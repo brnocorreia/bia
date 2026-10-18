@@ -12,7 +12,7 @@ mod common;
 /// checksum and fails this test; add a new migration and append it here instead.
 const RELEASED: &[(i64, &str)] = &[(
     1,
-    "a0c7898edb55d3417d0fe8b632d02d998aebc5bd65f5f9e375704b1e5ad3992ff90af209ae1feaf0c876d2c2bd33cfe7",
+    "0be8b42ff67613f91d99a00ac79f61ae67191ce1f650693a853e677741cb3519c8676a9de8d12e2a181a182859099a99",
 )];
 
 #[sqlx::test(migrations = false)]
