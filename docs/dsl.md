@@ -129,7 +129,7 @@ dead_letter: emails-dlq
 
 ## Diagnostics
 
-Validation runs in layers: JSON Schema → semantics (unique ids, scope references, Expressions compile, params match the Action, referenced Queues and Workflows exist, disabled Actions, limits) → optional Dry Run. Every finding is a Diagnostic:
+Validation runs in layers: JSON Schema → semantics (unique ids, scope references, Expressions compile, params match the Action, referenced Queues and Workflows exist, disabled Actions, limits) → optional Dry Run. The semantic layer reports every problem in one pass. A document that fails the schema layer has no typed form to check further, so it gets that layer's first Diagnostic only. Every finding is a Diagnostic:
 
 ```json
 {
@@ -142,3 +142,48 @@ Validation runs in layers: JSON Schema → semantics (unique ids, scope referenc
 ```
 
 Diagnostic codes are stable identifiers that agents can match on. Message text can change.
+
+`path` is a JSON Pointer into the Definition (empty for the root), and `suggestion` is `null` when there is none. Diagnostic codes are lower `snake_case` phrases naming the problem (ADR-0028).
+
+| Code | Layer | Severity | Meaning |
+|---|---|---|---|
+| `invalid_syntax` | schema | error | The text is not well-formed JSON or YAML. |
+| `missing_schema_version` | schema | error | The Definition has no `schema_version`. |
+| `unsupported_schema_version` | schema | error | This server does not support the `schema_version`. |
+| `unknown_kind` | schema | error | A document's `kind` names no known resource. |
+| `unknown_field` | schema | error | An object has a field the DSL does not define. Suggests the closest field. |
+| `missing_field` | schema | error | A required field is absent. |
+| `field_not_allowed` | schema | error | The field exists, but not on this Action or Trigger `type` (e.g. `params` on a Block). |
+| `invalid_value` | schema | error | A value has the wrong type or format: a malformed id, Duration or enum value. Suggests the closest enum value. |
+| `duplicate_step_id` | semantic | error | Two Steps share an id, nested Blocks included. |
+| `duplicate_trigger_id` | semantic | error | Two Triggers share an id. |
+| `invalid_expression` | semantic | error | An Expression or Template does not compile. |
+| `expression_limit_exceeded` | semantic | error | An Expression is longer or nests deeper than the limit. |
+| `secret_outside_params` | semantic | error | `secrets.*` is read outside `params`. |
+| `variable_out_of_scope` | semantic | error | `item`/`index` outside a `flow.foreach` body, or `error` outside a `catch`. |
+| `unknown_step_reference` | semantic | error | `steps.<id>` names no Step. Suggests the closest id. |
+| `forward_step_reference` | semantic | error | `steps.<id>` names a Step that has not finished at this point: a later Step, the Step itself or a Block around it. |
+| `step_may_not_have_run` | semantic | error | `steps.<id>` names an earlier Step that does not run on every path to this point. |
+| `unknown_action` | semantic | error | The Action is not in the Action Registry. Suggests the closest name. |
+| `disabled_action` | semantic | warning on a Draft, error at publish | The Action is disabled on this server (ADR-0014). |
+| `invalid_params` | semantic | error | Params break the Action's param schema. |
+| `unknown_queue` | semantic | warning on a Draft, error at publish | A referenced Queue does not exist (ADR-0015). Suggests the closest name. |
+| `unknown_workflow` | semantic | warning on a Draft, error at publish | A referenced Workflow does not exist. Suggests the closest id. |
+| `step_limit_exceeded` | semantic | error | The Definition has more Steps than `max_steps` (default 500). |
+| `nesting_limit_exceeded` | semantic | error | Steps sit inside more Blocks than `max_nesting_depth` (default 16). |
+| `iteration_limit_exceeded` | semantic | error | A loop's `max_iterations` exceeds the limit (default 10,000). |
+
+### Which Steps an Expression can read
+
+`steps.<id>` is valid only where Step `<id>` has finished on every path that reaches the Expression:
+
+- Earlier Steps in the same list, and in every list around it, are readable. A Step skipped by its `if` is still recorded, so it counts.
+- A Block's nested Steps stay out of scope after the Block: branch and switch arms, `flow.try` bodies and catches, and loop bodies may run partly or not at all. Read the Block's own Output instead. The one exception is `flow.parallel` with `join: all`, whose branches have all finished once it completes.
+- Inside a `flow.foreach` or `flow.loop_until` body, Steps see the earlier Steps of the same iteration. `until` sees the whole iteration.
+- `catch` sees what its `flow.try` saw, plus `error`, but not the body.
+- `on_error` sees none of `steps`, because the Run may have failed anywhere.
+- Reads by a computed id, such as `steps[name]`, can't be checked. Fields of `input`, `trigger` and `run` are not checked against `input_schema`.
+
+### Params that name resources
+
+An Action marks a param as naming a Queue or a Workflow with `"x-bia-resource": "queue"` or `"workflow"` in its param schema, on a property reached through `properties` from the schema root (ADR-0029). Validation checks literal names against the server's Queues and Workflows; names written as Templates are only known at execution time. A Definition always knows its own Workflow id.

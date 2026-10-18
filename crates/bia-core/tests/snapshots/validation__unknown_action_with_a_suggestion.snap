@@ -1,0 +1,27 @@
+---
+source: crates/bia-core/tests/validation.rs
+expression: "validate(Target::Draft,\nsteps(json!([{\n    \"id\": \"call\", \"action\": \"http.reqeust\", \"params\":\n    { \"url\": \"{{ input.url }}\" }\n}, { \"id\": \"branch\", \"action\": \"flow.brnch\" },\n{ \"id\": \"nothing_close\", \"action\": \"made.up\" },])),)"
+---
+[
+  {
+    "path": "/steps/0/action",
+    "code": "unknown_action",
+    "severity": "error",
+    "message": "Action 'http.reqeust' does not exist",
+    "suggestion": "Did you mean 'http.request'?"
+  },
+  {
+    "path": "/steps/1/action",
+    "code": "unknown_action",
+    "severity": "error",
+    "message": "Action 'flow.brnch' does not exist",
+    "suggestion": "Did you mean 'flow.branch'?"
+  },
+  {
+    "path": "/steps/2/action",
+    "code": "unknown_action",
+    "severity": "error",
+    "message": "Action 'made.up' does not exist",
+    "suggestion": null
+  }
+]

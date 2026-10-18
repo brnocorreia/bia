@@ -1,0 +1,20 @@
+---
+source: crates/bia-core/tests/validation.rs
+expression: "validate(Target::Draft,\nyaml(r\"\n            schema_version: 1\n            id: test\n            steps:\n              - id: check\n                action: flow.branch\n                when: 'true'\n                then:\n                  - id: vip\n                    action: flow.sleep\n                    params: { duration: 1s }\n                else:\n                  - id: basic\n                    action: queue.publish\n                    params: { queue: emails, body: '{{ steps.vip.output }}' }\n              - id: after\n                action: queue.publish\n                params: { queue: emails, body: '{{ steps.basic.output }}' }\n            \",),)"
+---
+[
+  {
+    "path": "/steps/0/else/0/params/body",
+    "code": "step_may_not_have_run",
+    "severity": "error",
+    "message": "Step 'vip' runs only on another arm of 'check'",
+    "suggestion": null
+  },
+  {
+    "path": "/steps/1/params/body",
+    "code": "step_may_not_have_run",
+    "severity": "error",
+    "message": "Step 'basic' runs only on one arm of 'check'",
+    "suggestion": null
+  }
+]

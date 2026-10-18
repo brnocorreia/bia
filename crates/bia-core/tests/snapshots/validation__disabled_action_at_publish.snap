@@ -1,0 +1,13 @@
+---
+source: crates/bia-core/tests/validation.rs
+expression: "validate(Target::Publish, definition)"
+---
+[
+  {
+    "path": "/steps/0/action",
+    "code": "disabled_action",
+    "severity": "error",
+    "message": "Action 'exec.shell' is disabled on this server",
+    "suggestion": null
+  }
+]

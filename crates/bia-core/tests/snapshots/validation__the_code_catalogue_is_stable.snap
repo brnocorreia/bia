@@ -1,0 +1,31 @@
+---
+source: crates/bia-core/tests/validation.rs
+expression: catalogue
+---
+[
+  "invalid_syntax",
+  "missing_schema_version",
+  "unsupported_schema_version",
+  "unknown_kind",
+  "unknown_field",
+  "missing_field",
+  "field_not_allowed",
+  "invalid_value",
+  "duplicate_step_id",
+  "duplicate_trigger_id",
+  "invalid_expression",
+  "expression_limit_exceeded",
+  "secret_outside_params",
+  "variable_out_of_scope",
+  "unknown_step_reference",
+  "forward_step_reference",
+  "step_may_not_have_run",
+  "unknown_action",
+  "disabled_action",
+  "invalid_params",
+  "unknown_queue",
+  "unknown_workflow",
+  "step_limit_exceeded",
+  "nesting_limit_exceeded",
+  "iteration_limit_exceeded"
+]

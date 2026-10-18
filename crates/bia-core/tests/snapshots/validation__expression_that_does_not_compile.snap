@@ -1,0 +1,27 @@
+---
+source: crates/bia-core/tests/validation.rs
+expression: "validate(Target::Draft,\nsteps(json!([{\n    \"id\": \"check\", \"action\": \"flow.branch\", \"when\": \"input.count >\", \"then\":\n    [{\n        \"id\": \"a\", \"action\": \"flow.sleep\", \"params\":\n        { \"duration\": \"{{ input. }}\" }\n    }],\n},\n{\n    \"id\": \"long\", \"action\": \"flow.sleep\", \"if\": \"1 + \".repeat(3000) + \"1\",\n    \"params\": { \"duration\": \"1s\" }\n},])),)"
+---
+[
+  {
+    "path": "/steps/0/when",
+    "code": "invalid_expression",
+    "severity": "error",
+    "message": "Syntax error: mismatched input '<EOF>' expecting expression (line 1, column 14)",
+    "suggestion": null
+  },
+  {
+    "path": "/steps/0/then/0/params/duration",
+    "code": "invalid_expression",
+    "severity": "error",
+    "message": "expected identifier after '.' (line 1, column 10)",
+    "suggestion": null
+  },
+  {
+    "path": "/steps/1/if",
+    "code": "expression_limit_exceeded",
+    "severity": "error",
+    "message": "Expression is 12001 bytes long, more than the limit of 8192 (line 1, column 1)",
+    "suggestion": null
+  }
+]
