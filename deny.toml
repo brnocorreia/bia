@@ -1,0 +1,50 @@
+# Dependency policy, checked by `just deny`.
+
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+yanked = "deny"
+
+[licenses]
+version = 2
+# Permissive licences compatible with distributing bia as MIT OR Apache-2.0.
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+confidence-threshold = 0.9
+
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+# Crate dependency edges from docs/architecture.md. `wrappers` lists the only
+# crates allowed to depend on each one directly.
+deny = [
+    { crate = "bia-store", wrappers = ["bia-engine", "bia-server", "bia-cli"] },
+    { crate = "bia-engine", wrappers = ["bia-server", "bia-cli"] },
+    { crate = "bia-actions", wrappers = ["bia-cli"] },
+    { crate = "bia-server", wrappers = ["bia-cli"] },
+    # Add "bia-server" here once it takes bia-client as a dev-dependency for
+    # HTTP API tests.
+    { crate = "bia-client", wrappers = ["bia-cli"] },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

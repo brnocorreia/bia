@@ -1,0 +1,21 @@
+# Local Postgres for development and tests. Tests reach it through
+# DATABASE_URL=postgres://bia:bia@localhost:5432/bia (the Justfile default).
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: bia
+      POSTGRES_PASSWORD: bia
+      POSTGRES_DB: bia
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bia -d bia"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+volumes:
+  postgres-data:
