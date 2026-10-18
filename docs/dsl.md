@@ -94,8 +94,12 @@ Human Tasks: `human.approval`, `human.form` (fields from a JSON Schema), `human.
 ## Expressions and Templates
 
 - Condition fields (`when`, `until`, `if`, `items`, `value`) take raw CEL.
-- `params` values can be Templates. `"{{ expr }}"` alone keeps the expression's type; `"text {{ expr }}"` renders a string.
+- `params` values can be Templates. `"{{ expr }}"` alone, with nothing around it (not even whitespace), keeps the expression's type; `"text {{ expr }}"` renders a string, inserting strings as they are and any other value as compact JSON.
+- Inside `{{ }}` the text is trimmed. The closing `}}` is the first one outside CEL string literals and braces the expression opened, so `{{ {'a': {'b': 1}} }}` is one map. A literal `{{` is written `{{ '{{' }}`.
 - Scope: `input`, `steps.<id>.output` (only Steps that already ran), `trigger`, `run` (`id`, `version`, `attempt`, `started_at`), `item`, `index`, `error` (inside `catch`). `secrets.NAME` is allowed in `params` only (ADR-0011).
+- Functions: the CEL standard library (including `timestamp`, `duration`, `matches`), the `strings` extension (`lowerAscii`, `split`, `join`, `replace`, `format`, …), `math` (`math.abs`, `math.ceil`, `math.round`, bit operations, …; not `math.greatest`/`math.least`) and `base64.encode`/`base64.decode` (ADR-0026).
+- JSON numbers without a fractional part are `int`; other numbers are `double`. Results become JSON again, with `bytes` as base64, `timestamp` as RFC 3339 and `duration` as `"1.5s"`.
+- Limits: an expression is at most 8 KiB, at most 32 levels deep, and spends at most 100,000 cost units per evaluation. Each `map`/`filter`/`all`/`exists`/`exists_one` iteration costs 1 plus the size of what it produces.
 
 ## Triggers
 

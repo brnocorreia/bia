@@ -62,7 +62,7 @@ _Avoid_: result, return value
 ### Expressions
 
 **Expression**:
-A side-effect-free CEL program evaluated against the Run's scope (`input`, `steps`, `trigger`, `run`, `item`, `index`).
+A side-effect-free CEL program evaluated against the Run's scope (`input`, `steps`, `trigger`, `run`, `item`, `index`, `error`, and `secrets` in Params), within a bounded cost.
 
 **Template**:
 A string in Params containing `{{ expression }}`. A Template that is exactly one expression keeps the expression's type; otherwise it renders to a string.
