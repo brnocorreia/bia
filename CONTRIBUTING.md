@@ -12,6 +12,14 @@ Thanks for your interest! bia is a personal open-source project that is still ta
 
 You need a stable Rust toolchain (pinned by `rust-toolchain.toml`), Docker (for Postgres), Node.js and pnpm (for `ui/`), and [`just`](https://github.com/casey/just). Common tasks are recipes in the `Justfile`; run `just --list` to see them.
 
+```sh
+just db-up   # start Postgres from compose.yaml (docker compose up --wait)
+just ci      # fmt-check, clippy, test, deny: the same recipes CI runs
+just db-down # stop Postgres
+```
+
+Tests reach Postgres through `DATABASE_URL`, which defaults to `postgres://bia:bia@localhost:5432/bia` (the database in `compose.yaml`). Set it in your environment to point at another server. Database tests use `#[sqlx::test]`, which creates a throwaway database for each test, so the role needs permission to create databases.
+
 ## Pull requests
 
 - One logical change per PR, linked to its issue.
