@@ -17,10 +17,17 @@ serde-saphyr = { version = "2.0.0", default-features = false, features = ["deser
 serde_json = "1.0.154"
 serde_path_to_error = "0.1.20"
 thiserror = "2.0.21"
+tokio-util = { version = "0.7.20", default-features = false }
+
+[features]
+# The fake Action, for tests in this and later crates.
+testing = []
 
 [lints]
 workspace = true
 
 [dev-dependencies]
+bia-core = { path = ".", features = ["testing"] }
 insta = { version = "1.49.0", features = ["json"] }
 jsonschema = { version = "0.59.0", default-features = false }
+tokio = { version = "1.53.3", features = ["rt", "macros"] }
