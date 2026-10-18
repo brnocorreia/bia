@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE workflows SET active_version = v.number\n        FROM versions v\n        WHERE workflows.id = $1\n          AND v.workflow_id = workflows.id\n          AND v.number = $2\n          AND v.state = 'published'\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8fc490e95e4f420a59032223622471ecf1ffcbfd1c0f2073dcedcc66ea7141d7"
+}

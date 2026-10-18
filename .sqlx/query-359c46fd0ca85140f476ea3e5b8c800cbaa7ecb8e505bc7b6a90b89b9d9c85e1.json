@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE runs SET timeline_len = timeline_len + 1 WHERE id = $1 RETURNING timeline_len",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "timeline_len",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "timeline_len"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "359c46fd0ca85140f476ea3e5b8c800cbaa7ecb8e505bc7b6a90b89b9d9c85e1"
+}

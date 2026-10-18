@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE runs\n        SET status = $2, cursor = $3, state = $4, updated_at = $5, finished_at = $6\n        WHERE id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Jsonb",
+        "Jsonb",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "12744fd0d4b400580e50d494b673383d5f9af2b95cfbbf65c082c10838800f3e"
+}
