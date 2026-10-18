@@ -1,0 +1,24 @@
+[package]
+name = "bia-cli"
+description = "The bia binary."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "bia"
+path = "src/main.rs"
+
+[dependencies]
+bia-core.workspace = true
+bia-store.workspace = true
+bia-engine.workspace = true
+bia-actions.workspace = true
+bia-server.workspace = true
+bia-client.workspace = true
+
+[lints]
+workspace = true

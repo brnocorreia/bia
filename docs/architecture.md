@@ -33,7 +33,7 @@ How bia's pieces fit together. Terms are defined in [`GLOSSARY.md`](../GLOSSARY.
 | `bia-client` | Typed HTTP client for the API. | core |
 | `bia-cli` | The `bia` binary (`clap`): `serve`, `migrate`, `mcp`, `workflow …`, `run …`, `queue …`, `secret …`, `token …`. Wires the Action Registry. | everything |
 
-The dependency rule keeps rebuilds small: an edit to an Action recompiles `bia-actions` and the binary only. A crate is split only when it earns it, and the split is recorded in an ADR.
+The dependency rule keeps rebuilds small: an edit to an Action recompiles `bia-actions` and the binary only. `deny.toml` enforces these edges: `just deny` fails when a crate depends on one it may not. A crate is split only when it earns it, and the split is recorded in an ADR.
 
 ## Time
 
