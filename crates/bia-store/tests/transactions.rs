@@ -5,17 +5,27 @@
 
 use bia_core::dsl::{ActionName, StepId};
 use bia_store::StoreError;
-use bia_store::job::{JobRepository, NewJob, PgJobRepository};
+use bia_store::job::{Claimed, JobRepository, Lease, NewJob, PgJobRepository};
 use bia_store::run::{Checkpoint, PgRunRepository, RunId, RunRepository, RunStatus};
 use bia_store::timeline::{
     AttemptStatus, NewTimelineEntry, PgTimelineRepository, TimelineRepository,
 };
+use chrono::TimeDelta;
 use serde_json::json;
 use sqlx::{Acquire, PgConnection, PgPool};
 
 mod common;
 
 use common::{at, published_workflow, start_run};
+
+async fn claim_one(conn: &mut PgConnection) -> Claimed {
+    let mut claimed = PgJobRepository
+        .claim(conn, "worker-a", 1, TimeDelta::seconds(30), at(1))
+        .await
+        .unwrap();
+    assert_eq!(claimed.len(), 1);
+    claimed.remove(0)
+}
 
 fn attempt(step: &str, attempt: i32) -> NewTimelineEntry {
     NewTimelineEntry {
@@ -41,8 +51,7 @@ fn after_first_step() -> Checkpoint {
 
 /// What a Worker writes when a Step finishes: Timeline entry, Checkpoint, Job completion and
 /// the next Job.
-async fn transition(conn: &mut PgConnection, run: RunId) {
-    let current = PgJobRepository.list_for_run(conn, run).await.unwrap();
+async fn transition(conn: &mut PgConnection, run: RunId, lease: &Lease) {
     PgTimelineRepository
         .append(conn, run, &attempt("fetch", 1))
         .await
@@ -51,9 +60,7 @@ async fn transition(conn: &mut PgConnection, run: RunId) {
         .update_checkpoint(conn, run, RunStatus::Running, &after_first_step(), at(12))
         .await
         .unwrap();
-    for job in current {
-        PgJobRepository.complete(conn, job.id).await.unwrap();
-    }
+    PgJobRepository.ack(conn, lease).await.unwrap();
     PgJobRepository
         .enqueue(conn, &NewJob::advance_run(run, at(12)))
         .await
@@ -70,8 +77,10 @@ async fn a_committed_transition_is_visible(pool: PgPool) {
         .await
         .unwrap();
 
+    let claimed = claim_one(&mut conn).await;
+
     let mut tx = pool.begin().await.unwrap();
-    transition(&mut tx, run.id).await;
+    transition(&mut tx, run.id, &claimed.lease).await;
     tx.commit().await.unwrap();
 
     let stored = PgRunRepository
@@ -104,8 +113,10 @@ async fn a_rolled_back_transition_leaves_nothing(pool: PgPool) {
         .await
         .unwrap();
 
+    let claimed = claim_one(&mut conn).await;
+
     let mut tx = pool.begin().await.unwrap();
-    transition(&mut tx, run.id).await;
+    transition(&mut tx, run.id, &claimed.lease).await;
     tx.rollback().await.unwrap();
 
     let stored = PgRunRepository

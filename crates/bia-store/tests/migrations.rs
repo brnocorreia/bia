@@ -11,10 +11,16 @@ mod common;
 
 /// Every migration ever released, with its checksum. Editing a released migration changes its
 /// checksum and fails this test; add a new migration and append it here instead.
-const RELEASED: &[(i64, &str)] = &[(
-    1,
-    "0be8b42ff67613f91d99a00ac79f61ae67191ce1f650693a853e677741cb3519c8676a9de8d12e2a181a182859099a99",
-)];
+const RELEASED: &[(i64, &str)] = &[
+    (
+        1,
+        "0be8b42ff67613f91d99a00ac79f61ae67191ce1f650693a853e677741cb3519c8676a9de8d12e2a181a182859099a99",
+    ),
+    (
+        2,
+        "2b89dcea7a66feb844e941a62ada571014c8b58d2daca25db9fe9dd3e0dfaf09d609200ee348008aea492d74473c22fc",
+    ),
+];
 
 #[sqlx::test(migrations = false)]
 async fn migrations_apply_to_an_empty_database(pool: PgPool) {

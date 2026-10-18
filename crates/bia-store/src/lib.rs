@@ -18,6 +18,7 @@
 use sqlx::PgPool;
 use sqlx::migrate::Migrator;
 
+mod clock;
 mod error;
 pub mod job;
 pub mod run;
@@ -25,6 +26,7 @@ pub mod timeline;
 pub mod version;
 pub mod workflow;
 
+pub use clock::SystemClock;
 pub use error::StoreError;
 
 /// The schema migrations, append-only.

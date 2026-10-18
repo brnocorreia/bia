@@ -154,6 +154,10 @@ A responsibility a `bia serve` process takes on: `api`, `worker`, `scheduler`, o
 **Worker**:
 A process with the `worker` Role, which claims Jobs and executes Actions.
 
+**Clock**:
+Where the engine, scheduler and store read the current time from: the system Clock in production, a manual Clock that tests move forward.
+_Avoid_: timer, now
+
 **Diagnostic**:
 One structured validation finding: JSON path, code, severity (error or warning), message and suggestion.
 _Avoid_: validation error (when it may be a warning), lint
