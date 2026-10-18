@@ -1,0 +1,3 @@
+# Secrets come from pluggable providers, internal store first
+
+Secrets are resolved through a `SecretProvider` trait. The first provider is internal: a Postgres table encrypted with XChaCha20-Poly1305 under `BIA_MASTER_KEY`, managed through API, CLI and UI, which never return values. Configuration routes name prefixes to providers (e.g. `aws/…` → AWS Secrets Manager) with the internal store as fallback. External managers (env, AWS Secrets Manager, Vault, Infisical, 1Password) are the intended long-term source; the internal store exists so bia works standalone. Resolved values are masked in logs and never written into Outputs or Timelines.
