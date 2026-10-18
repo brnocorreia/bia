@@ -1,0 +1,27 @@
+---
+source: crates/bia-core/tests/validation.rs
+expression: diagnostics
+---
+[
+  {
+    "path": "/triggers/0/queue",
+    "code": "unknown_queue",
+    "severity": "error",
+    "message": "Queue 'signup' does not exist",
+    "suggestion": "Did you mean 'signups'?"
+  },
+  {
+    "path": "/steps/1/then/0/params/queue",
+    "code": "unknown_queue",
+    "severity": "error",
+    "message": "Queue 'emals' does not exist",
+    "suggestion": "Did you mean 'emails'?"
+  },
+  {
+    "path": "/steps/1/then/2/params/workflow",
+    "code": "unknown_workflow",
+    "severity": "error",
+    "message": "Workflow 'send-invoce' does not exist",
+    "suggestion": "Did you mean 'send-invoice'?"
+  }
+]

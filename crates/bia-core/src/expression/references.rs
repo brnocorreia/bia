@@ -2,8 +2,8 @@ use std::collections::BTreeSet;
 
 use cel::common::ast::{EntryExpr, Expr, IdedExpr, LiteralValue, operators};
 
-/// The Step ids and Secret names an Expression or Template reads, found
-/// statically, without evaluating anything.
+/// The Step ids, Secret names and scope variables an Expression or Template
+/// reads, found statically, without evaluating anything.
 ///
 /// `steps.a`, `steps['a']` and `steps.?a` all reference Step `a`. A read
 /// whose id is not written literally, such as `steps[name]` or `size(steps)`,
@@ -16,12 +16,24 @@ pub struct References {
     pub secrets: BTreeSet<String>,
     pub dynamic_steps: bool,
     pub dynamic_secrets: bool,
+    /// Every top-level name read and not bound by a comprehension, such as
+    /// `input`, `item`, `steps` or `error`.
+    pub variables: BTreeSet<String>,
 }
 
 #[derive(Clone, Copy)]
 enum Root {
     Steps,
     Secrets,
+}
+
+impl Root {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Steps => "steps",
+            Self::Secrets => "secrets",
+        }
+    }
 }
 
 impl References {
@@ -36,9 +48,11 @@ impl References {
         self.secrets.extend(other.secrets.iter().cloned());
         self.dynamic_steps |= other.dynamic_steps;
         self.dynamic_secrets |= other.dynamic_secrets;
+        self.variables.extend(other.variables.iter().cloned());
     }
 
     fn record(&mut self, root: Root, name: &str) {
+        self.variables.insert(root.name().to_owned());
         match root {
             Root::Steps => self.steps.insert(name.to_owned()),
             Root::Secrets => self.secrets.insert(name.to_owned()),
@@ -46,6 +60,7 @@ impl References {
     }
 
     fn record_dynamic(&mut self, root: Root) {
+        self.variables.insert(root.name().to_owned());
         match root {
             Root::Steps => self.dynamic_steps = true,
             Root::Secrets => self.dynamic_secrets = true,
@@ -86,9 +101,11 @@ impl References {
                     self.visit(arg, bound);
                 }
             }
-            Expr::Ident(_) => {
+            Expr::Ident(name) => {
                 if let Some(root) = root(expr, bound) {
                     self.record_dynamic(root);
+                } else if !bound.contains(name) {
+                    self.variables.insert(name.clone());
                 }
             }
             Expr::Comprehension(comprehension) => {

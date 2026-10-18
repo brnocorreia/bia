@@ -1,0 +1,20 @@
+---
+source: crates/bia-core/tests/validation.rs
+expression: "validate(Target::Draft,\nyaml(r\"\n            schema_version: 1\n            id: test\n            steps:\n              - id: wait\n                action: flow.sleep\n                params: { duration: 1s }\n              - id: guard\n                action: flow.try\n                body:\n                  - id: loop\n                    action: flow.foreach\n                    items: '[1, 2]'\n                    body:\n                      - id: wait\n                        action: flow.sleep\n                        params: { duration: 1s }\n                catch:\n                  - id: guard\n                    action: flow.sleep\n                    params: { duration: 1s }\n            \",),)"
+---
+[
+  {
+    "path": "/steps/1/body/0/body/0/id",
+    "code": "duplicate_step_id",
+    "severity": "error",
+    "message": "Step id 'wait' is already used by the Step at /steps/0",
+    "suggestion": null
+  },
+  {
+    "path": "/steps/1/catch/0/id",
+    "code": "duplicate_step_id",
+    "severity": "error",
+    "message": "Step id 'guard' is already used by the Step at /steps/1",
+    "suggestion": null
+  }
+]

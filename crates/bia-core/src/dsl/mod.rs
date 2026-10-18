@@ -24,6 +24,7 @@ pub use ids::{ActionName, InvalidName, QueueName, StepId, TriggerId, WorkflowId}
 pub use parse::{ParseError, ParseErrorKind, yaml_to_json};
 pub use queue::{QueueKind, QueueResource};
 pub use schema::{definition_schema, queue_resource_schema};
+pub(crate) use step::BLOCK_ACTIONS;
 pub use step::{
     Backoff, Branch, FailureMode, Foreach, Join, LoopUntil, Parallel, Params, RetryPolicy, Step,
     StepKind, Switch, SwitchCase, Try,

@@ -1,0 +1,66 @@
+---
+source: crates/bia-core/tests/validation.rs
+expression: diagnostics
+---
+[
+  [
+    "unknown_field",
+    [
+      {
+        "path": "/steps/0/retires",
+        "code": "unknown_field",
+        "severity": "error",
+        "message": "unknown field `retires`, expected one of `id`, `action`, `description`, `if`, `retry`, `timeout`, `params`, `when`, `then`, `else`, `value`, `cases`, `default`, `branches`, `join`, `n`, `mode`, `items`, `body`, `concurrency`, `max_iterations`, `until`, `catch`",
+        "suggestion": null
+      }
+    ]
+  ],
+  [
+    "invalid_value",
+    [
+      {
+        "path": "/triggers/0/overlap",
+        "code": "invalid_value",
+        "severity": "error",
+        "message": "unknown variant `skp`, expected one of `skip`, `queue`, `allow`",
+        "suggestion": "Did you mean 'skip'?"
+      }
+    ]
+  ],
+  [
+    "field_not_allowed",
+    [
+      {
+        "path": "/steps/0",
+        "code": "field_not_allowed",
+        "severity": "error",
+        "message": "field `params` is not allowed on a `flow.branch` Step",
+        "suggestion": null
+      }
+    ]
+  ],
+  [
+    "missing_field",
+    [
+      {
+        "path": "/steps/0",
+        "code": "missing_field",
+        "severity": "error",
+        "message": "missing field `action`",
+        "suggestion": null
+      }
+    ]
+  ],
+  [
+    "missing_schema_version",
+    [
+      {
+        "path": "/schema_version",
+        "code": "missing_schema_version",
+        "severity": "error",
+        "message": "missing `schema_version`; this build supports 1",
+        "suggestion": null
+      }
+    ]
+  ]
+]

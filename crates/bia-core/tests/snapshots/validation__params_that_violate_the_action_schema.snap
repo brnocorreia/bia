@@ -1,0 +1,34 @@
+---
+source: crates/bia-core/tests/validation.rs
+expression: "validate(Target::Draft,\nsteps(json!([{\n    \"id\": \"call\", \"action\": \"http.request\", \"params\":\n    { \"method\": \"FETCH\", \"headers\": { \"X-Count\": 3 }, \"retries\": 2, },\n},\n{\n    \"id\": \"templated\", \"action\": \"http.request\", \"params\":\n    { \"method\": \"{{ input.method }}\", \"url\": \"{{ input.url }}\" },\n},])),)"
+---
+[
+  {
+    "path": "/steps/0/params",
+    "code": "invalid_params",
+    "severity": "error",
+    "message": "Params do not match the schema of 'http.request': \"url\" is a required property",
+    "suggestion": null
+  },
+  {
+    "path": "/steps/0/params/headers/X-Count",
+    "code": "invalid_params",
+    "severity": "error",
+    "message": "Params do not match the schema of 'http.request': value is not of type \"string\"",
+    "suggestion": null
+  },
+  {
+    "path": "/steps/0/params/method",
+    "code": "invalid_params",
+    "severity": "error",
+    "message": "Params do not match the schema of 'http.request': value is not one of \"GET\", \"POST\" or 2 other candidates",
+    "suggestion": null
+  },
+  {
+    "path": "/steps/0/params",
+    "code": "invalid_params",
+    "severity": "error",
+    "message": "Params do not match the schema of 'http.request': Additional properties are not allowed ('retries' was unexpected)",
+    "suggestion": null
+  }
+]

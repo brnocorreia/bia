@@ -11,6 +11,7 @@ publish.workspace = true
 [dependencies]
 base64 = "0.22"
 cel = { version = "0.15.0", default-features = false, features = ["chrono", "regex", "ext_encoders", "parser_pratt"] }
+jsonschema = { version = "0.59.0", default-features = false }
 schemars = "1.2.3"
 serde = { version = "1.0.229", features = ["derive"] }
 serde-saphyr = { version = "2.0.0", default-features = false, features = ["deserialize"] }
@@ -29,5 +30,4 @@ workspace = true
 [dev-dependencies]
 bia-core = { path = ".", features = ["testing"] }
 insta = { version = "1.49.0", features = ["json"] }
-jsonschema = { version = "0.59.0", default-features = false }
 tokio = { version = "1.53.3", features = ["rt", "macros"] }

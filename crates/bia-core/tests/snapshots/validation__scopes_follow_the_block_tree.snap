@@ -1,0 +1,90 @@
+---
+source: crates/bia-core/tests/validation.rs
+expression: "validate(Target::Draft,\nyaml(r\"\n            schema_version: 1\n            id: test\n            steps:\n              - id: fan_out\n                action: flow.parallel\n                branches:\n                  - - id: left\n                      action: flow.sleep\n                      params: { duration: 1s }\n                  - - id: right\n                      action: flow.sleep\n                      params: { duration: '{{ steps.left.output }}' }\n              - id: race\n                action: flow.parallel\n                join: any\n                branches:\n                  - - id: fast\n                      action: flow.sleep\n                      params: { duration: 1s }\n              - id: each\n                action: flow.foreach\n                items: steps.left.output.list\n                body:\n                  - id: per_item\n                    action: flow.sleep\n                    params: { duration: '{{ item }}s {{ index }}' }\n                  - id: uses_previous\n                    action: flow.sleep\n                    params: { duration: '{{ steps.per_item.output }}' }\n              - id: poll\n                action: flow.loop_until\n                until: steps.attempt.output.done && steps.maybe.output.done && steps.poll.output\n                body:\n                  - id: attempt\n                    action: flow.sleep\n                    params: { duration: 1s }\n                  - id: optional\n                    action: flow.branch\n                    when: 'true'\n                    then:\n                      - id: maybe\n                        action: flow.sleep\n                        params: { duration: 1s }\n              - id: guarded\n                action: flow.try\n                body:\n                  - id: risky\n                    action: flow.sleep\n                    params: { duration: 1s }\n                catch:\n                  - id: recover\n                    action: flow.sleep\n                    params: { duration: '{{ error.message }} {{ steps.risky.output }}' }\n              - id: summary\n                action: flow.sleep\n                params:\n                  duration: >-\n                    {{ steps.right.output }} {{ steps.fast.output }} {{ steps.per_item.output }}\n                    {{ steps.each.output }} {{ steps.attempt.output }} {{ steps.recover.output }}\n                    {{ steps.guarded.output }} {{ item }} {{ error }} {{ steps.sumary.output }}\n            on_error:\n              - id: alert\n                action: flow.sleep\n                params: { duration: '{{ steps.summary.output }}' }\n            \",),)"
+---
+[
+  {
+    "path": "/steps/0/branches/1/0/params/duration",
+    "code": "step_may_not_have_run",
+    "severity": "error",
+    "message": "Step 'left' is in another branch of 'fan_out', which runs concurrently",
+    "suggestion": null
+  },
+  {
+    "path": "/steps/3/until",
+    "code": "step_may_not_have_run",
+    "severity": "error",
+    "message": "Step 'maybe' runs only on one arm of 'optional'",
+    "suggestion": null
+  },
+  {
+    "path": "/steps/3/until",
+    "code": "forward_step_reference",
+    "severity": "error",
+    "message": "Step 'poll' cannot read its own Output",
+    "suggestion": null
+  },
+  {
+    "path": "/steps/4/catch/0/params/duration",
+    "code": "step_may_not_have_run",
+    "severity": "error",
+    "message": "Step 'risky' is in the body of 'guarded', which may fail before it runs",
+    "suggestion": null
+  },
+  {
+    "path": "/steps/5/params/duration",
+    "code": "variable_out_of_scope",
+    "severity": "error",
+    "message": "'item' is only in scope inside a flow.foreach body",
+    "suggestion": null
+  },
+  {
+    "path": "/steps/5/params/duration",
+    "code": "variable_out_of_scope",
+    "severity": "error",
+    "message": "'error' is only in scope inside the catch of a flow.try",
+    "suggestion": null
+  },
+  {
+    "path": "/steps/5/params/duration",
+    "code": "step_may_not_have_run",
+    "severity": "error",
+    "message": "Step 'attempt' runs inside the body of 'poll', once per iteration",
+    "suggestion": null
+  },
+  {
+    "path": "/steps/5/params/duration",
+    "code": "step_may_not_have_run",
+    "severity": "error",
+    "message": "Step 'fast' is in a branch of 'race', which can complete without it",
+    "suggestion": null
+  },
+  {
+    "path": "/steps/5/params/duration",
+    "code": "step_may_not_have_run",
+    "severity": "error",
+    "message": "Step 'per_item' runs inside the body of 'each', once per item",
+    "suggestion": "Read the list of iteration Outputs, steps.each.output, instead."
+  },
+  {
+    "path": "/steps/5/params/duration",
+    "code": "step_may_not_have_run",
+    "severity": "error",
+    "message": "Step 'recover' runs only when 'guarded' catches an error",
+    "suggestion": null
+  },
+  {
+    "path": "/steps/5/params/duration",
+    "code": "unknown_step_reference",
+    "severity": "error",
+    "message": "No Step has the id 'sumary'",
+    "suggestion": "Did you mean 'summary'?"
+  },
+  {
+    "path": "/on_error/0/params/duration",
+    "code": "step_may_not_have_run",
+    "severity": "error",
+    "message": "on_error runs after a failure at any point, so Step 'summary' may not have run",
+    "suggestion": null
+  }
+]
