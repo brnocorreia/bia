@@ -38,7 +38,7 @@ One node of a Definition, identified by an `id` unique across the whole Definiti
 _Avoid_: task, node, activity
 
 **Block**:
-A Step whose Action is control flow (`flow.*`, `human.*`) and that contains nested lists of Steps (branch arms, parallel branches, a loop body).
+A Step whose Action is one of the control-flow Actions that contain nested lists of Steps (branch arms, parallel branches, a loop body): `flow.branch`, `flow.switch`, `flow.parallel`, `flow.foreach`, `flow.loop_until`, `flow.try`. Other `flow.*` and `human.*` Actions are ordinary Steps with Params.
 _Avoid_: container, group
 
 **Action**:

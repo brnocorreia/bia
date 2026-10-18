@@ -1,0 +1,88 @@
+# Every Block, nested inside one another, plus ordinary Actions with every common field.
+schema_version: 1
+id: every-block
+description: Exercises each Block type
+steps:
+  - id: fetch
+    action: http.request
+    description: Fetch the batch
+    if: input.enabled
+    params:
+      method: GET
+      url: "https://api.example.com/items?since={{ input.since }}"
+    retry: { max_attempts: 3, backoff: fixed, initial: 500ms, max: 10s }
+    timeout: 1h
+
+  - id: route
+    action: flow.switch
+    value: steps.fetch.output.body.kind
+    cases:
+      - equals: bulk
+        steps:
+          - id: fan_out
+            action: flow.parallel
+            join: n_of_m
+            n: 1
+            mode: all_settled
+            branches:
+              - - id: left
+                  action: queue.publish
+                  params: { queue: left, body: "{{ input }}" }
+              - - id: right
+                  action: queue.publish
+                  params: { queue: right, body: "{{ input }}" }
+      - equals: { nested: [1, 2.5, true, null] }
+        steps:
+          - id: each
+            action: flow.foreach
+            items: steps.fetch.output.body.items
+            concurrency: 4
+            max_iterations: 100
+            mode: fail_fast
+            body:
+              - id: guarded
+                action: flow.try
+                body:
+                  - id: process
+                    action: http.request
+                    params: { method: POST, url: "https://api.example.com/items/{{ item.id }}" }
+                catch:
+                  - id: give_up
+                    action: flow.fail
+                    params: { message: "item {{ index }} failed: {{ error.message }}" }
+    default:
+      - id: poll
+        action: flow.loop_until
+        until: steps.check.output.body.done
+        max_iterations: 10
+        body:
+          - id: check
+            action: http.request
+            params: { method: GET, url: "https://api.example.com/status" }
+          - id: pause
+            action: flow.sleep
+            params: { duration: 5m }
+
+  - id: decide
+    action: flow.branch
+    when: steps.fetch.output.status == 200
+    then:
+      - id: done
+        action: flow.succeed
+    else:
+      - id: child
+        action: flow.subworkflow
+        params: { workflow: cleanup, input: { reason: "{{ steps.fetch.output.status }}" }, wait: true }
+
+  - id: only_then
+    action: flow.branch
+    when: "true"
+    then:
+      - id: wait_reply
+        action: flow.wait_for_event
+        params: { event: reply, match: "{{ input.email }}", timeout: 2d }
+
+on_error:
+  - id: alert
+    action: http.request
+    params: { method: POST, url: "https://hooks.example.com/alerts", body: { run: "{{ run.id }}" } }

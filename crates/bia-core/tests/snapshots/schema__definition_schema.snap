@@ -1,0 +1,738 @@
+---
+source: crates/bia-core/tests/schema.rs
+expression: definition_schema()
+---
+{
+  "$defs": {
+    "ActionName": {
+      "description": "An Action's name, `category.operation` (e.g. `http.request`).",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$",
+      "type": "string"
+    },
+    "Backoff": {
+      "description": "How the delay grows between Attempts.",
+      "enum": [
+        "fixed",
+        "exponential"
+      ],
+      "type": "string"
+    },
+    "CatchUpPolicy": {
+      "description": "What a cron Trigger does with firings missed while bia was down.",
+      "enum": [
+        "none",
+        "latest",
+        "all"
+      ],
+      "type": "string"
+    },
+    "Duration": {
+      "description": "A whole number followed by a unit: `ms`, `s`, `m`, `h` or `d` (e.g. `500ms`, `30s`, `3d`).",
+      "pattern": "^(0|[1-9][0-9]*)(ms|s|m|h|d)$",
+      "type": "string"
+    },
+    "Expression": {
+      "description": "A side-effect-free CEL Expression, written raw (no `{{ }}`).",
+      "type": "string"
+    },
+    "FailureMode": {
+      "description": "What a failing branch or iteration does to its siblings. Defaults to `fail_fast`.",
+      "enum": [
+        "fail_fast",
+        "all_settled"
+      ],
+      "type": "string"
+    },
+    "Hmac": {
+      "additionalProperties": false,
+      "description": "HMAC signature check for a webhook Trigger.",
+      "properties": {
+        "header": {
+          "description": "Request header carrying the signature.",
+          "type": "string"
+        },
+        "secret": {
+          "description": "Secret holding the signing key, as `secrets.NAME`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "header",
+        "secret"
+      ],
+      "type": "object"
+    },
+    "Join": {
+      "description": "When a `flow.parallel` Block completes.",
+      "enum": [
+        "all",
+        "any",
+        "n_of_m"
+      ],
+      "type": "string"
+    },
+    "Limits": {
+      "additionalProperties": false,
+      "description": "Per-Workflow limits.",
+      "properties": {
+        "max_concurrent_runs": {
+          "description": "Most Runs of this Workflow active at once.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "OverlapPolicy": {
+      "description": "What a cron Trigger does when the previous Run is still active.",
+      "enum": [
+        "skip",
+        "queue",
+        "allow"
+      ],
+      "type": "string"
+    },
+    "QueueName": {
+      "description": "A Queue's name (e.g. `emails`).",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_-]*$",
+      "type": "string"
+    },
+    "RetryPolicy": {
+      "additionalProperties": false,
+      "description": "Retry policy for `retryable` errors.",
+      "properties": {
+        "backoff": {
+          "$ref": "#/$defs/Backoff"
+        },
+        "initial": {
+          "$ref": "#/$defs/Duration",
+          "description": "Delay before the first retry."
+        },
+        "max": {
+          "$ref": "#/$defs/Duration",
+          "description": "Upper bound on the delay between Attempts."
+        },
+        "max_attempts": {
+          "description": "Total Attempts, the first one included.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_attempts"
+      ],
+      "type": "object"
+    },
+    "SchemaVersion": {
+      "const": 1,
+      "description": "The DSL version this Definition is written in.",
+      "type": "integer"
+    },
+    "Step": {
+      "description": "One node of a Definition. Ordinary Actions take `params`; Blocks (`flow.branch`, `flow.switch`, `flow.parallel`, `flow.foreach`, `flow.loop_until`, `flow.try`) take nested Step lists instead.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "A Step that calls an ordinary Action with `params`.",
+          "properties": {
+            "action": {
+              "$ref": "#/$defs/ActionName",
+              "not": {
+                "enum": [
+                  "flow.branch",
+                  "flow.switch",
+                  "flow.parallel",
+                  "flow.foreach",
+                  "flow.loop_until",
+                  "flow.try"
+                ]
+              }
+            },
+            "description": {
+              "description": "Free text shown in the UI and the Timeline.",
+              "type": "string"
+            },
+            "id": {
+              "$ref": "#/$defs/StepId",
+              "description": "Unique across the whole Definition, nested Blocks included."
+            },
+            "if": {
+              "$ref": "#/$defs/Expression",
+              "description": "CEL condition. When false, the Step is recorded as `skipped`."
+            },
+            "params": {
+              "additionalProperties": true,
+              "description": "Validated against the Action's param schema after Templates are resolved.",
+              "type": "object"
+            },
+            "retry": {
+              "$ref": "#/$defs/RetryPolicy",
+              "description": "Applies to `retryable` errors only."
+            },
+            "timeout": {
+              "$ref": "#/$defs/Duration",
+              "description": "Timeout per Attempt."
+            }
+          },
+          "required": [
+            "id",
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "`flow.branch`: runs `then` when `when` is true, `else` otherwise.",
+          "properties": {
+            "action": {
+              "const": "flow.branch"
+            },
+            "description": {
+              "description": "Free text shown in the UI and the Timeline.",
+              "type": "string"
+            },
+            "else": {
+              "items": {
+                "$ref": "#/$defs/Step"
+              },
+              "type": "array"
+            },
+            "id": {
+              "$ref": "#/$defs/StepId",
+              "description": "Unique across the whole Definition, nested Blocks included."
+            },
+            "if": {
+              "$ref": "#/$defs/Expression",
+              "description": "CEL condition. When false, the Step is recorded as `skipped`."
+            },
+            "retry": {
+              "$ref": "#/$defs/RetryPolicy",
+              "description": "Applies to `retryable` errors only."
+            },
+            "then": {
+              "items": {
+                "$ref": "#/$defs/Step"
+              },
+              "type": "array"
+            },
+            "timeout": {
+              "$ref": "#/$defs/Duration",
+              "description": "Timeout per Attempt."
+            },
+            "when": {
+              "$ref": "#/$defs/Expression",
+              "description": "CEL condition."
+            }
+          },
+          "required": [
+            "id",
+            "action",
+            "when",
+            "then"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "`flow.switch`: runs the Steps of the first case whose `equals` matches `value`.",
+          "properties": {
+            "action": {
+              "const": "flow.switch"
+            },
+            "cases": {
+              "items": {
+                "$ref": "#/$defs/SwitchCase"
+              },
+              "type": "array"
+            },
+            "default": {
+              "description": "Steps run when no case matches.",
+              "items": {
+                "$ref": "#/$defs/Step"
+              },
+              "type": "array"
+            },
+            "description": {
+              "description": "Free text shown in the UI and the Timeline.",
+              "type": "string"
+            },
+            "id": {
+              "$ref": "#/$defs/StepId",
+              "description": "Unique across the whole Definition, nested Blocks included."
+            },
+            "if": {
+              "$ref": "#/$defs/Expression",
+              "description": "CEL condition. When false, the Step is recorded as `skipped`."
+            },
+            "retry": {
+              "$ref": "#/$defs/RetryPolicy",
+              "description": "Applies to `retryable` errors only."
+            },
+            "timeout": {
+              "$ref": "#/$defs/Duration",
+              "description": "Timeout per Attempt."
+            },
+            "value": {
+              "$ref": "#/$defs/Expression",
+              "description": "CEL Expression compared with each case's `equals`."
+            }
+          },
+          "required": [
+            "id",
+            "action",
+            "value",
+            "cases"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "`flow.parallel`: runs each branch concurrently. Its Output is the list of branch Outputs.",
+          "properties": {
+            "action": {
+              "const": "flow.parallel"
+            },
+            "branches": {
+              "items": {
+                "items": {
+                  "$ref": "#/$defs/Step"
+                },
+                "type": "array"
+              },
+              "type": "array"
+            },
+            "description": {
+              "description": "Free text shown in the UI and the Timeline.",
+              "type": "string"
+            },
+            "id": {
+              "$ref": "#/$defs/StepId",
+              "description": "Unique across the whole Definition, nested Blocks included."
+            },
+            "if": {
+              "$ref": "#/$defs/Expression",
+              "description": "CEL condition. When false, the Step is recorded as `skipped`."
+            },
+            "join": {
+              "$ref": "#/$defs/Join",
+              "description": "When the Block completes. Defaults to `all`."
+            },
+            "mode": {
+              "$ref": "#/$defs/FailureMode"
+            },
+            "n": {
+              "description": "How many branches must succeed for `join: n_of_m`.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "retry": {
+              "$ref": "#/$defs/RetryPolicy",
+              "description": "Applies to `retryable` errors only."
+            },
+            "timeout": {
+              "$ref": "#/$defs/Duration",
+              "description": "Timeout per Attempt."
+            }
+          },
+          "required": [
+            "id",
+            "action",
+            "branches"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "`flow.foreach`: runs `body` once per item, with `item` and `index` in scope. Its Output is\nthe list of each iteration's last Output.",
+          "properties": {
+            "action": {
+              "const": "flow.foreach"
+            },
+            "body": {
+              "items": {
+                "$ref": "#/$defs/Step"
+              },
+              "type": "array"
+            },
+            "concurrency": {
+              "description": "How many iterations run at once.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "description": {
+              "description": "Free text shown in the UI and the Timeline.",
+              "type": "string"
+            },
+            "id": {
+              "$ref": "#/$defs/StepId",
+              "description": "Unique across the whole Definition, nested Blocks included."
+            },
+            "if": {
+              "$ref": "#/$defs/Expression",
+              "description": "CEL condition. When false, the Step is recorded as `skipped`."
+            },
+            "items": {
+              "$ref": "#/$defs/Expression",
+              "description": "CEL Expression producing the list to iterate."
+            },
+            "max_iterations": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "mode": {
+              "$ref": "#/$defs/FailureMode"
+            },
+            "retry": {
+              "$ref": "#/$defs/RetryPolicy",
+              "description": "Applies to `retryable` errors only."
+            },
+            "timeout": {
+              "$ref": "#/$defs/Duration",
+              "description": "Timeout per Attempt."
+            }
+          },
+          "required": [
+            "id",
+            "action",
+            "items",
+            "body"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "`flow.loop_until`: runs `body` until `until` is true.",
+          "properties": {
+            "action": {
+              "const": "flow.loop_until"
+            },
+            "body": {
+              "items": {
+                "$ref": "#/$defs/Step"
+              },
+              "type": "array"
+            },
+            "description": {
+              "description": "Free text shown in the UI and the Timeline.",
+              "type": "string"
+            },
+            "id": {
+              "$ref": "#/$defs/StepId",
+              "description": "Unique across the whole Definition, nested Blocks included."
+            },
+            "if": {
+              "$ref": "#/$defs/Expression",
+              "description": "CEL condition. When false, the Step is recorded as `skipped`."
+            },
+            "max_iterations": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "retry": {
+              "$ref": "#/$defs/RetryPolicy",
+              "description": "Applies to `retryable` errors only."
+            },
+            "timeout": {
+              "$ref": "#/$defs/Duration",
+              "description": "Timeout per Attempt."
+            },
+            "until": {
+              "$ref": "#/$defs/Expression",
+              "description": "CEL condition evaluated after each iteration; it sees that iteration's Outputs."
+            }
+          },
+          "required": [
+            "id",
+            "action",
+            "body",
+            "until"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "`flow.try`: runs `body`, and `catch` if it fails, with `error` in scope.",
+          "properties": {
+            "action": {
+              "const": "flow.try"
+            },
+            "body": {
+              "items": {
+                "$ref": "#/$defs/Step"
+              },
+              "type": "array"
+            },
+            "catch": {
+              "items": {
+                "$ref": "#/$defs/Step"
+              },
+              "type": "array"
+            },
+            "description": {
+              "description": "Free text shown in the UI and the Timeline.",
+              "type": "string"
+            },
+            "id": {
+              "$ref": "#/$defs/StepId",
+              "description": "Unique across the whole Definition, nested Blocks included."
+            },
+            "if": {
+              "$ref": "#/$defs/Expression",
+              "description": "CEL condition. When false, the Step is recorded as `skipped`."
+            },
+            "retry": {
+              "$ref": "#/$defs/RetryPolicy",
+              "description": "Applies to `retryable` errors only."
+            },
+            "timeout": {
+              "$ref": "#/$defs/Duration",
+              "description": "Timeout per Attempt."
+            }
+          },
+          "required": [
+            "id",
+            "action",
+            "body",
+            "catch"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "StepId": {
+      "description": "A Step's id, unique across the whole Definition.",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": "string"
+    },
+    "SwitchCase": {
+      "additionalProperties": false,
+      "description": "One case of a `flow.switch`.",
+      "properties": {
+        "equals": {
+          "description": "The value `value` must equal for this case to run."
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/Step"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "equals",
+        "steps"
+      ],
+      "type": "object"
+    },
+    "Trigger": {
+      "description": "What starts a Run. The Trigger payload becomes `input` and its metadata becomes `trigger`.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "`type: cron`: starts Runs on a cron schedule.",
+          "properties": {
+            "catch_up": {
+              "$ref": "#/$defs/CatchUpPolicy"
+            },
+            "expr": {
+              "description": "Cron expression, e.g. `0 9 * * *`.",
+              "type": "string"
+            },
+            "id": {
+              "$ref": "#/$defs/TriggerId",
+              "description": "Unique within the Definition. Webhook Triggers are served at\n`/hooks/{workflow_id}/{trigger_id}`."
+            },
+            "jitter": {
+              "$ref": "#/$defs/Duration",
+              "description": "Random delay added to each firing, up to this Duration."
+            },
+            "overlap": {
+              "$ref": "#/$defs/OverlapPolicy"
+            },
+            "type": {
+              "const": "cron"
+            },
+            "tz": {
+              "description": "IANA time zone the expression is read in, e.g. `America/Sao_Paulo`.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "type",
+            "expr"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "`type: queue`: starts Runs from the Messages of a Queue.",
+          "properties": {
+            "batch_size": {
+              "description": "How many Messages one Run receives.",
+              "format": "uint32",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "id": {
+              "$ref": "#/$defs/TriggerId",
+              "description": "Unique within the Definition. Webhook Triggers are served at\n`/hooks/{workflow_id}/{trigger_id}`."
+            },
+            "queue": {
+              "$ref": "#/$defs/QueueName"
+            },
+            "type": {
+              "const": "queue"
+            }
+          },
+          "required": [
+            "id",
+            "type",
+            "queue"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "`type: webhook`: starts Runs from requests to `/hooks/{workflow_id}/{trigger_id}`.",
+          "properties": {
+            "hmac": {
+              "$ref": "#/$defs/Hmac"
+            },
+            "id": {
+              "$ref": "#/$defs/TriggerId",
+              "description": "Unique within the Definition. Webhook Triggers are served at\n`/hooks/{workflow_id}/{trigger_id}`."
+            },
+            "type": {
+              "const": "webhook"
+            }
+          },
+          "required": [
+            "id",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "`type: manual`: started by hand from the API, CLI or UI.",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/TriggerId",
+              "description": "Unique within the Definition. Webhook Triggers are served at\n`/hooks/{workflow_id}/{trigger_id}`."
+            },
+            "type": {
+              "const": "manual"
+            }
+          },
+          "required": [
+            "id",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "`type: event`: starts Runs when an Event with this name arrives.",
+          "properties": {
+            "event": {
+              "description": "Event name.",
+              "type": "string"
+            },
+            "id": {
+              "$ref": "#/$defs/TriggerId",
+              "description": "Unique within the Definition. Webhook Triggers are served at\n`/hooks/{workflow_id}/{trigger_id}`."
+            },
+            "match": {
+              "description": "Correlation Key: when set, only Events carrying this key start a Run.",
+              "type": "string"
+            },
+            "type": {
+              "const": "event"
+            }
+          },
+          "required": [
+            "id",
+            "type",
+            "event"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "TriggerId": {
+      "description": "A Trigger's id, unique within the Definition.",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": "string"
+    },
+    "WorkflowId": {
+      "description": "A Workflow's id, stable across its Versions (e.g. `onboarding-email`).",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_-]*$",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The document that describes a Version: Triggers, input schema, Steps and error handling.",
+  "properties": {
+    "description": {
+      "description": "Free text shown in the UI.",
+      "type": "string"
+    },
+    "id": {
+      "$ref": "#/$defs/WorkflowId",
+      "description": "Workflow id, stable across Versions."
+    },
+    "input_schema": {
+      "additionalProperties": true,
+      "description": "JSON Schema the Trigger payload (`input`) is validated against.",
+      "type": "object"
+    },
+    "limits": {
+      "$ref": "#/$defs/Limits",
+      "description": "Per-Workflow limits; global limits apply to anything left out."
+    },
+    "on_error": {
+      "description": "Compensation Steps run when the Run fails.",
+      "items": {
+        "$ref": "#/$defs/Step"
+      },
+      "type": "array"
+    },
+    "schema_version": {
+      "$ref": "#/$defs/SchemaVersion"
+    },
+    "steps": {
+      "description": "Steps run in order.",
+      "items": {
+        "$ref": "#/$defs/Step"
+      },
+      "type": "array"
+    },
+    "triggers": {
+      "description": "What starts a Run.",
+      "items": {
+        "$ref": "#/$defs/Trigger"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "id",
+    "steps"
+  ],
+  "title": "Definition",
+  "type": "object"
+}

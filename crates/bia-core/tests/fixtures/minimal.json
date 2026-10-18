@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "id": "minimal",
+  "steps": [{ "id": "only", "action": "flow.succeed" }]
+}
