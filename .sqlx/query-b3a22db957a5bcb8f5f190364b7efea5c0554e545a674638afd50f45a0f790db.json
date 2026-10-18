@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- $1: kind, $2: run id, $3: payload, $4: when the Job becomes claimable\nINSERT INTO jobs (kind, run_id, payload, run_at)\nVALUES ($1, $2, $3, $4)\nRETURNING id\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid",
+        "Jsonb",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b3a22db957a5bcb8f5f190364b7efea5c0554e545a674638afd50f45a0f790db"
+}

@@ -1,0 +1,151 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Runs newest first. Every filter is optional.\n-- $1: workflow id, $2: status, $3: list only Runs after this run id, $4: limit\nSELECT id, workflow_id, version, status, input, trigger,\n       cursor AS \"cursor: Json<Vec<Value>>\", state, created_at, updated_at, finished_at\nFROM runs\nWHERE ($1::text IS NULL OR workflow_id = $1)\n  AND ($2::text IS NULL OR status = $2)\n  AND ($3::uuid IS NULL OR (created_at, id) < (SELECT created_at, id FROM runs WHERE id = $3))\nORDER BY created_at DESC, id DESC\nLIMIT $4\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "workflow_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "workflow_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "input",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "input"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "trigger",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "trigger"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "cursor: Json<Vec<Value>>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "cursor"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "state",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "updated_at"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "finished_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "finished_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "6485b9025cbdaceacfe472c906af72504c087ea36ee2bcfa5d0d4cb439642e8e"
+}

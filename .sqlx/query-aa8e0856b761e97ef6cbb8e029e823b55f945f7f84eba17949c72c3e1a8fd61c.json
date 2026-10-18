@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Takes the next Timeline position. The row lock on the Run orders concurrent appends,\n-- e.g. from parallel branches.\n-- $1: run id\nUPDATE runs SET timeline_len = timeline_len + 1\nWHERE id = $1\nRETURNING timeline_len\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "timeline_len",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "timeline_len"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "aa8e0856b761e97ef6cbb8e029e823b55f945f7f84eba17949c72c3e1a8fd61c"
+}
