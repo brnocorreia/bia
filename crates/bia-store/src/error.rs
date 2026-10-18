@@ -1,10 +1,8 @@
-//! The error every repository function returns.
+//! The error every repository method returns.
 
 use bia_core::dsl::WorkflowId;
 
-use crate::jobs::JobId;
-use crate::runs::RunId;
-use crate::versions::VersionNumber;
+use crate::models::{JobId, RunId, VersionNumber};
 
 /// Why a repository call failed.
 #[derive(Debug, thiserror::Error)]

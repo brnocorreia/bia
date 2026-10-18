@@ -1,0 +1,154 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Creates a pending Run pinned to a Published Version; inserts no row otherwise.\n-- $1: workflow id, $2: version number, $3: input, $4: trigger, $5: Cursor, $6: state,\n-- $7: creation time\nINSERT INTO runs (\n    workflow_id, version, status, input, trigger, cursor, state, created_at, updated_at\n)\nSELECT v.workflow_id, v.number, 'pending', $3, $4, $5, $6, $7, $7\nFROM versions v\nWHERE v.workflow_id = $1 AND v.number = $2 AND v.state = 'published'\nRETURNING id, workflow_id, version, status, input, trigger,\n          cursor AS \"cursor: Json<Vec<Value>>\", state, created_at, updated_at, finished_at\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "workflow_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "workflow_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "input",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "input"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "trigger",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "trigger"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "cursor: Json<Vec<Value>>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "cursor"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "state",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "updated_at"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "finished_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "finished_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int4",
+        "Jsonb",
+        "Jsonb",
+        "Jsonb",
+        "Jsonb",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "d28e8c8b42376007187eb273cdc4558826162e881e241f02b71538d9b1fffac4"
+}

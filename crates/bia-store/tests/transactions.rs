@@ -4,10 +4,12 @@
 #![allow(clippy::unwrap_used)]
 
 use bia_core::dsl::{ActionName, StepId};
-use bia_store::jobs::NewJob;
-use bia_store::runs::{Checkpoint, RunId, RunStatus};
-use bia_store::timeline::{AttemptStatus, NewTimelineEntry};
-use bia_store::{StoreError, jobs, runs, timeline};
+use bia_store::StoreError;
+use bia_store::models::{AttemptStatus, Checkpoint, NewJob, NewTimelineEntry, RunId, RunStatus};
+use bia_store::repositories::{
+    JobRepository, PgJobRepository, PgRunRepository, PgTimelineRepository, RunRepository,
+    TimelineRepository,
+};
 use serde_json::json;
 use sqlx::{Acquire, PgConnection, PgPool};
 
@@ -40,17 +42,20 @@ fn after_first_step() -> Checkpoint {
 /// What a Worker writes when a Step finishes: Timeline entry, Checkpoint, Job completion and
 /// the next Job.
 async fn transition(conn: &mut PgConnection, run: RunId) {
-    let current = jobs::list_for_run(conn, run).await.unwrap();
-    timeline::append(conn, run, &attempt("fetch", 1))
+    let current = PgJobRepository.list_for_run(conn, run).await.unwrap();
+    PgTimelineRepository
+        .append(conn, run, &attempt("fetch", 1))
         .await
         .unwrap();
-    runs::update_checkpoint(conn, run, RunStatus::Running, &after_first_step(), at(12))
+    PgRunRepository
+        .update_checkpoint(conn, run, RunStatus::Running, &after_first_step(), at(12))
         .await
         .unwrap();
     for job in current {
-        jobs::complete(conn, job.id).await.unwrap();
+        PgJobRepository.complete(conn, job.id).await.unwrap();
     }
-    jobs::enqueue(conn, &NewJob::advance_run(run, at(12)))
+    PgJobRepository
+        .enqueue(conn, &NewJob::advance_run(run, at(12)))
         .await
         .unwrap();
 }
@@ -60,7 +65,8 @@ async fn a_committed_transition_is_visible(pool: PgPool) {
     let mut conn = pool.acquire().await.unwrap();
     let version = published_workflow(&mut conn, "onboarding-email").await;
     let run = start_run(&mut conn, &version, at(0)).await;
-    let first_job = jobs::enqueue(&mut conn, &NewJob::advance_run(run.id, at(0)))
+    let first_job = PgJobRepository
+        .enqueue(&mut conn, &NewJob::advance_run(run.id, at(0)))
         .await
         .unwrap();
 
@@ -68,15 +74,22 @@ async fn a_committed_transition_is_visible(pool: PgPool) {
     transition(&mut tx, run.id).await;
     tx.commit().await.unwrap();
 
-    let stored = runs::get(&mut conn, run.id).await.unwrap().unwrap();
+    let stored = PgRunRepository
+        .get(&mut conn, run.id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(stored.status, RunStatus::Running);
     assert_eq!(stored.checkpoint, after_first_step());
-    let entries = timeline::list(&mut conn, run.id).await.unwrap();
+    let entries = PgTimelineRepository.list(&mut conn, run.id).await.unwrap();
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].seq, 1);
     assert_eq!(entries[0].output, Some(json!({ "status": 200 })));
     assert_eq!(entries[0].duration().num_seconds(), 2);
-    let pending = jobs::list_for_run(&mut conn, run.id).await.unwrap();
+    let pending = PgJobRepository
+        .list_for_run(&mut conn, run.id)
+        .await
+        .unwrap();
     assert_eq!(pending.len(), 1);
     assert_ne!(pending[0].id, first_job);
 }
@@ -86,7 +99,8 @@ async fn a_rolled_back_transition_leaves_nothing(pool: PgPool) {
     let mut conn = pool.acquire().await.unwrap();
     let version = published_workflow(&mut conn, "onboarding-email").await;
     let run = start_run(&mut conn, &version, at(0)).await;
-    let first_job = jobs::enqueue(&mut conn, &NewJob::advance_run(run.id, at(0)))
+    let first_job = PgJobRepository
+        .enqueue(&mut conn, &NewJob::advance_run(run.id, at(0)))
         .await
         .unwrap();
 
@@ -94,16 +108,30 @@ async fn a_rolled_back_transition_leaves_nothing(pool: PgPool) {
     transition(&mut tx, run.id).await;
     tx.rollback().await.unwrap();
 
-    let stored = runs::get(&mut conn, run.id).await.unwrap().unwrap();
+    let stored = PgRunRepository
+        .get(&mut conn, run.id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(stored, run);
-    assert!(timeline::list(&mut conn, run.id).await.unwrap().is_empty());
-    let pending = jobs::list_for_run(&mut conn, run.id).await.unwrap();
+    assert!(
+        PgTimelineRepository
+            .list(&mut conn, run.id)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    let pending = PgJobRepository
+        .list_for_run(&mut conn, run.id)
+        .await
+        .unwrap();
     assert_eq!(pending.len(), 1);
     assert_eq!(pending[0].id, first_job);
 
     // The rolled-back entry did not use up a place in the Timeline.
     assert_eq!(
-        timeline::append(&mut conn, run.id, &attempt("fetch", 1))
+        PgTimelineRepository
+            .append(&mut conn, run.id, &attempt("fetch", 1))
             .await
             .unwrap(),
         1
@@ -118,17 +146,27 @@ async fn a_failed_repository_call_inside_a_transaction_keeps_the_transaction_usa
 
     let mut tx = pool.begin().await.unwrap();
     let missing = RunId::from_uuid(uuid::Uuid::nil());
-    let failed = timeline::append(&mut tx, missing, &attempt("fetch", 1)).await;
+    let failed = PgTimelineRepository
+        .append(&mut tx, missing, &attempt("fetch", 1))
+        .await;
     assert!(
         matches!(failed, Err(StoreError::RunNotFound(_))),
         "{failed:?}"
     );
-    timeline::append(&mut tx, run.id, &attempt("fetch", 1))
+    PgTimelineRepository
+        .append(&mut tx, run.id, &attempt("fetch", 1))
         .await
         .unwrap();
     tx.commit().await.unwrap();
 
-    assert_eq!(timeline::list(&mut conn, run.id).await.unwrap().len(), 1);
+    assert_eq!(
+        PgTimelineRepository
+            .list(&mut conn, run.id)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
 }
 
 #[sqlx::test]
@@ -148,11 +186,14 @@ async fn timeline_entries_keep_their_order(pool: PgPool) {
 
     for entry in [&failed, &attempt("fetch", 2), &skipped] {
         let mut tx = conn.begin().await.unwrap();
-        timeline::append(&mut tx, run.id, entry).await.unwrap();
+        PgTimelineRepository
+            .append(&mut tx, run.id, entry)
+            .await
+            .unwrap();
         tx.commit().await.unwrap();
     }
 
-    let entries = timeline::list(&mut conn, run.id).await.unwrap();
+    let entries = PgTimelineRepository.list(&mut conn, run.id).await.unwrap();
     let summary: Vec<_> = entries
         .iter()
         .map(|entry| {

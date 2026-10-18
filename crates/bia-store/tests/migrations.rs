@@ -3,7 +3,8 @@
 // `allow-unwrap-in-tests` covers `#[test]` functions only, not the helpers they share.
 #![allow(clippy::unwrap_used)]
 
-use bia_store::{MIGRATOR, migrate, workflows};
+use bia_store::repositories::{PgWorkflowRepository, WorkflowRepository};
+use bia_store::{MIGRATOR, migrate};
 use sqlx::PgPool;
 
 mod common;
@@ -22,7 +23,8 @@ async fn migrations_apply_to_an_empty_database(pool: PgPool) {
     migrate(&pool).await.unwrap();
 
     let mut conn = pool.acquire().await.unwrap();
-    workflows::create(&mut conn, &common::workflow_id("onboarding-email"))
+    PgWorkflowRepository
+        .create(&mut conn, &common::workflow_id("onboarding-email"))
         .await
         .unwrap();
 }

@@ -3,9 +3,11 @@
 #![allow(dead_code, unreachable_pub, clippy::unwrap_used)]
 
 use bia_core::dsl::{Definition, WorkflowId};
-use bia_store::runs::{Checkpoint, NewRun, Run};
-use bia_store::versions::{Version, VersionNumber};
-use bia_store::{runs, versions, workflows};
+use bia_store::models::{Checkpoint, NewRun, Run, Version, VersionNumber};
+use bia_store::repositories::{
+    PgRunRepository, PgVersionRepository, PgWorkflowRepository, RunRepository, VersionRepository,
+    WorkflowRepository,
+};
 use chrono::{DateTime, TimeDelta, Utc};
 use serde_json::json;
 use sqlx::PgConnection;
@@ -39,13 +41,16 @@ pub fn definition(workflow: &str, step: &str) -> Definition {
 
 /// Creates `workflow` with one Published Version.
 pub async fn published_workflow(conn: &mut PgConnection, workflow: &str) -> Version {
-    workflows::create(conn, &workflow_id(workflow))
+    PgWorkflowRepository
+        .create(conn, &workflow_id(workflow))
         .await
         .unwrap();
-    let draft = versions::create_draft(conn, &definition(workflow, "first"))
+    let draft = PgVersionRepository
+        .create_draft(conn, &definition(workflow, "first"))
         .await
         .unwrap();
-    versions::publish(conn, &draft.workflow_id, draft.number, t0())
+    PgVersionRepository
+        .publish(conn, &draft.workflow_id, draft.number, t0())
         .await
         .unwrap()
 }
@@ -62,5 +67,5 @@ pub async fn start_run(conn: &mut PgConnection, version: &Version, when: DateTim
             state: json!({}),
         },
     };
-    runs::create(conn, &run, when).await.unwrap()
+    PgRunRepository.create(conn, &run, when).await.unwrap()
 }

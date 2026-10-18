@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- $1: run id, $2: status, $3: Cursor, $4: state, $5: transition time,\n-- $6: finish time (NULL unless the status is finished)\nUPDATE runs\nSET status = $2, cursor = $3, state = $4, updated_at = $5, finished_at = $6\nWHERE id = $1\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Jsonb",
+        "Jsonb",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e2d12984951c2f7fc286c61ea0fbe1194cb43b7532b69a1bfcdc33bb57288690"
+}

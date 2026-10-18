@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Takes the next Version number. The row lock serialises concurrent saves, so numbers\n-- have no gaps.\n-- $1: workflow id\nUPDATE workflows SET last_version = last_version + 1\nWHERE id = $1\nRETURNING last_version\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "last_version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "workflows",
+            "name": "last_version"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "203326640a3785c043205ab6a94742aa26a159bd4cd7cc5c5e92972a8e7c51ce"
+}

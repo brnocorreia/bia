@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- $1: run id, $2: seq, $3: step id, $4: iteration path, $5: attempt, $6: action,\n-- $7: status, $8: input, $9: output, $10: error, $11: start time, $12: finish time\nINSERT INTO timeline_entries (\n    run_id, seq, step_id, iteration_path, attempt, action, status,\n    input, output, error, started_at, finished_at\n)\nVALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Text",
+        "Text",
+        "Int4",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Jsonb",
+        "Jsonb",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1e139601d3038206fa7722c9d515530f56b07f87821e67abd49eb74284b0e237"
+}
