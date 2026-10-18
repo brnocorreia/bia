@@ -4,10 +4,8 @@
 #![allow(clippy::unwrap_used)]
 
 use bia_store::StoreError;
-use bia_store::models::VersionState;
-use bia_store::repositories::{
-    PgVersionRepository, PgWorkflowRepository, VersionRepository, WorkflowRepository,
-};
+use bia_store::version::{PgVersionRepository, VersionRepository, VersionState};
+use bia_store::workflow::{PgWorkflowRepository, WorkflowRepository};
 use sqlx::PgPool;
 
 mod common;

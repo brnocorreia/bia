@@ -3,8 +3,10 @@ use serde_json::Value;
 use sqlx::types::Json;
 use uuid::Uuid;
 
+use super::{Checkpoint, Run, RunId, RunStatus};
 use crate::StoreError;
-use crate::models::{Checkpoint, Run, RunId, RunStatus};
+use crate::version::version_number;
+use crate::workflow::workflow_id;
 
 #[derive(Debug)]
 pub(crate) struct RunRow {
@@ -27,8 +29,8 @@ impl TryFrom<RunRow> for Run {
     fn try_from(row: RunRow) -> Result<Self, StoreError> {
         Ok(Self {
             id: RunId::from_uuid(row.id),
-            workflow_id: super::workflow_id(row.workflow_id)?,
-            version: super::version_number(row.version)?,
+            workflow_id: workflow_id(row.workflow_id)?,
+            version: version_number(row.version)?,
             status: run_status(&row.status)?,
             input: row.input,
             trigger: row.trigger,

@@ -5,10 +5,10 @@ use serde_json::Value;
 use sqlx::PgConnection;
 use sqlx::types::Json;
 
-use super::version::why_not_published;
+use super::row::RunRow;
+use super::{Checkpoint, NewRun, Run, RunFilter, RunId, RunStatus};
 use crate::StoreError;
-use crate::models::{Checkpoint, NewRun, Run, RunFilter, RunId, RunStatus};
-use crate::rows::RunRow;
+use crate::version::why_not_published;
 
 /// Runs: executions pinned to the Version they started on (ADR-0009), and their Checkpoints.
 pub trait RunRepository {
@@ -59,7 +59,7 @@ impl RunRepository for PgRunRepository {
     ) -> Result<Run, StoreError> {
         let row = sqlx::query_file_as!(
             RunRow,
-            "queries/runs/insert.sql",
+            "src/run/queries/insert.sql",
             run.workflow_id.as_str(),
             run.version.get(),
             run.input,
@@ -78,7 +78,7 @@ impl RunRepository for PgRunRepository {
     }
 
     async fn get(&self, conn: &mut PgConnection, id: RunId) -> Result<Option<Run>, StoreError> {
-        sqlx::query_file_as!(RunRow, "queries/runs/get.sql", id.as_uuid())
+        sqlx::query_file_as!(RunRow, "src/run/queries/get.sql", id.as_uuid())
             .fetch_optional(&mut *conn)
             .await?
             .map(Run::try_from)
@@ -95,7 +95,7 @@ impl RunRepository for PgRunRepository {
     ) -> Result<(), StoreError> {
         let finished_at = status.is_finished().then_some(at);
         let updated = sqlx::query_file!(
-            "queries/runs/update_checkpoint.sql",
+            "src/run/queries/update_checkpoint.sql",
             id.as_uuid(),
             status.as_str(),
             Json(&checkpoint.cursor) as _,
@@ -120,7 +120,7 @@ impl RunRepository for PgRunRepository {
     ) -> Result<Vec<Run>, StoreError> {
         sqlx::query_file_as!(
             RunRow,
-            "queries/runs/list.sql",
+            "src/run/queries/list.sql",
             filter.workflow_id.as_ref().map(|id| id.as_str()),
             filter.status.map(RunStatus::as_str),
             filter.after.map(RunId::as_uuid),

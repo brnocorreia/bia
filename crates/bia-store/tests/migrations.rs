@@ -3,7 +3,7 @@
 // `allow-unwrap-in-tests` covers `#[test]` functions only, not the helpers they share.
 #![allow(clippy::unwrap_used)]
 
-use bia_store::repositories::{PgWorkflowRepository, WorkflowRepository};
+use bia_store::workflow::{PgWorkflowRepository, WorkflowRepository};
 use bia_store::{MIGRATOR, migrate};
 use sqlx::PgPool;
 

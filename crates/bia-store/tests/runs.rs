@@ -4,11 +4,11 @@
 #![allow(clippy::unwrap_used)]
 
 use bia_store::StoreError;
-use bia_store::models::{Checkpoint, NewRun, Run, RunFilter, RunId, RunStatus};
-use bia_store::repositories::{
-    PgRunRepository, PgVersionRepository, PgWorkflowRepository, RunRepository, VersionRepository,
-    WorkflowRepository,
+use bia_store::run::{
+    Checkpoint, NewRun, PgRunRepository, Run, RunFilter, RunId, RunRepository, RunStatus,
 };
+use bia_store::version::{PgVersionRepository, VersionRepository};
+use bia_store::workflow::{PgWorkflowRepository, WorkflowRepository};
 use serde_json::json;
 use sqlx::PgPool;
 

@@ -5,10 +5,10 @@
 
 use bia_core::dsl::{ActionName, StepId};
 use bia_store::StoreError;
-use bia_store::models::{AttemptStatus, Checkpoint, NewJob, NewTimelineEntry, RunId, RunStatus};
-use bia_store::repositories::{
-    JobRepository, PgJobRepository, PgRunRepository, PgTimelineRepository, RunRepository,
-    TimelineRepository,
+use bia_store::job::{JobRepository, NewJob, PgJobRepository};
+use bia_store::run::{Checkpoint, PgRunRepository, RunId, RunRepository, RunStatus};
+use bia_store::timeline::{
+    AttemptStatus, NewTimelineEntry, PgTimelineRepository, TimelineRepository,
 };
 use serde_json::json;
 use sqlx::{Acquire, PgConnection, PgPool};

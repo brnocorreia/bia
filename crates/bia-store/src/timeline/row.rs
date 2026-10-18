@@ -3,8 +3,9 @@ use chrono::{DateTime, Utc};
 use serde_json::Value;
 use uuid::Uuid;
 
+use super::{AttemptStatus, TimelineEntry};
 use crate::StoreError;
-use crate::models::{AttemptStatus, RunId, TimelineEntry};
+use crate::run::RunId;
 
 #[derive(Debug)]
 pub(crate) struct TimelineRow {

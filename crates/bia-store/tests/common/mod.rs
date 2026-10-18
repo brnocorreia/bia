@@ -3,11 +3,9 @@
 #![allow(dead_code, unreachable_pub, clippy::unwrap_used)]
 
 use bia_core::dsl::{Definition, WorkflowId};
-use bia_store::models::{Checkpoint, NewRun, Run, Version, VersionNumber};
-use bia_store::repositories::{
-    PgRunRepository, PgVersionRepository, PgWorkflowRepository, RunRepository, VersionRepository,
-    WorkflowRepository,
-};
+use bia_store::run::{Checkpoint, NewRun, PgRunRepository, Run, RunRepository};
+use bia_store::version::{PgVersionRepository, Version, VersionNumber, VersionRepository};
+use bia_store::workflow::{PgWorkflowRepository, WorkflowRepository};
 use chrono::{DateTime, TimeDelta, Utc};
 use serde_json::json;
 use sqlx::PgConnection;

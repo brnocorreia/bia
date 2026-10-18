@@ -3,10 +3,11 @@ use std::future::Future;
 use bia_core::dsl::WorkflowId;
 use sqlx::PgConnection;
 
-use super::version::why_not_published;
+use super::Workflow;
+use super::row::WorkflowRow;
 use crate::StoreError;
-use crate::models::{VersionNumber, Workflow};
-use crate::rows::WorkflowRow;
+use crate::version::VersionNumber;
+use crate::version::why_not_published;
 
 /// Workflows: stable identities that own Versions and point at one Active Version.
 pub trait WorkflowRepository {
@@ -50,7 +51,7 @@ impl WorkflowRepository for PgWorkflowRepository {
         conn: &mut PgConnection,
         id: &WorkflowId,
     ) -> Result<Workflow, StoreError> {
-        sqlx::query_file_as!(WorkflowRow, "queries/workflows/insert.sql", id.as_str())
+        sqlx::query_file_as!(WorkflowRow, "src/workflow/queries/insert.sql", id.as_str())
             .fetch_optional(&mut *conn)
             .await?
             .ok_or_else(|| StoreError::WorkflowExists(id.clone()))?
@@ -62,7 +63,7 @@ impl WorkflowRepository for PgWorkflowRepository {
         conn: &mut PgConnection,
         id: &WorkflowId,
     ) -> Result<Option<Workflow>, StoreError> {
-        sqlx::query_file_as!(WorkflowRow, "queries/workflows/get.sql", id.as_str())
+        sqlx::query_file_as!(WorkflowRow, "src/workflow/queries/get.sql", id.as_str())
             .fetch_optional(&mut *conn)
             .await?
             .map(Workflow::try_from)
@@ -70,7 +71,7 @@ impl WorkflowRepository for PgWorkflowRepository {
     }
 
     async fn list(&self, conn: &mut PgConnection) -> Result<Vec<Workflow>, StoreError> {
-        sqlx::query_file_as!(WorkflowRow, "queries/workflows/list.sql")
+        sqlx::query_file_as!(WorkflowRow, "src/workflow/queries/list.sql")
             .fetch_all(&mut *conn)
             .await?
             .into_iter()
@@ -85,7 +86,7 @@ impl WorkflowRepository for PgWorkflowRepository {
         number: VersionNumber,
     ) -> Result<(), StoreError> {
         let updated = sqlx::query_file!(
-            "queries/workflows/set_active_version.sql",
+            "src/workflow/queries/set_active_version.sql",
             id.as_str(),
             number.get(),
         )

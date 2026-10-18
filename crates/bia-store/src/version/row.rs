@@ -2,8 +2,9 @@ use bia_core::dsl::Definition;
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 
+use super::{Version, VersionNumber, VersionState};
 use crate::StoreError;
-use crate::models::{Version, VersionState};
+use crate::workflow::workflow_id;
 
 #[derive(Debug)]
 pub(crate) struct VersionRow {
@@ -20,8 +21,8 @@ impl TryFrom<VersionRow> for Version {
 
     fn try_from(row: VersionRow) -> Result<Self, StoreError> {
         Ok(Self {
-            workflow_id: super::workflow_id(row.workflow_id)?,
-            number: super::version_number(row.number)?,
+            workflow_id: workflow_id(row.workflow_id)?,
+            number: version_number(row.number)?,
             definition: Definition::from_value(row.definition)
                 .map_err(|err| StoreError::invalid("definition", err))?,
             state: version_state(&row.state)?,
@@ -37,4 +38,9 @@ pub(crate) fn version_state(state: &str) -> Result<VersionState, StoreError> {
         "published" => Ok(VersionState::Published),
         other => Err(StoreError::invalid("version state", other)),
     }
+}
+
+/// Reads back a stored Version number.
+pub(crate) fn version_number(number: i32) -> Result<VersionNumber, StoreError> {
+    VersionNumber::new(number).ok_or_else(|| StoreError::invalid("version number", number))
 }

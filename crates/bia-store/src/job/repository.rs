@@ -2,9 +2,10 @@ use std::future::Future;
 
 use sqlx::PgConnection;
 
+use super::row::JobRow;
+use super::{Job, JobId, NewJob};
 use crate::StoreError;
-use crate::models::{Job, JobId, NewJob, RunId};
-use crate::rows::JobRow;
+use crate::run::RunId;
 
 /// Jobs: internal units of engine work. Enqueueing and completing them here lets a
 /// transition do both in its transaction (ADR-0010); claims, Leases and retries build on the
@@ -39,7 +40,7 @@ pub struct PgJobRepository;
 impl JobRepository for PgJobRepository {
     async fn enqueue(&self, conn: &mut PgConnection, job: &NewJob) -> Result<JobId, StoreError> {
         let id = sqlx::query_file_scalar!(
-            "queries/jobs/insert.sql",
+            "src/job/queries/insert.sql",
             job.kind.as_str(),
             job.run_id.map(RunId::as_uuid),
             job.payload,
@@ -52,7 +53,7 @@ impl JobRepository for PgJobRepository {
     }
 
     async fn complete(&self, conn: &mut PgConnection, id: JobId) -> Result<(), StoreError> {
-        let deleted = sqlx::query_file!("queries/jobs/delete.sql", id.get())
+        let deleted = sqlx::query_file!("src/job/queries/delete.sql", id.get())
             .execute(&mut *conn)
             .await?
             .rows_affected();
@@ -68,7 +69,7 @@ impl JobRepository for PgJobRepository {
         conn: &mut PgConnection,
         run: RunId,
     ) -> Result<Vec<Job>, StoreError> {
-        sqlx::query_file_as!(JobRow, "queries/jobs/list_for_run.sql", run.as_uuid())
+        sqlx::query_file_as!(JobRow, "src/job/queries/list_for_run.sql", run.as_uuid())
             .fetch_all(&mut *conn)
             .await?
             .into_iter()

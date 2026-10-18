@@ -2,7 +2,7 @@ use bia_core::dsl::{ActionName, StepId};
 use chrono::{DateTime, TimeDelta, Utc};
 use serde_json::Value;
 
-use super::RunId;
+use crate::run::RunId;
 
 /// How an Attempt ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

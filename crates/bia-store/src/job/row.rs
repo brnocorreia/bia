@@ -2,8 +2,9 @@ use chrono::{DateTime, Utc};
 use serde_json::Value;
 use uuid::Uuid;
 
+use super::{Job, JobId, JobKind};
 use crate::StoreError;
-use crate::models::{Job, JobId, JobKind, RunId};
+use crate::run::RunId;
 
 #[derive(Debug)]
 pub(crate) struct JobRow {

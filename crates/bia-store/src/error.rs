@@ -2,7 +2,9 @@
 
 use bia_core::dsl::WorkflowId;
 
-use crate::models::{JobId, RunId, VersionNumber};
+use crate::job::JobId;
+use crate::run::RunId;
+use crate::version::VersionNumber;
 
 /// Why a repository call failed.
 #[derive(Debug, thiserror::Error)]

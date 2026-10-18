@@ -2,9 +2,10 @@ use std::future::Future;
 
 use sqlx::{Acquire, PgConnection};
 
+use super::row::TimelineRow;
+use super::{NewTimelineEntry, TimelineEntry};
 use crate::StoreError;
-use crate::models::{NewTimelineEntry, RunId, TimelineEntry};
-use crate::rows::TimelineRow;
+use crate::run::RunId;
 
 /// Timelines: the ordered record of a Run, one entry per Attempt.
 pub trait TimelineRepository {
@@ -37,13 +38,13 @@ impl TimelineRepository for PgTimelineRepository {
     ) -> Result<i32, StoreError> {
         let mut tx = conn.begin().await?;
 
-        let seq = sqlx::query_file_scalar!("queries/timeline/next_seq.sql", run.as_uuid())
+        let seq = sqlx::query_file_scalar!("src/timeline/queries/next_seq.sql", run.as_uuid())
             .fetch_optional(&mut *tx)
             .await?
             .ok_or(StoreError::RunNotFound(run))?;
 
         sqlx::query_file!(
-            "queries/timeline/insert.sql",
+            "src/timeline/queries/insert.sql",
             run.as_uuid(),
             seq,
             entry.step_id.as_str(),
@@ -69,7 +70,7 @@ impl TimelineRepository for PgTimelineRepository {
         conn: &mut PgConnection,
         run: RunId,
     ) -> Result<Vec<TimelineEntry>, StoreError> {
-        sqlx::query_file_as!(TimelineRow, "queries/timeline/list.sql", run.as_uuid())
+        sqlx::query_file_as!(TimelineRow, "src/timeline/queries/list.sql", run.as_uuid())
             .fetch_all(&mut *conn)
             .await?
             .into_iter()

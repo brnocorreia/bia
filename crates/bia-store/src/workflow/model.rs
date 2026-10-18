@@ -1,7 +1,7 @@
 use bia_core::dsl::WorkflowId;
 use chrono::{DateTime, Utc};
 
-use super::VersionNumber;
+use crate::version::VersionNumber;
 
 /// A Workflow and its Active Version.
 #[derive(Debug, Clone, PartialEq, Eq)]

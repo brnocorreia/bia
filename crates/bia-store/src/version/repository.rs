@@ -5,9 +5,10 @@ use chrono::{DateTime, Utc};
 use sqlx::types::Json;
 use sqlx::{Acquire, PgConnection};
 
+use super::row::VersionRow;
+use super::row::version_state;
+use super::{Version, VersionNumber};
 use crate::StoreError;
-use crate::models::{Version, VersionNumber};
-use crate::rows::{VersionRow, version_state};
 
 /// Versions: immutable, numbered snapshots of a Workflow's Definition (ADR-0009). A Draft
 /// can be replaced; publishing freezes it for good.
@@ -67,17 +68,15 @@ impl VersionRepository for PgVersionRepository {
         let workflow = &definition.id;
         let mut tx = conn.begin().await?;
 
-        let number = sqlx::query_file_scalar!(
-            "queries/workflows/next_version_number.sql",
-            workflow.as_str(),
-        )
-        .fetch_optional(&mut *tx)
-        .await?
-        .ok_or_else(|| StoreError::WorkflowNotFound(workflow.clone()))?;
+        let number =
+            sqlx::query_file_scalar!("src/version/queries/next_number.sql", workflow.as_str(),)
+                .fetch_optional(&mut *tx)
+                .await?
+                .ok_or_else(|| StoreError::WorkflowNotFound(workflow.clone()))?;
 
         let row = sqlx::query_file_as!(
             VersionRow,
-            "queries/versions/insert_draft.sql",
+            "src/version/queries/insert_draft.sql",
             workflow.as_str(),
             number,
             Json(definition) as _,
@@ -105,7 +104,7 @@ impl VersionRepository for PgVersionRepository {
 
         let row = sqlx::query_file_as!(
             VersionRow,
-            "queries/versions/replace_draft.sql",
+            "src/version/queries/replace_draft.sql",
             workflow.as_str(),
             number.get(),
             Json(definition) as _,
@@ -128,7 +127,7 @@ impl VersionRepository for PgVersionRepository {
     ) -> Result<Version, StoreError> {
         let row = sqlx::query_file_as!(
             VersionRow,
-            "queries/versions/publish.sql",
+            "src/version/queries/publish.sql",
             workflow.as_str(),
             number.get(),
             at,
@@ -150,7 +149,7 @@ impl VersionRepository for PgVersionRepository {
     ) -> Result<Option<Version>, StoreError> {
         sqlx::query_file_as!(
             VersionRow,
-            "queries/versions/get.sql",
+            "src/version/queries/get.sql",
             workflow.as_str(),
             number.get(),
         )
@@ -165,17 +164,21 @@ impl VersionRepository for PgVersionRepository {
         conn: &mut PgConnection,
         workflow: &WorkflowId,
     ) -> Result<Vec<Version>, StoreError> {
-        sqlx::query_file_as!(VersionRow, "queries/versions/list.sql", workflow.as_str())
-            .fetch_all(&mut *conn)
-            .await?
-            .into_iter()
-            .map(Version::try_from)
-            .collect()
+        sqlx::query_file_as!(
+            VersionRow,
+            "src/version/queries/list.sql",
+            workflow.as_str()
+        )
+        .fetch_all(&mut *conn)
+        .await?
+        .into_iter()
+        .map(Version::try_from)
+        .collect()
     }
 }
 
 /// Explains why a Version could not be used as a Published one.
-pub(super) async fn why_not_published(
+pub(crate) async fn why_not_published(
     conn: &mut PgConnection,
     workflow: &WorkflowId,
     number: VersionNumber,
@@ -214,7 +217,7 @@ async fn exists(
     number: VersionNumber,
 ) -> Result<bool, StoreError> {
     let state = sqlx::query_file_scalar!(
-        "queries/versions/get_state.sql",
+        "src/version/queries/get_state.sql",
         workflow.as_str(),
         number.get(),
     )
@@ -232,7 +235,7 @@ async fn missing(
     number: VersionNumber,
 ) -> Result<StoreError, StoreError> {
     let workflow_exists =
-        sqlx::query_file_scalar!("queries/workflows/exists.sql", workflow.as_str())
+        sqlx::query_file_scalar!("src/version/queries/workflow_exists.sql", workflow.as_str())
             .fetch_one(&mut *conn)
             .await?;
 
