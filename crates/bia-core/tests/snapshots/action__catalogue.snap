@@ -1,0 +1,50 @@
+---
+source: crates/bia-core/tests/action.rs
+expression: registry.catalogue()
+---
+[
+  {
+    "name": "exec.shell",
+    "category": "exec",
+    "description": "Runs a shell command.",
+    "effect": "side_effecting",
+    "dangerous": true,
+    "param_schema": {},
+    "output_schema": {},
+    "examples": [],
+    "enabled": false
+  },
+  {
+    "name": "test.echo",
+    "category": "test",
+    "description": "Returns its Params.",
+    "effect": "pure",
+    "dangerous": false,
+    "param_schema": {
+      "type": "object",
+      "properties": {
+        "greeting": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "greeting"
+      ]
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "examples": [
+      {
+        "description": "Echo a greeting",
+        "params": {
+          "greeting": "hi"
+        },
+        "output": {
+          "greeting": "hi"
+        }
+      }
+    ],
+    "enabled": true
+  }
+]

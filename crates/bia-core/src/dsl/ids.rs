@@ -1,6 +1,6 @@
 //! Identifiers and names that appear in Definitions, each checked on parse.
 
-use std::borrow::Cow;
+use std::borrow::{Borrow, Cow};
 use std::fmt;
 
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
@@ -68,6 +68,12 @@ macro_rules! name_type {
             }
         }
 
+        impl Borrow<str> for $name {
+            fn borrow(&self) -> &str {
+                &self.0
+            }
+        }
+
         impl<'de> Deserialize<'de> for $name {
             fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
                 Self::new(String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
@@ -121,6 +127,23 @@ name_type! {
     expected: "lowercase letters, digits, `_` or `-`, starting with a letter"
 }
 
+impl ActionName {
+    /// The part before the dot, e.g. `http` in `http.request`.
+    pub fn category(&self) -> &str {
+        self.parts().0
+    }
+
+    /// The part after the dot, e.g. `request` in `http.request`.
+    pub fn operation(&self) -> &str {
+        self.parts().1
+    }
+
+    fn parts(&self) -> (&str, &str) {
+        // `new` guarantees exactly one dot.
+        self.0.split_once('.').unwrap_or((&self.0, ""))
+    }
+}
+
 /// A string that breaks the rules for an identifier or name.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("invalid name `{value}`: expected {expected}, at most 64 characters")]
@@ -162,5 +185,7 @@ mod tests {
         ] {
             assert!(ActionName::new(bad).is_err(), "{bad:?} should be rejected");
         }
+        let name = ActionName::new("flow.loop_until").unwrap();
+        assert_eq!((name.category(), name.operation()), ("flow", "loop_until"));
     }
 }
