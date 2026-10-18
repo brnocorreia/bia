@@ -1,0 +1,27 @@
+---
+source: crates/bia-core/tests/validation.rs
+expression: "validate_with(Target::Draft, limits,\nyaml(r\"\n            schema_version: 1\n            id: test\n            steps:\n              - id: outer\n                action: flow.foreach\n                items: input.list\n                max_iterations: 1000\n                body:\n                  - id: inner\n                    action: flow.loop_until\n                    until: 'true'\n                    body:\n                      - id: deepest\n                        action: flow.sleep\n                        params: { duration: 1s }\n              - id: second\n                action: flow.sleep\n                params: { duration: 1s }\n              - id: third\n                action: flow.sleep\n                params: { duration: 1s }\n            \",),)"
+---
+[
+  {
+    "path": "/steps/0/max_iterations",
+    "code": "iteration_limit_exceeded",
+    "severity": "error",
+    "message": "max_iterations is 1000, more than the limit of 100",
+    "suggestion": null
+  },
+  {
+    "path": "/steps/0/body/0",
+    "code": "nesting_limit_exceeded",
+    "severity": "error",
+    "message": "Steps inside 'inner' are nested 2 Blocks deep, more than the limit of 1",
+    "suggestion": null
+  },
+  {
+    "path": "/steps/2",
+    "code": "step_limit_exceeded",
+    "severity": "error",
+    "message": "The Definition has 5 Steps, more than the limit of 4",
+    "suggestion": null
+  }
+]

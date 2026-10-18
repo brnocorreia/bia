@@ -1,0 +1,20 @@
+---
+source: crates/bia-core/tests/validation.rs
+expression: "validate(Target::Draft,\nsteps(json!([{\n    \"id\": \"notify\", \"action\": \"queue.publish\", \"params\":\n    { \"queue\": \"emails\", \"body\": \"{{ steps.fetch.output.body }}\" },\n},\n{\n    \"id\": \"fetch\", \"action\": \"http.request\", \"params\":\n    { \"method\": \"GET\", \"url\": \"https://x\" }\n},\n{\n    \"id\": \"self_ref\", \"action\": \"flow.sleep\", \"if\":\n    \"steps.self_ref.output.done\", \"params\": { \"duration\": \"1s\" }\n},])),)"
+---
+[
+  {
+    "path": "/steps/0/params/body",
+    "code": "forward_step_reference",
+    "severity": "error",
+    "message": "Step 'fetch' runs later, so its Output is not available here",
+    "suggestion": null
+  },
+  {
+    "path": "/steps/2/if",
+    "code": "forward_step_reference",
+    "severity": "error",
+    "message": "Step 'self_ref' cannot read its own Output",
+    "suggestion": null
+  }
+]

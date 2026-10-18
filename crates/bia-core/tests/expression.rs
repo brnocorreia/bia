@@ -280,7 +280,48 @@ fn extraction_lists_exactly_the_referenced_steps_and_secrets() {
     ];
     for (source, expected) in cases {
         let expression = Expression::compile(source).unwrap();
-        assert_eq!(expression.references(), expected, "{source}");
+        let References {
+            steps,
+            secrets,
+            dynamic_steps,
+            dynamic_secrets,
+            variables: _,
+        } = expression.references();
+        assert_eq!(
+            (steps, secrets, dynamic_steps, dynamic_secrets),
+            (
+                &expected.steps,
+                &expected.secrets,
+                &expected.dynamic_steps,
+                &expected.dynamic_secrets
+            ),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn extraction_lists_the_scope_variables_read_outside_comprehensions() {
+    let cases: &[(&str, &[&str])] = &[
+        ("input.email", &["input"]),
+        (
+            "steps.a.output + item.n + index",
+            &["index", "item", "steps"],
+        ),
+        ("size(secrets) > 0", &["secrets"]),
+        ("has(error.message)", &["error"]),
+        ("input.list.map(item, item.n)", &["input"]),
+        ("trigger.id + run.id", &["run", "trigger"]),
+    ];
+    for (source, expected) in cases {
+        let expression = Expression::compile(source).unwrap();
+        let variables: Vec<&str> = expression
+            .references()
+            .variables
+            .iter()
+            .map(String::as_str)
+            .collect();
+        assert_eq!(variables, *expected, "{source}");
     }
 }
 
@@ -308,7 +349,9 @@ fn template_extraction_unions_its_segments() {
         "Bearer {{ secrets.TOKEN }} for {{ steps.user.output.id }}/{{ steps.user.output.org }} {{ steps.other.output }}",
     )
     .unwrap();
-    assert_eq!(template.references(), &refs(&["other", "user"], &["TOKEN"]));
+    let mut expected = refs(&["other", "user"], &["TOKEN"]);
+    expected.variables = ["secrets".to_owned(), "steps".to_owned()].into();
+    assert_eq!(template.references(), &expected);
 }
 
 #[test]
