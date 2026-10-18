@@ -1,8 +1,12 @@
-//! Jobs: internal units of engine work.
+//! Jobs: internal units of engine work, claimed by Workers under a Lease.
 
+mod listener;
 mod model;
 mod repository;
 mod row;
 
-pub use model::{Job, JobId, JobKind, NewJob};
+pub use listener::{JobListener, NOTIFY_CHANNEL};
+pub use model::{
+    Backoff, Claimed, DEFAULT_MAX_ATTEMPTS, Failed, Job, JobId, JobKind, Lease, NewJob,
+};
 pub use repository::{JobRepository, PgJobRepository};

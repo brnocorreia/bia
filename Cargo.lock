@@ -133,6 +133,7 @@ dependencies = [
  "base64",
  "bia-core",
  "cel",
+ "chrono",
  "insta",
  "jsonschema",
  "schemars",
@@ -171,6 +172,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "thiserror",
+ "tokio",
  "uuid",
 ]
 

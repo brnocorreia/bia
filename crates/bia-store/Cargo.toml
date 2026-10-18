@@ -10,7 +10,7 @@ publish.workspace = true
 
 [dependencies]
 bia-core.workspace = true
-chrono = { version = "0.4.45", default-features = false, features = ["std"] }
+chrono = { version = "0.4.45", default-features = false, features = ["now", "std"] }
 serde_json = "1.0.154"
 sqlx = { workspace = true, features = ["chrono", "json", "uuid"] }
 thiserror = "2.0.21"
@@ -18,3 +18,7 @@ uuid = "1.28.0"
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+bia-core = { workspace = true, features = ["testing"] }
+tokio = { version = "1.53.3", features = ["macros", "rt", "time"] }

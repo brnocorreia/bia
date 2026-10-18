@@ -39,8 +39,10 @@ pub enum StoreError {
     },
     #[error("run {0} not found")]
     RunNotFound(RunId),
-    #[error("job {0} not found")]
-    JobNotFound(JobId),
+    /// The Lease on the Job ended: another claimer took the Job after it expired, or the Job
+    /// was already acked or failed.
+    #[error("lease on job {0} was lost")]
+    LeaseLost(JobId),
     /// A stored value this build cannot read back.
     #[error("stored {what} is invalid: {message}")]
     InvalidStoredData { what: &'static str, message: String },

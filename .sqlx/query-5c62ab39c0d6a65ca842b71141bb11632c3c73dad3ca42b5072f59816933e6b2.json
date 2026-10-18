@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "-- $1: run id\nSELECT id, kind, run_id, payload, run_at, attempts, locked_by, locked_until, last_error\nFROM jobs\nWHERE run_id = $1\nORDER BY id\n",
+  "query": "-- $1: run id\nSELECT id, kind, run_id, payload, run_at, attempts, max_attempts, locked_by, locked_until,\n       last_error, failed_at\nFROM jobs\nWHERE run_id = $1\nORDER BY id\n",
   "describe": {
     "columns": [
       {
@@ -71,6 +71,17 @@
       },
       {
         "ordinal": 6,
+        "name": "max_attempts",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "max_attempts"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
         "name": "locked_by",
         "type_info": "Text",
         "origin": {
@@ -81,7 +92,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "locked_until",
         "type_info": "Timestamptz",
         "origin": {
@@ -92,13 +103,24 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "last_error",
         "type_info": "Text",
         "origin": {
           "Table": {
             "table": "jobs",
             "name": "last_error"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "failed_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "failed_at"
           }
         }
       }
@@ -115,10 +137,12 @@
       false,
       false,
       false,
+      false,
+      true,
       true,
       true,
       true
     ]
   },
-  "hash": "50fad7ffdf74fc4f0b3872df3509b98228de1376bdbdfb32a5122d96deb65fd0"
+  "hash": "5c62ab39c0d6a65ca842b71141bb11632c3c73dad3ca42b5072f59816933e6b2"
 }

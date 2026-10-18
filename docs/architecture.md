@@ -37,7 +37,7 @@ The dependency rule keeps rebuilds small: an edit to an Action recompiles `bia-a
 
 ## Time
 
-Engine, scheduler and store read time from an injected `Clock` (ADR-0022), so tests drive sleeps, cron and Lease expiry deterministically.
+Engine, scheduler and store read time from an injected `Clock` (ADR-0022), so tests drive sleeps, cron and Lease expiry deterministically. The trait and the manual test Clock (behind `bia-core`'s `testing` feature) live in `bia-core`; the system Clock lives in `bia-store`. Store functions take `now` as a parameter rather than a Clock.
 
 ## Processes
 
