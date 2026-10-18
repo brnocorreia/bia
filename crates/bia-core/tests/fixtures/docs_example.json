@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "id": "onboarding-email",
+  "description": "Welcome new signups and escalate VIPs",
+  "triggers": [
+    {
+      "id": "daily",
+      "type": "cron",
+      "expr": "0 9 * * *",
+      "tz": "America/Sao_Paulo",
+      "overlap": "skip",
+      "catch_up": "latest"
+    },
+    {
+      "id": "signups",
+      "type": "queue",
+      "queue": "signups",
+      "batch_size": 10
+    },
+    {
+      "id": "signup_hook",
+      "type": "webhook",
+      "hmac": {
+        "header": "X-Signature",
+        "secret": "secrets.SIGNUP_HMAC"
+      }
+    },
+    {
+      "id": "by_hand",
+      "type": "manual"
+    }
+  ],
+  "input_schema": {
+    "properties": {
+      "email": {
+        "format": "email",
+        "type": "string"
+      }
+    },
+    "required": [
+      "email"
+    ],
+    "type": "object"
+  },
+  "limits": {
+    "max_concurrent_runs": 5
+  },
+  "steps": [
+    {
+      "id": "fetch_user",
+      "action": "http.request",
+      "retry": {
+        "max_attempts": 5,
+        "backoff": "exponential",
+        "initial": "2s",
+        "max": "1m"
+      },
+      "timeout": "30s",
+      "params": {
+        "headers": {
+          "Authorization": "Bearer {{ secrets.API_TOKEN }}"
+        },
+        "method": "GET",
+        "url": "https://api.example.com/users/{{ input.email }}"
+      }
+    },
+    {
+      "id": "is_vip",
+      "action": "flow.branch",
+      "when": "steps.fetch_user.output.body.plan == 'vip'",
+      "then": [
+        {
+          "id": "send_vip",
+          "action": "queue.publish",
+          "params": {
+            "body": "{{ steps.fetch_user.output.body }}",
+            "queue": "emails"
+          }
+        }
+      ],
+      "else": [
+        {
+          "id": "send_basic",
+          "action": "queue.publish",
+          "params": {
+            "body": {
+              "email": "{{ input.email }}",
+              "template": "basic"
+            },
+            "queue": "emails"
+          }
+        }
+      ]
+    },
+    {
+      "id": "wait",
+      "action": "flow.sleep",
+      "params": {
+        "duration": "3d"
+      }
+    },
+    {
+      "id": "approval",
+      "action": "human.approval",
+      "params": {
+        "timeout": "7d",
+        "title": "Upgrade {{ input.email }}?"
+      }
+    }
+  ],
+  "on_error": [
+    {
+      "id": "notify_failure",
+      "action": "http.request",
+      "params": {
+        "body": {
+          "run": "{{ run.id }}"
+        },
+        "method": "POST",
+        "url": "https://hooks.example.com/alerts"
+      }
+    }
+  ]
+}

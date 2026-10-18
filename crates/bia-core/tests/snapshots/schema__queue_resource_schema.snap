@@ -1,0 +1,63 @@
+---
+source: crates/bia-core/tests/schema.rs
+expression: queue_resource_schema()
+---
+{
+  "$defs": {
+    "Duration": {
+      "description": "A whole number followed by a unit: `ms`, `s`, `m`, `h` or `d` (e.g. `500ms`, `30s`, `3d`).",
+      "pattern": "^(0|[1-9][0-9]*)(ms|s|m|h|d)$",
+      "type": "string"
+    },
+    "QueueKind": {
+      "description": "The `kind` of a queue resource file.",
+      "enum": [
+        "queue"
+      ],
+      "type": "string"
+    },
+    "QueueName": {
+      "description": "A Queue's name (e.g. `emails`).",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_-]*$",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A Queue declared as a resource file (ADR-0015).",
+  "properties": {
+    "batch_size": {
+      "description": "How many Messages a consumer receives at once.",
+      "format": "uint32",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "dead_letter": {
+      "$ref": "#/$defs/QueueName",
+      "description": "Queue that receives Messages which exhausted their retries."
+    },
+    "kind": {
+      "$ref": "#/$defs/QueueKind"
+    },
+    "max_retries": {
+      "description": "Deliveries a Message gets before it moves to the Dead-Letter Queue.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "name": {
+      "$ref": "#/$defs/QueueName"
+    },
+    "visibility_timeout": {
+      "$ref": "#/$defs/Duration",
+      "description": "How long a delivered Message stays hidden from other consumers."
+    }
+  },
+  "required": [
+    "kind",
+    "name"
+  ],
+  "title": "QueueResource",
+  "type": "object"
+}

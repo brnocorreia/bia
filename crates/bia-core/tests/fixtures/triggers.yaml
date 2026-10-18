@@ -1,0 +1,23 @@
+# Every Trigger type, with every field it accepts.
+schema_version: 1
+id: every_trigger
+triggers:
+  - id: nightly
+    type: cron
+    expr: "0 3 * * *"
+    tz: UTC
+    jitter: 30s
+    overlap: queue
+    catch_up: all
+  - { id: hourly, type: cron, expr: "0 * * * *" }
+  - { id: inbox, type: queue, queue: inbox, batch_size: 25 }
+  - { id: plain_hook, type: webhook }
+  - { id: signed_hook, type: webhook, hmac: { header: X-Hub-Signature-256, secret: secrets.GITHUB_HMAC } }
+  - { id: by_hand, type: manual }
+  - { id: on_signup, type: event, event: user.signed_up, match: vip }
+  - { id: any_order, type: event, event: order.created }
+input_schema: { type: object }
+limits: { max_concurrent_runs: 1 }
+steps:
+  - id: noop
+    action: flow.succeed
