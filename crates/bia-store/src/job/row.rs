@@ -14,9 +14,11 @@ pub(crate) struct JobRow {
     pub(crate) payload: Value,
     pub(crate) run_at: DateTime<Utc>,
     pub(crate) attempts: i32,
+    pub(crate) max_attempts: i32,
     pub(crate) locked_by: Option<String>,
     pub(crate) locked_until: Option<DateTime<Utc>>,
     pub(crate) last_error: Option<String>,
+    pub(crate) failed_at: Option<DateTime<Utc>>,
 }
 
 impl TryFrom<JobRow> for Job {
@@ -30,14 +32,16 @@ impl TryFrom<JobRow> for Job {
             payload: row.payload,
             run_at: row.run_at,
             attempts: row.attempts,
+            max_attempts: row.max_attempts,
             locked_by: row.locked_by,
             locked_until: row.locked_until,
             last_error: row.last_error,
+            failed_at: row.failed_at,
         })
     }
 }
 
-fn job_kind(kind: &str) -> Result<JobKind, StoreError> {
+pub(crate) fn job_kind(kind: &str) -> Result<JobKind, StoreError> {
     match kind {
         "advance_run" => Ok(JobKind::AdvanceRun),
         other => Err(StoreError::invalid("job kind", other)),
