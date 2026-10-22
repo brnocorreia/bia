@@ -26,7 +26,10 @@ pub fn builtin_registry() -> Result<InMemoryRegistry, BuiltinError> {
         Arc::new(http::Request::new()?),
         Arc::new(transform::Expr::new()),
     ];
-    for action in actions {
+    let flow = bia_core::action::flow::Flow::all()
+        .into_iter()
+        .map(|action| Arc::new(action) as Arc<dyn Action>);
+    for action in actions.into_iter().chain(flow) {
         registry
             .register(action)
             .expect("builtin Actions have distinct names");

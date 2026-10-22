@@ -16,6 +16,7 @@ use crate::dsl::{Params, StepId, WorkflowId};
 
 mod descriptor;
 mod error;
+pub mod flow;
 mod registry;
 #[cfg(feature = "testing")]
 pub mod testing;

@@ -80,14 +80,14 @@ Blocks hold nested Step lists. They never reference other Steps by id (ADR-0003)
 
 | Action | Nested fields | Notes |
 |---|---|---|
-| `flow.branch` | **`when`**, **`then`**, `else` | |
+| `flow.branch` | **`when`**, **`then`**, `else` | Output is `{ "arm": "then" \| "else" }`. |
 | `flow.switch` | **`value`**, **`cases: [{ equals, steps }]`**, `default` | |
 | `flow.parallel` | **`branches: [[steps], …]`**, `join: all\|any\|n_of_m`, `n`, `mode: fail_fast\|all_settled` | Output is the list of branch Outputs. |
 | `flow.foreach` | **`items`** (CEL), **`body`**, `concurrency`, `max_iterations`, `mode` | `item` and `index` in scope; Output is the list of each iteration's last Output. |
 | `flow.loop_until` | **`body`**, **`until`** (CEL), `max_iterations` | `until` sees the iteration's Outputs. |
 | `flow.try` | **`body`**, **`catch`** | `catch` sees `error`. |
 
-Every other Action is an ordinary Step that takes `params`, including these flow Actions: `flow.subworkflow` (params: `workflow`, `input`, `wait: true|false`; bounded by `max_subworkflow_depth`), `flow.sleep`, `flow.sleep_until`, `flow.wait_for_event` (`event`, optional `match` Correlation Key, `timeout`), `flow.fail`, `flow.succeed`, `flow.rate_limit`, `flow.debounce`, `flow.dedupe`.
+Every other Action is an ordinary Step that takes `params`, including these flow Actions: `flow.subworkflow` (params: `workflow`, `input`, `wait: true|false`; bounded by `max_subworkflow_depth`), `flow.sleep` (`duration`), `flow.sleep_until` (`timestamp`, RFC 3339), `flow.wait_for_event` (`event`, optional `match` Correlation Key, `timeout`), `flow.fail` (`message`), `flow.succeed` (ends the whole Run, from any depth), `flow.rate_limit`, `flow.debounce`, `flow.dedupe`.
 
 Human Tasks: `human.approval`, `human.form` (fields from a JSON Schema), `human.choice`. All are built on `wait_for_event` (ADR-0018).
 

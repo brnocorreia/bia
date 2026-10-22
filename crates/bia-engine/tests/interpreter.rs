@@ -761,3 +761,538 @@ async fn an_undefined_secret_fails_the_step(pool: PgPool) {
     assert_eq!(error["code"], "unknown_secret");
     assert_eq!(error["class"], "fatal");
 }
+
+fn echo(id: &str, n: i64) -> Value {
+    json!({ "id": id, "action": "test.echo", "params": { "n": n } })
+}
+
+fn definition(id: &str, steps: Vec<Value>) -> Value {
+    json!({ "schema_version": 1, "id": id, "steps": steps })
+}
+
+fn ran(timeline: &[TimelineEntry]) -> Vec<(&str, AttemptStatus)> {
+    timeline
+        .iter()
+        .map(|entry| (step_id(entry), entry.status))
+        .collect()
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn a_branch_runs_the_chosen_arm_and_then_the_steps_after_it(pool: PgPool) {
+    for (flag, arm, skipped) in [(true, "then", "no"), (false, "else", "yes")] {
+        let echo_action = Arc::new(FakeAction::new("test.echo"));
+        let h = Harness::new(
+            pool.clone(),
+            &ManualClock::new(t0()),
+            vec![echo_action.clone()],
+        );
+        // One Workflow per iteration: ids are unique per database.
+        let run = h
+            .start(
+                definition(
+                    &format!("branching-{arm}"),
+                    vec![
+                        echo("before", 0),
+                        json!({
+                            "id": "decide",
+                            "action": "flow.branch",
+                            "when": "input.flag",
+                            "then": [echo("yes", 1)],
+                            "else": [echo("no", 2)],
+                        }),
+                        echo("after", 3),
+                    ],
+                ),
+                json!({ "flag": flag }),
+            )
+            .await;
+
+        h.drive().await;
+
+        assert_eq!(h.run(run).await.status, RunStatus::Succeeded);
+        let timeline = h.timeline(run).await;
+        let chosen = if flag { "yes" } else { "no" };
+        assert_eq!(
+            ran(&timeline),
+            [
+                ("before", AttemptStatus::Succeeded),
+                ("decide", AttemptStatus::Succeeded),
+                (chosen, AttemptStatus::Succeeded),
+                ("after", AttemptStatus::Succeeded),
+            ],
+            "{skipped} is not run"
+        );
+        assert_eq!(timeline[1].output, Some(json!({ "arm": arm })));
+        assert_eq!(timeline[1].input, Some(json!({ "when": flag })));
+        assert_eq!(echo_action.calls().len(), 3);
+    }
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn a_branch_without_an_else_carries_on_after_the_block(pool: PgPool) {
+    let h = Harness::new(
+        pool,
+        &ManualClock::new(t0()),
+        vec![Arc::new(FakeAction::new("test.echo"))],
+    );
+    let run = h
+        .start(
+            definition(
+                "no-else",
+                vec![
+                    json!({
+                        "id": "decide",
+                        "action": "flow.branch",
+                        "when": "false",
+                        "then": [echo("inside", 1)],
+                    }),
+                    echo("after", 2),
+                ],
+            ),
+            json!({}),
+        )
+        .await;
+
+    h.drive().await;
+
+    assert_eq!(h.run(run).await.status, RunStatus::Succeeded);
+    assert_eq!(
+        ran(&h.timeline(run).await),
+        [
+            ("decide", AttemptStatus::Succeeded),
+            ("after", AttemptStatus::Succeeded)
+        ]
+    );
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn nested_blocks_advance_and_return_through_checkpoints_across_jobs(pool: PgPool) {
+    let h = Harness::new(
+        pool,
+        &ManualClock::new(t0()),
+        vec![Arc::new(FakeAction::new("test.echo"))],
+    );
+    let run = h
+        .start(
+            definition(
+                "nested",
+                vec![
+                    echo("first", 1),
+                    json!({
+                        "id": "outer",
+                        "action": "flow.branch",
+                        "when": "true",
+                        "then": [
+                            echo("outer_first", 2),
+                            {
+                                "id": "inner",
+                                "action": "flow.branch",
+                                "when": "steps.outer_first.output.n == 3",
+                                "then": [echo("inner_then", 3)],
+                                "else": [echo("inner_else", 4)],
+                            },
+                            echo("outer_last", 5),
+                        ],
+                        "else": [echo("outer_else", 6)],
+                    }),
+                    echo("last", 7),
+                ],
+            ),
+            json!({}),
+        )
+        .await;
+
+    // One Job at a time, reading the Cursor the Checkpoint holds between them.
+    let mut cursors = Vec::new();
+    while let Some(claimed) = h.claim("worker-a").await {
+        h.interpreter.advance(&claimed).await.unwrap();
+        cursors.push(h.run(run).await.checkpoint.cursor);
+    }
+
+    assert_eq!(
+        cursors,
+        [
+            json!(["steps", 0]),
+            json!(["steps", 1]),
+            json!(["steps", 1, "then", 0]),
+            json!(["steps", 1, "then", 1]),
+            json!(["steps", 1, "then", 1, "else", 0]),
+            json!(["steps", 1, "then", 2]),
+            json!(["steps", 2]),
+            json!([]),
+        ]
+        .map(|cursor| cursor.as_array().unwrap().clone())
+    );
+    assert_eq!(
+        ran(&h.timeline(run).await)
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect::<Vec<_>>(),
+        [
+            "first",
+            "outer",
+            "outer_first",
+            "inner",
+            "inner_else",
+            "outer_last",
+            "last"
+        ]
+    );
+    assert_eq!(h.run(run).await.status, RunStatus::Succeeded);
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn a_false_if_skips_the_step_without_calling_its_action(pool: PgPool) {
+    let echo_action = Arc::new(FakeAction::new("test.echo"));
+    let h = Harness::new(pool, &ManualClock::new(t0()), vec![echo_action.clone()]);
+    let run = h
+        .start(
+            definition(
+                "skipping",
+                vec![
+                    json!({
+                        "id": "maybe",
+                        "action": "test.echo",
+                        "params": { "n": 1 },
+                        "if": "input.go",
+                    }),
+                    json!({
+                        "id": "block",
+                        "action": "flow.branch",
+                        "if": "input.go",
+                        "when": "true",
+                        "then": [echo("inside", 2)],
+                    }),
+                    echo("after", 3),
+                ],
+            ),
+            json!({ "go": false }),
+        )
+        .await;
+
+    h.drive().await;
+
+    assert_eq!(h.run(run).await.status, RunStatus::Succeeded);
+    let timeline = h.timeline(run).await;
+    assert_eq!(
+        ran(&timeline),
+        [
+            ("maybe", AttemptStatus::Skipped),
+            ("block", AttemptStatus::Skipped),
+            ("after", AttemptStatus::Succeeded),
+        ]
+    );
+    assert_eq!(timeline[0].input, None);
+    assert_eq!(timeline[0].output, None);
+    assert_eq!(
+        echo_action.calls().len(),
+        1,
+        "only `after` called its Action"
+    );
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn a_true_if_runs_the_step_and_a_non_boolean_if_fails_the_run(pool: PgPool) {
+    let h = Harness::new(
+        pool,
+        &ManualClock::new(t0()),
+        vec![Arc::new(FakeAction::new("test.echo"))],
+    );
+    let run = h
+        .start(
+            definition(
+                "conditions",
+                vec![
+                    json!({ "id": "yes", "action": "test.echo", "if": "1 < 2" }),
+                    json!({ "id": "bad", "action": "test.echo", "if": "'maybe'" }),
+                ],
+            ),
+            json!({}),
+        )
+        .await;
+
+    h.drive().await;
+
+    assert_eq!(h.run(run).await.status, RunStatus::Failed);
+    let timeline = h.timeline(run).await;
+    assert_eq!(
+        ran(&timeline),
+        [
+            ("yes", AttemptStatus::Succeeded),
+            ("bad", AttemptStatus::Failed)
+        ]
+    );
+    let error = timeline[1].error.as_ref().unwrap();
+    assert_eq!(error["code"], "invalid_expression");
+    assert_eq!(error["class"], "fatal");
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn sleep_makes_the_run_sleeping_and_holds_no_job_until_the_clock_reaches_it(pool: PgPool) {
+    let echo_action = Arc::new(FakeAction::new("test.echo"));
+    let clock = ManualClock::new(t0());
+    let h = Harness::new(pool, &clock, vec![echo_action.clone()]);
+    let run = h
+        .start(
+            definition(
+                "napping",
+                vec![
+                    echo("before", 1),
+                    json!({ "id": "nap", "action": "flow.sleep", "params": { "duration": "3d" } }),
+                    echo("after", 2),
+                ],
+            ),
+            json!({}),
+        )
+        .await;
+
+    let advanced = h.drive().await;
+    let last = advanced.last().unwrap();
+    assert_eq!(last.status, RunStatus::Sleeping);
+    assert_eq!(last.next_job_at, Some(t0() + TimeDelta::days(3)));
+    assert_eq!(h.run(run).await.status, RunStatus::Sleeping);
+    assert_eq!(echo_action.calls().len(), 1);
+
+    // The only Job is the delayed one, and nobody holds it.
+    let mut conn = h.pool.acquire().await.unwrap();
+    let jobs = PgJobRepository.list_for_run(&mut conn, run).await.unwrap();
+    drop(conn);
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0].run_at, t0() + TimeDelta::days(3));
+    assert_eq!((&jobs[0].locked_by, jobs[0].locked_until), (&None, None));
+
+    clock.advance(TimeDelta::days(3) - TimeDelta::seconds(1));
+    assert!(
+        h.drive().await.is_empty(),
+        "nothing runs before the 3 days pass"
+    );
+    assert_eq!(echo_action.calls().len(), 1);
+
+    clock.advance(TimeDelta::seconds(1));
+    let advanced = h.drive().await;
+    assert_eq!(advanced.len(), 2, "wake up, then the next Step");
+    assert_eq!(advanced[0].status, RunStatus::Running);
+    assert_eq!(h.run(run).await.status, RunStatus::Succeeded);
+    assert_eq!(echo_action.calls().len(), 2);
+
+    let timeline = h.timeline(run).await;
+    assert_eq!(
+        ran(&timeline),
+        [
+            ("before", AttemptStatus::Succeeded),
+            ("nap", AttemptStatus::Succeeded),
+            ("after", AttemptStatus::Succeeded),
+        ]
+    );
+    assert_eq!(timeline[1].input, Some(json!({ "duration": "3d" })));
+    assert_eq!(timeline[1].duration(), TimeDelta::days(3));
+    assert_eq!(
+        timeline[1].output,
+        Some(json!({ "slept_until": (t0() + TimeDelta::days(3)).to_rfc3339() }))
+    );
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn sleep_until_waits_for_the_timestamp_and_a_past_one_does_not_wait(pool: PgPool) {
+    let clock = ManualClock::new(t0());
+    let h = Harness::new(pool, &clock, vec![Arc::new(FakeAction::new("test.echo"))]);
+    let wake = t0() + TimeDelta::hours(5);
+    let sleeper = h
+        .start(
+            definition(
+                "until-then",
+                vec![
+                    json!({
+                        "id": "wait",
+                        "action": "flow.sleep_until",
+                        "params": { "timestamp": "{{ input.at }}" },
+                    }),
+                    echo("after", 1),
+                ],
+            ),
+            json!({ "at": wake.to_rfc3339() }),
+        )
+        .await;
+    let impatient = h
+        .start(
+            definition(
+                "until-past",
+                vec![
+                    json!({
+                        "id": "wait",
+                        "action": "flow.sleep_until",
+                        "params": { "timestamp": "{{ input.at }}" },
+                    }),
+                    echo("after", 1),
+                ],
+            ),
+            json!({ "at": (t0() - TimeDelta::hours(1)).to_rfc3339() }),
+        )
+        .await;
+
+    h.drive().await;
+    assert_eq!(h.run(sleeper).await.status, RunStatus::Sleeping);
+    assert_eq!(h.run(impatient).await.status, RunStatus::Succeeded);
+
+    clock.advance(TimeDelta::hours(5));
+    h.drive().await;
+    assert_eq!(h.run(sleeper).await.status, RunStatus::Succeeded);
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn a_sleep_inside_a_branch_returns_to_the_parent_list(pool: PgPool) {
+    let clock = ManualClock::new(t0());
+    let h = Harness::new(pool, &clock, vec![Arc::new(FakeAction::new("test.echo"))]);
+    let run = h
+        .start(
+            definition(
+                "nap-inside",
+                vec![
+                    json!({
+                        "id": "decide",
+                        "action": "flow.branch",
+                        "when": "true",
+                        "then": [
+                            { "id": "nap", "action": "flow.sleep", "params": { "duration": "1h" } },
+                            echo("inside", 1),
+                        ],
+                    }),
+                    echo("after", 2),
+                ],
+            ),
+            json!({}),
+        )
+        .await;
+
+    h.drive().await;
+    let sleeping = h.run(run).await;
+    assert_eq!(sleeping.status, RunStatus::Sleeping);
+    assert_eq!(
+        sleeping.checkpoint.cursor,
+        [json!("steps"), json!(0), json!("then"), json!(0)]
+    );
+
+    clock.advance(TimeDelta::hours(1));
+    h.drive().await;
+
+    assert_eq!(h.run(run).await.status, RunStatus::Succeeded);
+    assert_eq!(
+        ran(&h.timeline(run).await)
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect::<Vec<_>>(),
+        ["decide", "nap", "inside", "after"]
+    );
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn fail_ends_the_run_failed_with_its_message_on_the_timeline(pool: PgPool) {
+    let echo_action = Arc::new(FakeAction::new("test.echo"));
+    let h = Harness::new(pool, &ManualClock::new(t0()), vec![echo_action.clone()]);
+    let run = h
+        .start(
+            definition(
+                "failing",
+                vec![
+                    json!({
+                        "id": "reject",
+                        "action": "flow.fail",
+                        "params": { "message": "{{ input.who }} is not eligible" },
+                    }),
+                    echo("never", 1),
+                ],
+            ),
+            json!({ "who": "ada" }),
+        )
+        .await;
+
+    h.drive().await;
+
+    let finished = h.run(run).await;
+    assert_eq!(finished.status, RunStatus::Failed);
+    assert_eq!(finished.checkpoint.cursor, [json!("steps"), json!(0)]);
+    let timeline = h.timeline(run).await;
+    assert_eq!(ran(&timeline), [("reject", AttemptStatus::Failed)]);
+    let error = timeline[0].error.as_ref().unwrap();
+    assert_eq!(error["message"], "ada is not eligible");
+    assert_eq!(error["code"], "flow_fail");
+    assert!(echo_action.calls().is_empty());
+    assert_eq!(h.jobs_left(run).await, 0);
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn succeed_inside_nested_blocks_ends_the_whole_run_without_running_later_steps(pool: PgPool) {
+    let echo_action = Arc::new(FakeAction::new("test.echo"));
+    let h = Harness::new(pool, &ManualClock::new(t0()), vec![echo_action.clone()]);
+    let run = h
+        .start(
+            definition(
+                "early",
+                vec![
+                    json!({
+                        "id": "outer",
+                        "action": "flow.branch",
+                        "when": "true",
+                        "then": [
+                            {
+                                "id": "inner",
+                                "action": "flow.branch",
+                                "when": "true",
+                                "then": [
+                                    { "id": "stop", "action": "flow.succeed" },
+                                    echo("after_stop", 1),
+                                ],
+                            },
+                            echo("after_inner", 2),
+                        ],
+                    }),
+                    echo("after_outer", 3),
+                ],
+            ),
+            json!({}),
+        )
+        .await;
+
+    h.drive().await;
+
+    let finished = h.run(run).await;
+    assert_eq!(finished.status, RunStatus::Succeeded);
+    assert!(finished.checkpoint.cursor.is_empty());
+    assert_eq!(
+        ran(&h.timeline(run).await),
+        [
+            ("outer", AttemptStatus::Succeeded),
+            ("inner", AttemptStatus::Succeeded),
+            ("stop", AttemptStatus::Succeeded),
+        ]
+    );
+    assert!(echo_action.calls().is_empty());
+    assert_eq!(h.jobs_left(run).await, 0);
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn invalid_flow_params_fail_the_step(pool: PgPool) {
+    let h = Harness::new(pool, &ManualClock::new(t0()), vec![]);
+    let run = h
+        .start(
+            definition(
+                "bad-sleep",
+                vec![json!({
+                    "id": "nap",
+                    "action": "flow.sleep",
+                    "params": { "duration": "soon" },
+                })],
+            ),
+            json!({}),
+        )
+        .await;
+
+    h.drive().await;
+
+    assert_eq!(h.run(run).await.status, RunStatus::Failed);
+    let timeline = h.timeline(run).await;
+    assert_eq!(
+        timeline[0].error.as_ref().unwrap()["code"],
+        "invalid_params"
+    );
+}
