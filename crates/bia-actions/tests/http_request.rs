@@ -159,9 +159,9 @@ async fn sends_a_text_body_with_basic_auth() {
 }
 
 #[tokio::test]
-async fn server_errors_are_retryable_and_client_errors_fatal() {
+async fn server_errors_408_and_429_are_retryable_and_other_client_errors_fatal() {
     let server = MockServer::start().await;
-    for status in [500, 502, 503, 400, 401, 404, 409, 422] {
+    for status in [500, 502, 503, 408, 429, 400, 401, 404, 409, 422] {
         Mock::given(path(format!("/{status}")))
             .respond_with(ResponseTemplate::new(status).set_body_json(json!({ "error": "nope" })))
             .mount(&server)
@@ -172,6 +172,8 @@ async fn server_errors_are_retryable_and_client_errors_fatal() {
         (500, ErrorClass::Retryable),
         (502, ErrorClass::Retryable),
         (503, ErrorClass::Retryable),
+        (408, ErrorClass::Retryable),
+        (429, ErrorClass::Retryable),
         (400, ErrorClass::Fatal),
         (401, ErrorClass::Fatal),
         (404, ErrorClass::Fatal),

@@ -151,8 +151,9 @@ enum BodyEncoding {
 
 /// Sends one HTTP request and returns its status, headers and body.
 ///
-/// A 2xx status, or one listed in `success_statuses`, succeeds. 5xx statuses, network errors and
-/// timeouts are `retryable`; every other status and invalid Params are `fatal` (ADR-0012).
+/// A 2xx status, or one listed in `success_statuses`, succeeds. 5xx, 408 and 429 statuses,
+/// network errors and timeouts are `retryable`; every other status and invalid Params are
+/// `fatal` (ADR-0012).
 #[derive(Debug)]
 pub struct Request {
     descriptor: ActionDescriptor,
@@ -349,7 +350,8 @@ fn is_json_media_type(content_type: &str) -> bool {
 
 fn status_error(status: u16) -> ActionError {
     let message = format!("the server responded with status {status}");
-    if (500..600).contains(&status) {
+    // 408 and 429 are the server asking to be tried again later.
+    if (500..600).contains(&status) || matches!(status, 408 | 429) {
         ActionError::retryable(message)
     } else {
         ActionError::fatal(message)
@@ -389,9 +391,9 @@ fn descriptor() -> ActionDescriptor {
     ActionDescriptor::new(
         ActionName::new("http.request").expect("a valid Action name"),
         "Sends one HTTP request and returns the response's status, headers and body (parsed \
-         when it is JSON). 2xx statuses and any listed in `success_statuses` succeed; 5xx \
-         statuses, network errors and timeouts fail as retryable; other statuses fail as \
-         fatal. The Step's Idempotency Key is sent as the `Idempotency-Key` header.",
+         when it is JSON). 2xx statuses and any listed in `success_statuses` succeed; 5xx, \
+         408 and 429 statuses, network errors and timeouts fail as retryable; other statuses \
+         fail as fatal. The Step's Idempotency Key is sent as the `Idempotency-Key` header.",
         Effect::SideEffecting,
     )
     .param_schema(schema_for::<Params>())
