@@ -23,18 +23,26 @@ impl AttemptStatus {
     }
 }
 
-/// One Attempt to record. Entries reach operators and agents verbatim, so inputs, Outputs
-/// and errors must never contain a resolved Secret.
-#[derive(Debug, Clone, PartialEq)]
-pub struct NewTimelineEntry {
+/// Which Attempt of which Step an entry records.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StepAttempt {
     pub step_id: StepId,
     /// Which iteration of the enclosing loops, as in the Idempotency Key; empty outside loops.
     pub iteration_path: String,
     /// 1 for the first Attempt, then 2, 3… on retries.
     pub attempt: i32,
     pub action: ActionName,
+}
+
+/// One entry to record. Entries reach operators and agents verbatim, so inputs, Outputs and
+/// errors must never contain a resolved Secret.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NewTimelineEntry {
+    /// The Attempt recorded, or `None` for an entry about the Run as a whole, such as input
+    /// rejected before any Step ran.
+    pub step: Option<StepAttempt>,
     pub status: AttemptStatus,
-    /// The resolved Params, without Secrets.
+    /// The resolved Params, without Secrets; the Run input for an entry about the Run.
     pub input: Option<Value>,
     pub output: Option<Value>,
     pub error: Option<Value>,
@@ -42,16 +50,13 @@ pub struct NewTimelineEntry {
     pub finished_at: DateTime<Utc>,
 }
 
-/// One recorded Attempt.
+/// One recorded entry.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TimelineEntry {
     pub run_id: RunId,
     /// Position in the Run's Timeline: 1, 2, 3…
     pub seq: i32,
-    pub step_id: StepId,
-    pub iteration_path: String,
-    pub attempt: i32,
-    pub action: ActionName,
+    pub step: Option<StepAttempt>,
     pub status: AttemptStatus,
     pub input: Option<Value>,
     pub output: Option<Value>,

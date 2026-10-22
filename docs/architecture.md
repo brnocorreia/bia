@@ -37,7 +37,7 @@ The dependency rule keeps rebuilds small: an edit to an Action recompiles `bia-a
 
 ## Time
 
-Engine, scheduler and store read time from an injected `Clock` (ADR-0022), so tests drive sleeps, cron and Lease expiry deterministically. The trait and the manual test Clock (behind `bia-core`'s `testing` feature) live in `bia-core`; the system Clock lives in `bia-store`. Store functions take `now` as a parameter rather than a Clock.
+Engine, scheduler and store read time from an injected `Clock` (ADR-0022), and wait on it for in-process timers such as Attempt timeouts (ADR-0034), so tests drive sleeps, timeouts, cron and Lease expiry deterministically. The trait and the manual test Clock (behind `bia-core`'s `testing` feature) live in `bia-core`; the system Clock lives in `bia-store`. Store functions take `now` as a parameter rather than a Clock.
 
 ## Processes
 
@@ -50,7 +50,7 @@ Engine, scheduler and store read time from an injected `Clock` (ADR-0022), so te
 
 1. A Trigger fires (Schedule, Message, webhook, manual, Event), and the server creates a Run pinned to the Active Version, plus a Job to advance it.
 2. A Worker claims the Job under a Lease, loads the Checkpoint and executes the Step at the Cursor: it resolves Templates and Secrets, calls the Action with the Idempotency Key and enforces the timeout.
-3. In one transaction, the Worker writes the Attempt to the Timeline, updates the Checkpoint and Cursor, completes the Job and enqueues the next Job (or a delayed Job for `sleep`/retry backoff, or nothing while waiting for an Event).
+3. In one transaction, the Worker writes the Attempt to the Timeline, updates the Checkpoint and Cursor, completes the Job and enqueues the next Job (or a delayed Job for `sleep`/retry backoff, or nothing while waiting for an Event). Each Job makes one transition: starting the Run (checking its input against the `input_schema`) or one Attempt of one Step (ADR-0032). The Timeline entry shape is ADR-0033.
 4. Run statuses: `pending → running → (sleeping | waiting) → running → succeeded | failed | cancelled`.
 
 Cancellation sets a flag the Worker observes. In-flight Actions receive their cancellation token and stop cooperatively.

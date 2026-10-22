@@ -3,7 +3,8 @@
 use std::collections::BTreeSet;
 
 use bia_core::expression::{
-    CompileErrorKind, EvalError, Expression, Limits, References, Scope, Template,
+    CompileErrorKind, EvalError, Expression, Limits, ParamsError, References, Scope, Template,
+    resolve_params,
 };
 use serde_json::{Value, json};
 
@@ -518,4 +519,62 @@ fn compiled_expressions_are_reusable_across_scopes() {
         let scope = Scope::new().with_step_output("a", &json!({ "count": count }));
         assert_eq!(expression.evaluate(&scope), Ok(json!(count * 2)));
     }
+}
+
+fn params(value: Value) -> bia_core::dsl::Params {
+    match value {
+        Value::Object(params) => params,
+        _ => panic!("Params are an object"),
+    }
+}
+
+#[test]
+fn params_resolve_every_template_and_record_secret_templates_as_written() {
+    let scope = scope().with_secret("API_TOKEN", "s3cr3t");
+    let written = params(json!({
+        "url": "https://api.example.com/users/{{ input.user.name }}",
+        "count": "{{ steps.a.output.count }}",
+        "headers": { "Authorization": "Bearer {{ secrets.API_TOKEN }}" },
+        "encoded": ["{{ base64.encode(bytes(secrets.API_TOKEN)) }}", 7],
+        "literal": "no templates here",
+    }));
+
+    let resolved = resolve_params(&written, &scope, &Limits::default()).unwrap();
+
+    assert_eq!(
+        Value::Object(resolved.call.clone()),
+        json!({
+            "url": "https://api.example.com/users/Ada",
+            "count": 3,
+            "headers": { "Authorization": "Bearer s3cr3t" },
+            "encoded": ["czNjcjN0", 7],
+            "literal": "no templates here",
+        })
+    );
+    assert_eq!(
+        Value::Object(resolved.recorded.clone()),
+        json!({
+            "url": "https://api.example.com/users/Ada",
+            "count": 3,
+            "headers": { "Authorization": "Bearer {{ secrets.API_TOKEN }}" },
+            "encoded": ["{{ base64.encode(bytes(secrets.API_TOKEN)) }}", 7],
+            "literal": "no templates here",
+        })
+    );
+    assert!(!format!("{resolved:?}").contains("s3cr3t"));
+}
+
+#[test]
+fn a_failing_template_in_params_names_its_path() {
+    let written = params(json!({ "body": { "items/all": ["{{ steps.missing.output }}"] } }));
+
+    let error = resolve_params(&written, &scope(), &Limits::default()).unwrap_err();
+
+    assert_eq!(
+        error,
+        ParamsError {
+            path: "/body/items~1all/0".into(),
+            message: "no such key 'missing'".into(),
+        }
+    );
 }

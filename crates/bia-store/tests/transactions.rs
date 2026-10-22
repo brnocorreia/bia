@@ -8,7 +8,7 @@ use bia_store::StoreError;
 use bia_store::job::{Claimed, JobRepository, Lease, NewJob, PgJobRepository};
 use bia_store::run::{Checkpoint, PgRunRepository, RunId, RunRepository, RunStatus};
 use bia_store::timeline::{
-    AttemptStatus, NewTimelineEntry, PgTimelineRepository, TimelineRepository,
+    AttemptStatus, NewTimelineEntry, PgTimelineRepository, StepAttempt, TimelineRepository,
 };
 use chrono::TimeDelta;
 use serde_json::json;
@@ -29,10 +29,12 @@ async fn claim_one(conn: &mut PgConnection) -> Claimed {
 
 fn attempt(step: &str, attempt: i32) -> NewTimelineEntry {
     NewTimelineEntry {
-        step_id: StepId::new(step).unwrap(),
-        iteration_path: String::new(),
-        attempt,
-        action: ActionName::new("http.request").unwrap(),
+        step: Some(StepAttempt {
+            step_id: StepId::new(step).unwrap(),
+            iteration_path: String::new(),
+            attempt,
+            action: ActionName::new("http.request").unwrap(),
+        }),
         status: AttemptStatus::Succeeded,
         input: Some(json!({ "url": "https://example.com" })),
         output: Some(json!({ "status": 200 })),
@@ -194,8 +196,17 @@ async fn timeline_entries_keep_their_order(pool: PgPool) {
     skipped.status = AttemptStatus::Skipped;
     skipped.input = None;
     skipped.output = None;
+    let about_the_run = NewTimelineEntry {
+        step: None,
+        status: AttemptStatus::Failed,
+        input: Some(json!({ "user": 42 })),
+        output: None,
+        error: Some(json!({ "class": "fatal", "message": "input rejected" })),
+        started_at: at(13),
+        finished_at: at(13),
+    };
 
-    for entry in [&failed, &attempt("fetch", 2), &skipped] {
+    for entry in [&failed, &attempt("fetch", 2), &skipped, &about_the_run] {
         let mut tx = conn.begin().await.unwrap();
         PgTimelineRepository
             .append(&mut tx, run.id, entry)
@@ -210,8 +221,8 @@ async fn timeline_entries_keep_their_order(pool: PgPool) {
         .map(|entry| {
             (
                 entry.seq,
-                entry.step_id.as_str(),
-                entry.attempt,
+                entry.step.as_ref().map(|step| step.step_id.as_str()),
+                entry.step.as_ref().map(|step| step.attempt),
                 entry.status,
             )
         })
@@ -219,10 +230,12 @@ async fn timeline_entries_keep_their_order(pool: PgPool) {
     assert_eq!(
         summary,
         [
-            (1, "fetch", 1, AttemptStatus::Failed),
-            (2, "fetch", 2, AttemptStatus::Succeeded),
-            (3, "notify", 1, AttemptStatus::Skipped),
+            (1, Some("fetch"), Some(1), AttemptStatus::Failed),
+            (2, Some("fetch"), Some(2), AttemptStatus::Succeeded),
+            (3, Some("notify"), Some(1), AttemptStatus::Skipped),
+            (4, None, None, AttemptStatus::Failed),
         ]
     );
     assert_eq!(entries[0].error, failed.error);
+    assert_eq!(entries[3].error, about_the_run.error);
 }

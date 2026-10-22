@@ -65,8 +65,8 @@ Required top-level fields are `schema_version` (currently `1`), `id` and `steps`
 | `id` | Unique across the whole Definition, including nested Blocks. `[a-z][a-z0-9_]*`. |
 | `action` | Action name, `category.operation`. |
 | `params` | Object validated against the Action's param schema after Templates are resolved. Ordinary Actions only; Blocks take their nested fields instead. |
-| `retry` | `max_attempts` (required, counts the first Attempt), `backoff` (`fixed` \| `exponential`), `initial`, `max`. Applies to `retryable` errors only. |
-| `timeout` | Per Attempt. |
+| `retry` | `max_attempts` (required, counts the first Attempt), `backoff` (`fixed` \| `exponential`, default `exponential`), `initial` (default `1s`), `max` (default `1h`). Applies to `retryable` errors only; without it a Step has one Attempt. |
+| `timeout` | Per Attempt, default `5m`. An Attempt past it is cancelled and fails with a `retryable` error. |
 | `if` | Optional CEL condition. When false, the Step is recorded as `skipped`. |
 | `description` | Free text shown in the UI and Timeline. |
 
