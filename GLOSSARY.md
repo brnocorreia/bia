@@ -98,10 +98,10 @@ The persisted state of a Run after a transition. Resuming a Run means reading it
 _Avoid_: snapshot, savepoint
 
 **Cursor**:
-The position inside the Definition that a Run's Checkpoint points at, as a path through nested Blocks.
+The position inside the Definition that a Run's Checkpoint points at: the path to the Step it executes next, through nested Blocks (e.g. `["steps", 2]`).
 
 **Timeline**:
-The ordered, human- and agent-readable record of a Run: each Step's Attempts, inputs, Outputs, errors and durations.
+The ordered, human- and agent-readable record of a Run: each Step's Attempts, inputs, Outputs, errors and durations, plus entries about the Run as a whole, such as input rejected before any Step ran.
 _Avoid_: history, log, trace
 
 **Dry Run**:
@@ -155,7 +155,7 @@ A responsibility a `bia serve` process takes on: `api`, `worker`, `scheduler`, o
 A process with the `worker` Role, which claims Jobs and executes Actions.
 
 **Clock**:
-Where the engine, scheduler and store read the current time from: the system Clock in production, a manual Clock that tests move forward.
+Where the engine, scheduler and store read the current time from, and wait on it: the system Clock in production, a manual Clock that tests move forward.
 _Avoid_: timer, now
 
 **Diagnostic**:

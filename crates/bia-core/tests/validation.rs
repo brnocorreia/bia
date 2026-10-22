@@ -8,7 +8,10 @@ use std::sync::Arc;
 use bia_core::action::InMemoryRegistry;
 use bia_core::action::testing::FakeAction;
 use bia_core::dsl::{QueueName, WorkflowId, yaml_to_json};
-use bia_core::validation::{Code, Diagnostic, KnownResources, Limits, Severity, Target, Validator};
+use bia_core::validation::{
+    Code, Diagnostic, KnownResources, Limits, SchemaViolation, Severity, Target, Validator,
+    schema_violations,
+};
 use schemars::json_schema;
 use serde_json::{Value, json};
 
@@ -578,4 +581,27 @@ fn action_names_in_the_registry_are_suggested_for_typos() {
         diagnostics.diagnostics[0].suggestion.as_deref(),
         Some("Did you mean 'slack.post_message'?")
     );
+}
+
+#[test]
+fn values_are_checked_against_a_json_schema_without_echoing_them() {
+    let schema = json!({
+        "type": "object",
+        "required": ["email"],
+        "properties": { "email": { "type": "string" }, "age": { "type": "integer" } },
+    });
+
+    assert_eq!(
+        schema_violations(&schema, &json!({ "email": "a@b.c" })).unwrap(),
+        []
+    );
+    let violations = schema_violations(&schema, &json!({ "age": "hunter2" })).unwrap();
+    let paths: Vec<_> = violations.iter().map(|v| v.path.as_str()).collect();
+    assert_eq!(paths, ["", "/age"]);
+    assert!(
+        violations
+            .iter()
+            .all(|v: &SchemaViolation| !v.message.contains("hunter2"))
+    );
+    assert!(schema_violations(&json!({ "type": 12 }), &json!({})).is_err());
 }

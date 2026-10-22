@@ -18,12 +18,14 @@ use crate::action::ActionRegistry;
 use crate::dsl::{Definition, QueueName, WorkflowId};
 
 mod code;
+mod instance;
 mod params;
 mod semantic;
 mod shape;
 mod suggest;
 
 pub use code::Code;
+pub use instance::{InvalidSchema, SchemaViolation, schema_violations};
 
 /// One structured validation finding.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

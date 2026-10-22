@@ -206,6 +206,12 @@ version = "0.0.0"
 dependencies = [
  "bia-core",
  "bia-store",
+ "chrono",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]

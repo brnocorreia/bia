@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use serde_json::Value;
 use uuid::Uuid;
 
-use super::{AttemptStatus, TimelineEntry};
+use super::{AttemptStatus, StepAttempt, TimelineEntry};
 use crate::StoreError;
 use crate::run::RunId;
 
@@ -11,10 +11,10 @@ use crate::run::RunId;
 pub(crate) struct TimelineRow {
     pub(crate) run_id: Uuid,
     pub(crate) seq: i32,
-    pub(crate) step_id: String,
+    pub(crate) step_id: Option<String>,
     pub(crate) iteration_path: String,
-    pub(crate) attempt: i32,
-    pub(crate) action: String,
+    pub(crate) attempt: Option<i32>,
+    pub(crate) action: Option<String>,
     pub(crate) status: String,
     pub(crate) input: Option<Value>,
     pub(crate) output: Option<Value>,
@@ -27,14 +27,26 @@ impl TryFrom<TimelineRow> for TimelineEntry {
     type Error = StoreError;
 
     fn try_from(row: TimelineRow) -> Result<Self, StoreError> {
+        let step = match (row.step_id, row.attempt, row.action) {
+            (Some(step_id), Some(attempt), Some(action)) => Some(StepAttempt {
+                step_id: StepId::new(step_id).map_err(|err| StoreError::invalid("step id", err))?,
+                iteration_path: row.iteration_path,
+                attempt,
+                action: ActionName::new(action)
+                    .map_err(|err| StoreError::invalid("action name", err))?,
+            }),
+            (None, None, None) => None,
+            _ => {
+                return Err(StoreError::invalid(
+                    "timeline entry",
+                    "step id, attempt and action are not all set or all absent",
+                ));
+            }
+        };
         Ok(Self {
             run_id: RunId::from_uuid(row.run_id),
             seq: row.seq,
-            step_id: StepId::new(row.step_id).map_err(|err| StoreError::invalid("step id", err))?,
-            iteration_path: row.iteration_path,
-            attempt: row.attempt,
-            action: ActionName::new(row.action)
-                .map_err(|err| StoreError::invalid("action name", err))?,
+            step,
             status: attempt_status(&row.status)?,
             input: row.input,
             output: row.output,
