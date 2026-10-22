@@ -28,7 +28,6 @@ pub struct CompileError {
     pub message: String,
     /// Byte offset into the source.
     pub offset: usize,
-    /// 1-based line.
     pub line: usize,
     /// 1-based column, counted in characters.
     pub column: usize,

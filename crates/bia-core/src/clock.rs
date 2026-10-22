@@ -72,7 +72,6 @@ mod manual {
             self.now.send_modify(|now| *now += by);
         }
 
-        /// Jumps to `to`.
         pub fn set(&self, to: DateTime<Utc>) {
             self.now.send_replace(to);
         }

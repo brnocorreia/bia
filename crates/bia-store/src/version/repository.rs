@@ -39,7 +39,6 @@ pub trait VersionRepository {
         at: DateTime<Utc>,
     ) -> impl Future<Output = Result<Version, StoreError>> + Send;
 
-    /// Reads one Version.
     fn get(
         &self,
         conn: &mut PgConnection,
@@ -55,7 +54,6 @@ pub trait VersionRepository {
     ) -> impl Future<Output = Result<Vec<Version>, StoreError>> + Send;
 }
 
-/// [`VersionRepository`] over Postgres.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct PgVersionRepository;
 

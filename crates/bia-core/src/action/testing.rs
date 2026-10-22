@@ -52,7 +52,6 @@ impl FakeAction {
         }
     }
 
-    /// Succeeds with `output` on every call.
     pub fn returning(mut self, output: Output) -> Self {
         self.behaviour = Behaviour::Return(output);
         self

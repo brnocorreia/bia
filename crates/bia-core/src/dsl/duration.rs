@@ -57,12 +57,10 @@ impl Duration {
         Some(Self { amount, unit })
     }
 
-    /// The number as written, in [`Self::unit`].
     pub fn amount(self) -> u64 {
         self.amount
     }
 
-    /// The unit as written.
     pub fn unit(self) -> DurationUnit {
         self.unit
     }

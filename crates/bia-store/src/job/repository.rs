@@ -8,8 +8,6 @@ use super::{Backoff, Claimed, Failed, Job, JobId, Lease, NewJob};
 use crate::StoreError;
 use crate::run::RunId;
 
-/// Jobs: internal units of engine work, claimed by Workers under a Lease.
-///
 /// Every method takes a connection, so a transition can ack its Job and enqueue the next one
 /// in its own transaction (ADR-0010), and takes `now` from the caller's `Clock` (ADR-0022).
 /// Claims skip Jobs another claimer is locking, so any number of Workers can claim without

@@ -3,7 +3,6 @@ use chrono::{DateTime, Utc};
 
 use crate::version::VersionNumber;
 
-/// A Workflow and its Active Version.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Workflow {
     pub id: WorkflowId,

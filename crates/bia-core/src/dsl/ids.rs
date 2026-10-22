@@ -50,7 +50,6 @@ macro_rules! name_type {
                 }
             }
 
-            /// The name as written in the Definition.
             pub fn as_str(&self) -> &str {
                 &self.0
             }

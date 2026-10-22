@@ -45,14 +45,12 @@ pub enum StepKind {
 }
 
 impl Step {
-    /// The Action name as written in the Definition.
     pub fn action(&self) -> &str {
         self.kind.action()
     }
 }
 
 impl StepKind {
-    /// The Action name as written in the Definition.
     pub fn action(&self) -> &str {
         match self {
             Self::Action { action, .. } => action.as_str(),
@@ -65,7 +63,6 @@ impl StepKind {
         }
     }
 
-    /// Whether this is a Block, i.e. holds nested Step lists.
     pub fn is_block(&self) -> bool {
         !matches!(self, Self::Action { .. })
     }

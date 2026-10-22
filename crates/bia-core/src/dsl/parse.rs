@@ -131,35 +131,29 @@ fn check_schema_version(value: &Value) -> Result<(), ParseError> {
 }
 
 impl Definition {
-    /// Parses a Definition from its JSON value.
     pub fn from_value(value: Value) -> Result<Self, ParseError> {
         check_schema_version(&value)?;
         typed(value)
     }
 
-    /// Parses a Definition from JSON text.
     pub fn from_json(json: &str) -> Result<Self, ParseError> {
         Self::from_value(json_to_value(json)?)
     }
 
-    /// Parses a Definition from YAML text.
     pub fn from_yaml(yaml: &str) -> Result<Self, ParseError> {
         Self::from_value(yaml_to_json(yaml)?)
     }
 }
 
 impl QueueResource {
-    /// Parses a queue resource from its JSON value.
     pub fn from_value(value: Value) -> Result<Self, ParseError> {
         typed(value)
     }
 
-    /// Parses a queue resource from JSON text.
     pub fn from_json(json: &str) -> Result<Self, ParseError> {
         Self::from_value(json_to_value(json)?)
     }
 
-    /// Parses a queue resource from YAML text.
     pub fn from_yaml(yaml: &str) -> Result<Self, ParseError> {
         Self::from_value(yaml_to_json(yaml)?)
     }
@@ -183,12 +177,10 @@ impl Document {
         }
     }
 
-    /// Parses a document from JSON text.
     pub fn from_json(json: &str) -> Result<Self, ParseError> {
         Self::from_value(json_to_value(json)?)
     }
 
-    /// Parses a document from YAML text.
     pub fn from_yaml(yaml: &str) -> Result<Self, ParseError> {
         Self::from_value(yaml_to_json(yaml)?)
     }

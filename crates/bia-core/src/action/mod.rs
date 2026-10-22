@@ -100,7 +100,6 @@ impl fmt::Display for IdempotencyKey {
     }
 }
 
-/// The Run an Attempt belongs to.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RunContext {
     pub run_id: String,

@@ -134,7 +134,6 @@ impl Expression {
         })
     }
 
-    /// The source the Expression was compiled from.
     pub fn source(&self) -> &str {
         &self.source
     }

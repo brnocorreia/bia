@@ -9,23 +9,19 @@ use crate::StoreError;
 use crate::version::VersionNumber;
 use crate::version::why_not_published;
 
-/// Workflows: stable identities that own Versions and point at one Active Version.
 pub trait WorkflowRepository {
-    /// Creates a Workflow with no Versions.
     fn create(
         &self,
         conn: &mut PgConnection,
         id: &WorkflowId,
     ) -> impl Future<Output = Result<Workflow, StoreError>> + Send;
 
-    /// Reads one Workflow.
     fn get(
         &self,
         conn: &mut PgConnection,
         id: &WorkflowId,
     ) -> impl Future<Output = Result<Option<Workflow>, StoreError>> + Send;
 
-    /// Lists every Workflow by id.
     fn list(
         &self,
         conn: &mut PgConnection,
@@ -41,7 +37,6 @@ pub trait WorkflowRepository {
     ) -> impl Future<Output = Result<(), StoreError>> + Send;
 }
 
-/// [`WorkflowRepository`] over Postgres.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct PgWorkflowRepository;
 

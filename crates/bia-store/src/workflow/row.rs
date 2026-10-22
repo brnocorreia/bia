@@ -24,7 +24,6 @@ impl TryFrom<WorkflowRow> for Workflow {
     }
 }
 
-/// Reads back a stored Workflow id.
 pub(crate) fn workflow_id(id: String) -> Result<WorkflowId, StoreError> {
     WorkflowId::new(id).map_err(|err| StoreError::invalid("workflow id", err))
 }

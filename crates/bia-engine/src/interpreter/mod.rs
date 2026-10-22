@@ -60,7 +60,6 @@ impl Default for InterpreterConfig {
     }
 }
 
-/// What one call to [`Interpreter::advance`] left the Run in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Advanced {
     pub run: RunId,
@@ -128,7 +127,6 @@ impl Started<'_> {
     }
 }
 
-/// Whether `name` is an Action the interpreter executes itself.
 fn is_flow(name: &str) -> bool {
     matches!(
         name,
@@ -143,7 +141,6 @@ struct Attempted {
 }
 
 impl Interpreter {
-    /// An interpreter with no Secret Provider and the default [`InterpreterConfig`].
     pub fn new(pool: PgPool, actions: Arc<dyn ActionRegistry>, clock: Arc<dyn Clock>) -> Self {
         Self {
             pool,

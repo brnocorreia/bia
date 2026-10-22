@@ -10,7 +10,6 @@ use serde_json::{Value, json};
 
 use crate::EngineError;
 
-/// The Step list a Definition runs from the top.
 const STEPS: &str = "steps";
 /// The nested lists of `flow.branch`.
 pub(crate) const THEN: &str = "then";
@@ -86,7 +85,6 @@ impl Cursor {
             .collect()
     }
 
-    /// The Step at the Cursor.
     pub(crate) fn step<'a>(&self, definition: &'a Definition) -> Option<&'a Step> {
         self.list(definition)?.get(self.frames.last()?.index)
     }
@@ -200,7 +198,6 @@ impl RunState {
     }
 }
 
-/// The Checkpoint of a Run at `cursor` with `state`.
 pub(crate) fn checkpoint(cursor: Option<&Cursor>, state: &RunState) -> Checkpoint {
     Checkpoint {
         cursor: cursor.map(Cursor::encode).unwrap_or_default(),

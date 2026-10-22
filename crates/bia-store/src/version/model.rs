@@ -8,7 +8,6 @@ use chrono::{DateTime, Utc};
 pub struct VersionNumber(i32);
 
 impl VersionNumber {
-    /// Returns the number if it is positive.
     pub fn new(number: i32) -> Option<Self> {
         (number > 0).then_some(Self(number))
     }
