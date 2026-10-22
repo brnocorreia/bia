@@ -52,7 +52,6 @@ impl RunStatus {
         }
     }
 
-    /// Whether the Run has ended.
     pub fn is_finished(self) -> bool {
         matches!(self, Self::Succeeded | Self::Failed | Self::Cancelled)
     }
@@ -61,9 +60,7 @@ impl RunStatus {
 /// The persisted state of a Run after a transition. The interpreter owns what goes inside.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Checkpoint {
-    /// The Cursor: a path through nested Blocks, one segment per level.
     pub cursor: Vec<Value>,
-    /// Everything else the interpreter needs to resume.
     pub state: Value,
 }
 
@@ -80,7 +77,6 @@ pub struct Run {
     pub checkpoint: Checkpoint,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    /// When the Run reached a finished status.
     pub finished_at: Option<DateTime<Utc>>,
 }
 
@@ -88,7 +84,6 @@ pub struct Run {
 #[derive(Debug, Clone, PartialEq)]
 pub struct NewRun {
     pub workflow_id: WorkflowId,
-    /// The Published Version the Run is pinned to.
     pub version: VersionNumber,
     pub input: Value,
     pub trigger: Value,
@@ -100,7 +95,6 @@ pub struct NewRun {
 pub struct RunFilter {
     pub workflow_id: Option<WorkflowId>,
     pub status: Option<RunStatus>,
-    /// Only Runs listed after this one, for paging.
     pub after: Option<RunId>,
     pub limit: u32,
 }

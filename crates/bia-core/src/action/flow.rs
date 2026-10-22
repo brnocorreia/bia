@@ -21,16 +21,11 @@ pub const SLEEP_UNTIL: &str = "flow.sleep_until";
 pub const FAIL: &str = "flow.fail";
 pub const SUCCEED: &str = "flow.succeed";
 
-/// What a flow Action asks of the Run, read from its resolved Params.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Control {
-    /// Wait this long, from the moment the Step starts.
     Sleep(Duration),
-    /// Wait until this moment.
     SleepUntil(DateTime<Utc>),
-    /// Fail the Run with this message.
     Fail(String),
-    /// Succeed the Run now, whichever Block the Step sits in.
     Succeed,
 }
 
@@ -74,14 +69,12 @@ impl Control {
     }
 }
 
-/// The descriptors of the flow Actions, ready to register.
 #[derive(Debug)]
 pub struct Flow {
     descriptor: ActionDescriptor,
 }
 
 impl Flow {
-    /// One [`Flow`] per flow Action.
     pub fn all() -> Vec<Self> {
         let name = |name| ActionName::new(name).expect("a valid Action name");
         let example = |description, params: serde_json::Value, output| {

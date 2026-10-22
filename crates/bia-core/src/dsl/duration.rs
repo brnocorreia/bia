@@ -51,7 +51,6 @@ impl DurationUnit {
 }
 
 impl Duration {
-    /// Builds a Duration, or `None` when it does not fit in `u64` milliseconds.
     pub fn new(amount: u64, unit: DurationUnit) -> Option<Self> {
         amount.checked_mul(unit.millis())?;
         Some(Self { amount, unit })
@@ -65,13 +64,10 @@ impl Duration {
         self.unit
     }
 
-    /// The span in milliseconds.
     pub fn as_millis(self) -> u64 {
-        // `new` and `from_str` reject amounts that overflow.
         self.amount * self.unit.millis()
     }
 
-    /// The span as a [`std::time::Duration`].
     pub fn to_std(self) -> std::time::Duration {
         std::time::Duration::from_millis(self.as_millis())
     }
@@ -109,7 +105,6 @@ impl fmt::Display for Duration {
     }
 }
 
-/// A string that is not a valid [`Duration`].
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error(
     "invalid duration `{0}`: expected a whole number followed by `ms`, `s`, `m`, `h` or `d` (e.g. `30s`)"

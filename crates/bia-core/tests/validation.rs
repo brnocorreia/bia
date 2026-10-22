@@ -1,6 +1,5 @@
 //! Layered validation of Definitions into Diagnostics.
 
-// `allow-unwrap-in-tests` covers `#[test]` functions only, not the helpers they share.
 #![allow(clippy::unwrap_used)]
 
 use std::sync::Arc;

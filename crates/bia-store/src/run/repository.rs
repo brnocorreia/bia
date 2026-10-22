@@ -11,7 +11,6 @@ use crate::StoreError;
 use crate::version::why_not_published;
 
 pub trait RunRepository {
-    /// Creates a `pending` Run at `at`, pinned to a Published Version.
     fn create(
         &self,
         conn: &mut PgConnection,
@@ -36,7 +35,6 @@ pub trait RunRepository {
         at: DateTime<Utc>,
     ) -> impl Future<Output = Result<(), StoreError>> + Send;
 
-    /// Lists Runs newest first.
     fn list(
         &self,
         conn: &mut PgConnection,

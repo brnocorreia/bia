@@ -29,7 +29,6 @@ enum Part {
 }
 
 impl Template {
-    /// Parses `source` with the default [`Limits`].
     pub fn parse(source: &str) -> Result<Self, CompileError> {
         Self::parse_with(source, &Limits::default())
     }
@@ -84,7 +83,6 @@ impl Template {
         })
     }
 
-    /// The source the Template was parsed from.
     pub fn source(&self) -> &str {
         &self.source
     }
@@ -94,13 +92,10 @@ impl Template {
         &self.references
     }
 
-    /// Whether the Template is exactly one segment and keeps its type.
     pub fn is_single_expression(&self) -> bool {
         matches!(self.parts.as_slice(), [Part::Expression(_)])
     }
 
-    /// Evaluates the Template: the typed value of a single segment, or the
-    /// rendered string otherwise.
     pub fn evaluate(&self, scope: &Scope) -> Result<serde_json::Value, EvalError> {
         if let [Part::Expression(expression)] = self.parts.as_slice() {
             return expression.evaluate(scope);
@@ -142,8 +137,6 @@ fn closing(source: &str, start: usize) -> Option<usize> {
     None
 }
 
-/// The offset just past the CEL string literal opening at `open`, single or
-/// triple quoted, honouring backslash escapes unless it is raw.
 fn string_end(bytes: &[u8], open: usize, quote: u8, raw: bool) -> Option<usize> {
     let triple = bytes.get(open..open + 3) == Some(&[quote, quote, quote]);
     let delimiter = if triple { 3 } else { 1 };

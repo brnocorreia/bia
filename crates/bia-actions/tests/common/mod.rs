@@ -1,6 +1,5 @@
 //! Helpers shared by the Action tests.
 
-// `allow-unwrap-in-tests` covers `#[test]` functions only, not the helpers they share.
 #![allow(clippy::unwrap_used, dead_code, unreachable_pub)]
 
 use std::sync::Arc;

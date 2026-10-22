@@ -6,7 +6,6 @@ use jsonschema::Validator;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
-/// Checks Params against a descriptor's param schema, then reads them as `T`.
 #[derive(Debug)]
 pub(crate) struct ParamReader {
     validator: Validator,
@@ -46,13 +45,11 @@ impl ParamReader {
     }
 }
 
-/// A param or output schema derived from a Rust type.
 pub(crate) fn schema_for<T: schemars::JsonSchema>() -> schemars::Schema {
     schemars::SchemaGenerator::new(schemars::generate::SchemaSettings::draft2020_12())
         .into_root_schema_for::<T>()
 }
 
-/// An example's Params, written as a JSON object literal.
 pub(crate) fn object(value: Value) -> bia_core::dsl::Params {
     match value {
         Value::Object(map) => map,

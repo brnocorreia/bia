@@ -35,7 +35,6 @@ pub trait JobRepository {
         now: DateTime<Utc>,
     ) -> impl Future<Output = Result<Vec<Claimed>, StoreError>> + Send;
 
-    /// Extends `lease` to `now + lease_for`, so a long Attempt keeps its Job.
     fn extend_lease(
         &self,
         conn: &mut PgConnection,
@@ -44,11 +43,6 @@ pub trait JobRepository {
         now: DateTime<Utc>,
     ) -> impl Future<Output = Result<Lease, StoreError>> + Send;
 
-    /// Completes the Job `lease` is on, removing it.
-    ///
-    /// Fails with [`StoreError::LeaseLost`] once another claimer has taken the Job, so a
-    /// holder whose Lease expired cannot complete it twice. A Lease that expired without
-    /// anyone claiming the Job since still acks.
     fn ack(
         &self,
         conn: &mut PgConnection,
@@ -81,7 +75,6 @@ pub trait JobRepository {
     ) -> impl Future<Output = Result<Vec<Job>, StoreError>> + Send;
 }
 
-/// [`JobRepository`] over Postgres.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct PgJobRepository;
 

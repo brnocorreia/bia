@@ -1,6 +1,5 @@
 //! Parsing Definitions and queue resources from JSON and YAML.
 
-// `allow-unwrap-in-tests` covers `#[test]` functions only, not the helpers they share.
 #![allow(clippy::unwrap_used)]
 
 use std::collections::BTreeSet;
@@ -116,7 +115,6 @@ fn fixtures_round_trip_through_canonical_json() {
             .unwrap_or_else(|err| panic!("{name} does not re-parse: {err}\n{json}"));
         assert_eq!(reparsed, definition, "{name} changed in a round trip");
 
-        // Serialising is stable: the canonical form of the canonical form is itself.
         assert_eq!(serde_json::to_string(&reparsed).unwrap(), json, "{name}");
     }
 }
@@ -376,7 +374,6 @@ fn documents_are_told_apart_by_kind() {
     assert_eq!(err.path, "/kind");
     assert!(matches!(err.kind, ParseErrorKind::UnknownKind { .. }));
 
-    // A Definition never has `kind`, so a stray one is not silently ignored.
     let err =
         Document::from_value(json!({ "schema_version": 1, "id": "x", "steps": [], "kind": 1 }))
             .unwrap_err();

@@ -11,7 +11,6 @@ use serde_json::{Value, json};
 use crate::EngineError;
 
 const STEPS: &str = "steps";
-/// The nested lists of `flow.branch`.
 pub(crate) const THEN: &str = "then";
 pub(crate) const ELSE: &str = "else";
 
@@ -36,7 +35,6 @@ struct Frame {
 }
 
 impl Cursor {
-    /// The first top-level Step, if the Definition has one.
     pub(crate) fn start(definition: &Definition) -> Option<Self> {
         Self {
             frames: vec![Frame {
@@ -47,7 +45,6 @@ impl Cursor {
         .settle(definition)
     }
 
-    /// Reads a stored Cursor, checking that it names a Step of `definition`.
     pub(crate) fn decode(
         run: RunId,
         segments: &[Value],
@@ -89,7 +86,6 @@ impl Cursor {
         self.list(definition)?.get(self.frames.last()?.index)
     }
 
-    /// The Step list the Cursor's last level points into.
     fn list<'a>(&self, definition: &'a Definition) -> Option<&'a [Step]> {
         let mut frames = self.frames.iter();
         let mut parent = frames.next().filter(|frame| frame.list == STEPS)?;
@@ -119,11 +115,8 @@ impl Cursor {
         self.settle(definition)
     }
 
-    /// Leaves every list the Cursor has run off the end of, so it rests on a Step or on nothing.
     fn settle(mut self, definition: &Definition) -> Option<Self> {
         while self.step(definition).is_none() {
-            // Past the end of a list: the Block that holds it is done, and the Cursor moves on
-            // in the list around that Block. A used-up top-level list ends the Run.
             self.frames.pop();
             self.frames.last_mut()?.index += 1;
         }
@@ -131,7 +124,6 @@ impl Cursor {
     }
 }
 
-/// The nested Step list a Block calls `list`.
 fn nested<'a>(step: &'a Step, list: &str) -> Option<&'a [Step]> {
     match (&step.kind, list) {
         (StepKind::Branch(branch), THEN) => Some(&branch.then),
@@ -140,7 +132,6 @@ fn nested<'a>(step: &'a Step, list: &str) -> Option<&'a [Step]> {
     }
 }
 
-/// Everything besides the Cursor a Run needs to resume.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub(crate) struct RunState {
     /// The Output of every Step that succeeded, by Step id, readable as `steps.<id>.output`.
@@ -149,8 +140,6 @@ pub(crate) struct RunState {
     /// Attempts the Step at the Cursor has finished so far; the next one is `attempts + 1`.
     #[serde(default)]
     pub(crate) attempts: u32,
-    /// Set while the Step at the Cursor is a `flow.sleep` or `flow.sleep_until` the Run is
-    /// waiting out.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) sleep: Option<Sleep>,
 }
@@ -161,7 +150,6 @@ pub(crate) struct RunState {
 pub(crate) struct Sleep {
     started_at: i64,
     until: i64,
-    /// The resolved Params of the sleeping Step, for the Timeline entry written on waking.
     input: Option<Value>,
 }
 
@@ -193,7 +181,6 @@ impl Sleep {
 
 impl RunState {
     pub(crate) fn decode(run: RunId, state: &Value) -> Result<Self, EngineError> {
-        // A pending Run's state is `{}`, which decodes to the default.
         Self::deserialize(state).map_err(|error| invalid(run, error))
     }
 }

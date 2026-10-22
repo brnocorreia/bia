@@ -41,12 +41,10 @@ use failure::{Failure, FailureCode};
 /// Settings the interpreter applies where a Definition says nothing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct InterpreterConfig {
-    /// How long an Attempt may run when its Step has no `timeout`.
     pub default_timeout: TimeDelta,
     /// How long a timed-out Action gets to stop after its cancellation token fires, before
     /// it is dropped.
     pub cancel_grace: TimeDelta,
-    /// Bounds on every Template evaluated in Params.
     pub expression_limits: expression::Limits,
 }
 
@@ -88,7 +86,6 @@ impl fmt::Debug for Interpreter {
     }
 }
 
-/// A transition to commit: everything one Job changes, written in one transaction.
 struct Transition {
     status: RunStatus,
     checkpoint: Checkpoint,
@@ -97,7 +94,6 @@ struct Transition {
     at: DateTime<Utc>,
 }
 
-/// The Attempt in progress: the Step at the Cursor and when this Attempt began.
 struct Started<'a> {
     step: &'a Step,
     cursor: Cursor,
@@ -107,8 +103,6 @@ struct Started<'a> {
 }
 
 impl Started<'_> {
-    /// The Timeline entry for this Attempt, ending at `finished_at`; the caller fills in the
-    /// input, Output and error.
     fn entry(&self, status: AttemptStatus, finished_at: DateTime<Utc>) -> NewTimelineEntry {
         NewTimelineEntry {
             step: Some(StepAttempt {
@@ -134,7 +128,6 @@ fn is_flow(name: &str) -> bool {
     )
 }
 
-/// How one Attempt ended, and the Params to record for it.
 struct Attempted {
     input: Option<Value>,
     result: Result<Output, Failure>,
@@ -240,7 +233,6 @@ impl Interpreter {
         self.at(Cursor::start(definition), RunState::default(), None, now)
     }
 
-    /// Executes the Step at the Cursor and decides what follows from its outcome.
     async fn step(&self, run: &Run, definition: &Definition) -> Result<Transition, EngineError> {
         let cursor = Cursor::decode(run.id, &run.checkpoint.cursor, definition)?;
         let mut state = RunState::decode(run.id, &run.checkpoint.state)?;
@@ -303,7 +295,6 @@ impl Interpreter {
         }
     }
 
-    /// Evaluates a condition (`if`, `when`) in the scope of the Step about to run.
     fn condition(
         &self,
         condition: &bia_core::dsl::Expression,
@@ -450,7 +441,6 @@ impl Interpreter {
 
         let sleep = Sleep::new(now, until, input);
         if until <= now {
-            // Nothing to wait for: complete in this very Job.
             return self.wake(definition, started, state, sleep);
         }
         // Fall asleep: the Cursor stays on this Step, and the next Job only becomes claimable
@@ -497,7 +487,6 @@ impl Interpreter {
         self.advance_past(definition, started.cursor, state, entry)
     }
 
-    /// The transition after a Step finished: the Cursor moves on, through any Blocks it leaves.
     fn advance_past(
         &self,
         definition: &Definition,
@@ -542,8 +531,6 @@ impl Interpreter {
         }
     }
 
-    /// The transition that leaves the Run about to execute the Step at `cursor`, or succeeded
-    /// when no Step is left.
     fn at(
         &self,
         cursor: Option<Cursor>,
@@ -565,8 +552,6 @@ impl Interpreter {
         }
     }
 
-    /// Runs one Attempt of an ordinary Step: resolves its Params, checks them against the
-    /// Action and calls it under the Step's timeout.
     async fn attempt(&self, run: &Run, step: &Step, attempt: u32, state: &RunState) -> Attempted {
         let (action, params) = match &step.kind {
             StepKind::Action { action, params } => (action, params),
@@ -675,7 +660,6 @@ impl Interpreter {
         }
     }
 
-    /// Calls the Action, cancelling it once `timeout` passes on the Clock.
     async fn call(
         &self,
         action: &dyn bia_core::action::Action,
@@ -707,8 +691,6 @@ impl Interpreter {
         }
     }
 
-    /// Commits a transition: the Job's completion, the Timeline entry, the Checkpoint and the
-    /// next Job, all or nothing (ADR-0010).
     async fn commit(
         &self,
         lease: &Lease,
@@ -770,7 +752,6 @@ pub async fn start_run(
     Ok(run)
 }
 
-/// Why `input` cannot start a Run of `definition`, if it cannot.
 fn input_failure(definition: &Definition, input: &Value) -> Option<Failure> {
     let schema = Value::Object(definition.input_schema.clone()?);
     let error = match schema_violations(&schema, input) {
@@ -824,8 +805,6 @@ fn idempotency_key(run: RunId, step: &Step, iteration_path: &str) -> Idempotency
     IdempotencyKey::new(format!("{run}:{}:{iteration_path}", step.id))
 }
 
-/// How long to wait before the Attempt after `attempt` (1-based) failed: `initial` each time
-/// for `fixed`, doubled after each Attempt for `exponential`, never more than `max`.
 fn retry_delay(policy: &RetryPolicy, attempt: u32) -> TimeDelta {
     let millis = |duration: bia_core::dsl::Duration| {
         TimeDelta::try_milliseconds(i64::try_from(duration.as_millis()).unwrap_or(i64::MAX))
@@ -851,7 +830,6 @@ fn action_name(step: &Step) -> bia_core::dsl::ActionName {
     }
 }
 
-/// `30s`, `1500ms`: a timeout as a Definition would write it.
 fn humanize(duration: TimeDelta) -> String {
     let millis = duration.num_milliseconds();
     if millis % 1000 == 0 {

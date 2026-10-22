@@ -14,10 +14,8 @@ use cel::common::ast::{CallExpr, ComprehensionExpr, EntryExpr, Expr, IdedExpr, o
 use cel::extractors::Arguments;
 use cel::{Context, ExecutionError, Value};
 
-/// The internal function each comprehension iteration calls.
 const CHARGE: &str = "@bia_charge";
 
-/// Bytes of string or bytes value that cost one unit.
 const BYTES_PER_UNIT: u64 = 64;
 
 /// Rewrites `expr` so that every comprehension iteration calls [`CHARGE`].
@@ -91,7 +89,6 @@ fn charge_iterations(comprehension: &mut ComprehensionExpr) {
     wrap(step);
 }
 
-/// The single element of an `@result + [elem]` step.
 fn appended_element<'e>(
     step: &'e mut IdedExpr,
     is_accu: &impl Fn(&IdedExpr) -> bool,
@@ -124,7 +121,6 @@ fn wrap(expr: &mut IdedExpr) {
     };
 }
 
-/// The cost spent by one evaluation.
 #[derive(Debug, Clone)]
 pub(super) struct Meter {
     spent: Arc<AtomicU64>,
@@ -141,7 +137,6 @@ impl Meter {
         }
     }
 
-    /// Registers [`CHARGE`] on `context`, charging this meter.
     pub(super) fn bind(&self, context: &mut Context<'_, '_>) {
         let meter = self.clone();
         context

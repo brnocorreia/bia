@@ -1,6 +1,5 @@
 //! Migrations apply cleanly and are append-only.
 
-// `allow-unwrap-in-tests` covers `#[test]` functions only, not the helpers they share.
 #![allow(clippy::unwrap_used)]
 
 use bia_store::workflow::{PgWorkflowRepository, WorkflowRepository};
@@ -29,7 +28,6 @@ const RELEASED: &[(i64, &str)] = &[
 #[sqlx::test(migrations = false)]
 async fn migrations_apply_to_an_empty_database(pool: PgPool) {
     migrate(&pool).await.unwrap();
-    // A second run finds nothing pending.
     migrate(&pool).await.unwrap();
 
     let mut conn = pool.acquire().await.unwrap();

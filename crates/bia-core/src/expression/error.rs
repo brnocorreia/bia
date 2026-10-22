@@ -2,34 +2,26 @@ use cel::{ExecutionError, ParseErrors};
 
 use super::scope::Scope;
 
-/// What kind of problem stopped an Expression or Template from compiling.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum CompileErrorKind {
-    /// The source is not valid CEL.
     Syntax,
-    /// The Expression, or a `{{ }}` segment, has nothing in it.
     Empty,
     /// The Expression is longer than [`Limits::max_source_len`](super::Limits).
     TooLong,
     /// The Expression nests deeper than
     /// [`Limits::max_nesting_depth`](super::Limits).
     TooDeep,
-    /// A Template opens `{{` and never closes it.
     UnclosedTemplate,
 }
 
-/// An Expression or Template that does not compile, with the position of the
-/// problem in its source.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("{message} (line {line}, column {column})")]
 pub struct CompileError {
     pub kind: CompileErrorKind,
     pub message: String,
-    /// Byte offset into the source.
     pub offset: usize,
     pub line: usize,
-    /// 1-based column, counted in characters.
     pub column: usize,
 }
 
@@ -95,7 +87,6 @@ fn line_column(source: &str, offset: usize) -> (usize, usize) {
     (line, column)
 }
 
-/// The byte offset of a 1-based line and 1-based byte column.
 fn offset_of(source: &str, line: usize, column: usize) -> usize {
     let line_start: usize = source
         .split_inclusive('\n')
@@ -109,10 +100,6 @@ fn offset_of(source: &str, line: usize, column: usize) -> usize {
     offset
 }
 
-/// An Expression that compiled but failed to evaluate.
-///
-/// Messages never carry Secret values: anything that could echo one is
-/// redacted against the [`Scope`] the Expression ran in.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum EvalError {

@@ -13,15 +13,12 @@ use crate::StoreError;
 /// Versions: immutable, numbered snapshots of a Workflow's Definition (ADR-0009). A Draft
 /// can be replaced; publishing freezes it for good.
 pub trait VersionRepository {
-    /// Saves `definition` as a new Draft of the Workflow it names, numbered one past the
-    /// newest Version.
     fn create_draft(
         &self,
         conn: &mut PgConnection,
         definition: &Definition,
     ) -> impl Future<Output = Result<Version, StoreError>> + Send;
 
-    /// Replaces the Definition of a Draft, keeping its number.
     fn replace_draft(
         &self,
         conn: &mut PgConnection,
@@ -30,7 +27,6 @@ pub trait VersionRepository {
         definition: &Definition,
     ) -> impl Future<Output = Result<Version, StoreError>> + Send;
 
-    /// Publishes a Draft at `at`. From then on the Version never changes.
     fn publish(
         &self,
         conn: &mut PgConnection,
@@ -46,7 +42,6 @@ pub trait VersionRepository {
         number: VersionNumber,
     ) -> impl Future<Output = Result<Option<Version>, StoreError>> + Send;
 
-    /// Lists a Workflow's Versions, oldest first.
     fn list(
         &self,
         conn: &mut PgConnection,

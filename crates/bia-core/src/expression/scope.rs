@@ -28,29 +28,24 @@ impl Scope {
         Self::default()
     }
 
-    /// The Run's input.
     pub fn with_input(self, input: &serde_json::Value) -> Self {
         self.with_variable("input", input)
     }
 
-    /// The metadata of the Trigger that started the Run.
     pub fn with_trigger(self, trigger: &serde_json::Value) -> Self {
         self.with_variable("trigger", trigger)
     }
 
-    /// The Run itself: `id`, `version`, `attempt`, `started_at`.
     pub fn with_run(self, run: &serde_json::Value) -> Self {
         self.with_variable("run", run)
     }
 
-    /// The Output of a Step that already ran, read as `steps.<id>.output`.
     pub fn with_step_output(mut self, id: impl Into<String>, output: &serde_json::Value) -> Self {
         let step = convert::map([("output", convert::from_json(output))]);
         self.steps.insert(id.into(), Value::Map(step));
         self
     }
 
-    /// The current `flow.foreach` iteration.
     pub fn with_item(mut self, item: &serde_json::Value, index: u64) -> Self {
         self.variables.insert("item", convert::from_json(item));
         self.variables
@@ -58,7 +53,6 @@ impl Scope {
         self
     }
 
-    /// The error a `flow.try` caught, inside its `catch`.
     pub fn with_error(self, error: &serde_json::Value) -> Self {
         self.with_variable("error", error)
     }
@@ -101,7 +95,6 @@ impl Scope {
         }
     }
 
-    /// `text` with every Secret value in scope replaced by a marker.
     pub(super) fn redact(&self, text: &str) -> String {
         let mut values: Vec<&str> = self
             .secrets

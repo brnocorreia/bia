@@ -17,7 +17,6 @@ pub(super) fn closest<'c>(
         .map(|(_, candidate)| candidate)
 }
 
-/// The suggestion text for a name close to `name`.
 pub(super) fn did_you_mean<'c>(
     name: &str,
     candidates: impl IntoIterator<Item = &'c str>,

@@ -27,8 +27,6 @@ pub trait WorkflowRepository {
         conn: &mut PgConnection,
     ) -> impl Future<Output = Result<Vec<Workflow>, StoreError>> + Send;
 
-    /// Points the Active Version at a Published Version. Rolling back is pointing it at an
-    /// older one.
     fn set_active_version(
         &self,
         conn: &mut PgConnection,

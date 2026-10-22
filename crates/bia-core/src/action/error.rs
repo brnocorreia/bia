@@ -36,7 +36,6 @@ impl ActionError {
         }
     }
 
-    /// Structured context for the Timeline and `flow.try` catches, e.g. a response status.
     pub fn with_details(mut self, details: Value) -> Self {
         self.details = Some(details);
         self
@@ -46,7 +45,6 @@ impl ActionError {
         self.class
     }
 
-    /// Whether the Step's `retry` policy applies.
     pub fn is_retryable(&self) -> bool {
         self.class == ErrorClass::Retryable
     }
@@ -60,8 +58,6 @@ impl ActionError {
     }
 }
 
-/// The classification every Action error carries. Only `retryable` errors consume a Step's
-/// `retry` policy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorClass {

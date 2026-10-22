@@ -1,7 +1,6 @@
 //! The interpreter drives sequential Runs to `succeeded` or `failed` through Jobs, with
 //! retries, timeouts, Idempotency Keys and a complete Timeline (ADR-0001, ADR-0010, ADR-0012).
 
-// `allow-unwrap-in-tests` covers `#[test]` functions only, not the helpers they share.
 #![allow(clippy::unwrap_used)]
 
 use std::collections::BTreeMap;
@@ -316,13 +315,11 @@ async fn a_retryable_failure_retries_after_its_backoff_with_the_same_idempotency
         )
         .await;
 
-    // Start the Run, then the first Attempt, which fails after 2 s.
     let advanced = h.drive().await;
     assert_eq!(advanced.len(), 2);
     assert_eq!(advanced[1].status, RunStatus::Running);
     assert_eq!(advanced[1].next_job_at, Some(t0() + TimeDelta::seconds(12)));
 
-    // The retry waits out its backoff: 10 s, then 20 s.
     h.clock.advance(TimeDelta::seconds(9));
     assert!(h.drive().await.is_empty());
     h.clock.advance(TimeDelta::seconds(1));
@@ -786,7 +783,6 @@ async fn a_branch_runs_the_chosen_arm_and_then_the_steps_after_it(pool: PgPool) 
             &ManualClock::new(t0()),
             vec![echo_action.clone()],
         );
-        // One Workflow per iteration: ids are unique per database.
         let run = h
             .start(
                 definition(
@@ -902,7 +898,6 @@ async fn nested_blocks_advance_and_return_through_checkpoints_across_jobs(pool: 
         )
         .await;
 
-    // One Job at a time, reading the Cursor the Checkpoint holds between them.
     let mut cursors = Vec::new();
     while let Some(claimed) = h.claim("worker-a").await {
         h.interpreter.advance(&claimed).await.unwrap();

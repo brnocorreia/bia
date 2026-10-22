@@ -16,7 +16,6 @@ pub trait TimelineRepository {
         entry: &NewTimelineEntry,
     ) -> impl Future<Output = Result<i32, StoreError>> + Send;
 
-    /// Lists a Run's Timeline in order.
     fn list(
         &self,
         conn: &mut PgConnection,

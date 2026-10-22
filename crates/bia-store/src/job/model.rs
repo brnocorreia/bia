@@ -5,7 +5,6 @@ use serde_json::Value;
 
 use crate::run::RunId;
 
-/// How many Attempts a Job gets unless its enqueuer says otherwise.
 pub const DEFAULT_MAX_ATTEMPTS: i32 = 20;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -27,7 +26,6 @@ impl fmt::Display for JobId {
     }
 }
 
-/// What a Job does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum JobKind {
@@ -47,14 +45,12 @@ pub struct NewJob {
     pub kind: JobKind,
     pub run_id: Option<RunId>,
     pub payload: Value,
-    /// When the Job becomes claimable; later than now for a delayed Job.
     pub run_at: DateTime<Utc>,
     /// How many Attempts the Job gets before it gives up; at least 1.
     pub max_attempts: i32,
 }
 
 impl NewJob {
-    /// A Job that advances `run`, claimable from `run_at`.
     pub fn advance_run(run: RunId, run_at: DateTime<Utc>) -> Self {
         Self {
             kind: JobKind::AdvanceRun,
@@ -72,7 +68,6 @@ pub struct Job {
     pub kind: JobKind,
     pub run_id: Option<RunId>,
     pub payload: Value,
-    /// When the Job is next claimable.
     pub run_at: DateTime<Utc>,
     /// How many times the Job has been claimed, including claims whose Lease expired.
     pub attempts: i32,
@@ -80,7 +75,6 @@ pub struct Job {
     pub locked_by: Option<String>,
     pub locked_until: Option<DateTime<Utc>>,
     pub last_error: Option<String>,
-    /// When the Job gave up after its last Attempt failed.
     pub failed_at: Option<DateTime<Utc>>,
 }
 
@@ -110,7 +104,6 @@ impl Lease {
         self.attempt
     }
 
-    /// When the Lease expires and the Job becomes claimable again.
     pub fn until(&self) -> DateTime<Utc> {
         self.until
     }
@@ -131,7 +124,6 @@ pub struct Backoff {
 }
 
 impl Backoff {
-    /// The delay after Attempt `attempt` (1-based) fails.
     pub fn delay(&self, attempt: i32) -> TimeDelta {
         let doublings = u32::try_from(attempt.saturating_sub(1)).unwrap_or(0);
         2_i32
@@ -142,7 +134,6 @@ impl Backoff {
 }
 
 impl Default for Backoff {
-    /// 1 s, 2 s, 4 s… up to an hour.
     fn default() -> Self {
         Self {
             initial: TimeDelta::seconds(1),
@@ -151,7 +142,6 @@ impl Default for Backoff {
     }
 }
 
-/// What failing a Job led to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Failed {
     /// The Job is claimable again from `run_at`.

@@ -67,7 +67,6 @@ mod manual {
             }
         }
 
-        /// Moves time forward by `by`, or backward when `by` is negative.
         pub fn advance(&self, by: TimeDelta) {
             self.now.send_modify(|now| *now += by);
         }
@@ -86,7 +85,6 @@ mod manual {
             let mut now = self.now.subscribe();
             Box::pin(async move {
                 if now.wait_for(|now| *now >= deadline).await.is_err() {
-                    // Every handle on the Clock is gone, so time never reaches the deadline.
                     std::future::pending::<()>().await;
                 }
             })

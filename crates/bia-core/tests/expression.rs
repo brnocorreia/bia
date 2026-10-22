@@ -364,7 +364,6 @@ fn pathological_expressions_stop_at_the_cost_limit() {
             .collect::<Vec<_>>()
             .join(",")
     );
-    // 100^4 = 100 million iterations without a limit.
     let source = format!(
         "{range}.map(a, {range}.map(b, {range}.map(c, {range}.filter(d, a + b + c + d > 0))))"
     );
@@ -403,7 +402,6 @@ fn cost_counts_the_size_of_produced_values() {
     };
     let big = json!((0..500).collect::<Vec<_>>());
     let scope = Scope::new().with_input(&json!({ "big": big }));
-    // 10 iterations, each copying a 500-element list.
     let source = "[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(x, input.big)";
     let result = Expression::compile_with(source, &limits)
         .unwrap()

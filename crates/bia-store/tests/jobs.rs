@@ -1,6 +1,5 @@
 //! Job claims, Leases, retries and wake-ups, with time driven by the manual Clock.
 
-// `allow-unwrap-in-tests` covers `#[test]` functions only, not the helpers they share.
 #![allow(clippy::unwrap_used)]
 
 use std::collections::BTreeMap;
@@ -45,7 +44,6 @@ async fn many_concurrent_claimers_process_each_job_exactly_once(pool: PgPool) {
     let mut enqueued = Vec::with_capacity(JOBS);
     let mut run = None;
     for i in 0..JOBS {
-        // A few Jobs per Run, as parallel branches would enqueue.
         if i % 10 == 0 {
             run = Some(start_run(&mut conn, &version, t0()).await.id);
         }
@@ -59,7 +57,6 @@ async fn many_concurrent_claimers_process_each_job_exactly_once(pool: PgPool) {
     }
     drop(conn);
 
-    // Every ack is recorded with the claimer and the Attempt it acked.
     let processed: Arc<Mutex<Vec<(JobId, String, i32)>>> = Arc::default();
     let mut claimers = Vec::new();
     for c in 0..CLAIMERS {
@@ -313,7 +310,6 @@ async fn a_committed_enqueue_wakes_a_listener(pool: PgPool) {
         .unwrap();
     tx.commit().await.unwrap();
 
-    // The timeout only bounds a broken test; a working listener returns at once.
     let woken = tokio::time::timeout(Duration::from_secs(10), listener.recv())
         .await
         .expect("no notification arrived")

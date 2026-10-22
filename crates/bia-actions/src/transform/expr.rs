@@ -24,8 +24,6 @@ struct Params {
     values: Map<String, Value>,
 }
 
-/// Evaluates a CEL Expression over the values in its Params. Its Output is the result, of
-/// whatever type the Expression produces.
 #[derive(Debug)]
 pub struct Expr {
     descriptor: ActionDescriptor,
@@ -95,8 +93,6 @@ impl Action for Expr {
         call: ActionCall,
         _cancel: CancellationToken,
     ) -> BoxFuture<'_, Result<Output, ActionError>> {
-        // Evaluation is bounded by the Expression cost limit, so it finishes quickly and does
-        // not need to watch for cancellation.
         let result = self.params.read::<Params>(&call.params).and_then(|params| {
             let expression = Expression::compile(&params.expression).map_err(|error| {
                 ActionError::fatal(format!("`expression` does not compile: {error}"))

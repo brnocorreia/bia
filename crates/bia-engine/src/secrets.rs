@@ -13,7 +13,6 @@ pub trait SecretResolver: fmt::Debug + Send + Sync {
     fn resolve<'a>(&'a self, name: &'a str) -> BoxFuture<'a, Result<Option<String>, ActionError>>;
 }
 
-/// A resolver that knows no Secrets, until a Secret Provider is wired in.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct NoSecrets;
 
