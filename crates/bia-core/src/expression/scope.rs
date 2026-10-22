@@ -63,6 +63,12 @@ impl Scope {
         self.with_variable("error", error)
     }
 
+    /// The values a `transform.expr` Step hands its Expression, read as
+    /// `values`. Only that Action's scope has them.
+    pub fn with_values(self, values: &serde_json::Value) -> Self {
+        self.with_variable("values", values)
+    }
+
     /// A resolved Secret, read as `secrets.NAME`. Its value is redacted from
     /// every evaluation error and never shown by `Debug`.
     pub fn with_secret(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
