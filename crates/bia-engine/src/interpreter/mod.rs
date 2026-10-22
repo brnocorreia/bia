@@ -11,12 +11,13 @@ use std::collections::BTreeSet;
 use std::fmt;
 use std::sync::Arc;
 
+use bia_core::action::flow::{self, Control};
 use bia_core::action::{
     ActionCall, ActionError, ActionRegistry, CancellationToken, IdempotencyKey, Lookup, Output,
     RunContext,
 };
 use bia_core::clock::Clock;
-use bia_core::dsl::{Definition, Params, RetryPolicy, Step, StepKind, WorkflowId};
+use bia_core::dsl::{Branch, Definition, Params, RetryPolicy, Step, StepKind, WorkflowId};
 use bia_core::expression::{self, Scope, Template, resolve_params};
 use bia_core::validation::schema_violations;
 use bia_store::job::{Claimed, JobRepository, Lease, NewJob, PgJobRepository};
@@ -34,7 +35,7 @@ use crate::{EngineError, NoSecrets, SecretResolver};
 mod checkpoint;
 mod failure;
 
-use checkpoint::{Cursor, RunState, checkpoint};
+use checkpoint::{Cursor, ELSE, RunState, Sleep, THEN, checkpoint};
 use failure::{Failure, FailureCode};
 
 /// Settings the interpreter applies where a Definition says nothing.
@@ -95,6 +96,44 @@ struct Transition {
     entry: Option<NewTimelineEntry>,
     next_job_at: Option<DateTime<Utc>>,
     at: DateTime<Utc>,
+}
+
+/// The Attempt in progress: the Step at the Cursor and when this Attempt began.
+struct Started<'a> {
+    step: &'a Step,
+    cursor: Cursor,
+    /// 1 for the first Attempt of the Step.
+    attempt: u32,
+    started_at: DateTime<Utc>,
+}
+
+impl Started<'_> {
+    /// The Timeline entry for this Attempt, ending at `finished_at`; the caller fills in the
+    /// input, Output and error.
+    fn entry(&self, status: AttemptStatus, finished_at: DateTime<Utc>) -> NewTimelineEntry {
+        NewTimelineEntry {
+            step: Some(StepAttempt {
+                step_id: self.step.id.clone(),
+                iteration_path: String::new(),
+                attempt: i32::try_from(self.attempt).unwrap_or(i32::MAX),
+                action: action_name(self.step),
+            }),
+            status,
+            input: None,
+            output: None,
+            error: None,
+            started_at: self.started_at,
+            finished_at,
+        }
+    }
+}
+
+/// Whether `name` is an Action the interpreter executes itself.
+fn is_flow(name: &str) -> bool {
+    matches!(
+        name,
+        flow::SLEEP | flow::SLEEP_UNTIL | flow::FAIL | flow::SUCCEED
+    )
 }
 
 /// How one Attempt ended, and the Params to record for it.
@@ -201,85 +240,328 @@ impl Interpreter {
                 at: now,
             };
         }
-        self.at(definition, Cursor::start(), RunState::default(), None, now)
+        self.at(Cursor::start(definition), RunState::default(), None, now)
     }
 
     /// Executes the Step at the Cursor and decides what follows from its outcome.
     async fn step(&self, run: &Run, definition: &Definition) -> Result<Transition, EngineError> {
-        let cursor = Cursor::decode(run.id, &run.checkpoint.cursor)?;
+        let cursor = Cursor::decode(run.id, &run.checkpoint.cursor, definition)?;
         let mut state = RunState::decode(run.id, &run.checkpoint.state)?;
-        let Some(step) = cursor.step(definition) else {
-            return Ok(self.at(definition, cursor, state, None, self.clock.now()));
+        let step = cursor
+            .step(definition)
+            .ok_or_else(|| EngineError::InvalidCheckpoint {
+                run: run.id,
+                message: "cursor names no Step".to_owned(),
+            })?;
+        let started = Started {
+            step,
+            attempt: state.attempts + 1,
+            started_at: self.clock.now(),
+            cursor,
         };
 
-        let attempt = state.attempts + 1;
-        let started_at = self.clock.now();
-        let Attempted { input, result } = self.attempt(run, step, attempt, &state).await;
-        let finished_at = self.clock.now();
-
-        let mut entry = NewTimelineEntry {
-            step: Some(StepAttempt {
-                step_id: step.id.clone(),
-                iteration_path: String::new(),
-                attempt: i32::try_from(attempt).unwrap_or(i32::MAX),
-                action: action_name(step),
-            }),
-            status: AttemptStatus::Succeeded,
-            input,
-            output: None,
-            error: None,
-            started_at,
-            finished_at,
-        };
-
-        Ok(match result {
-            Ok(output) => {
-                entry.output = Some(output.clone());
-                state.outputs.insert(step.id.as_str().to_owned(), output);
-                state.attempts = 0;
-                self.at(definition, cursor.next(), state, Some(entry), finished_at)
-            }
-            Err(failure) => {
-                entry.status = AttemptStatus::Failed;
-                entry.error = Some(failure.to_value());
-                state.attempts = attempt;
-                let policy = step.retry.as_ref();
-                let max_attempts = policy.map_or(1, |policy| policy.max_attempts);
-                let (status, next_job_at) = if failure.is_retryable() && attempt < max_attempts {
-                    let delay = policy.map_or(TimeDelta::zero(), |p| retry_delay(p, attempt));
-                    (RunStatus::Running, Some(finished_at + delay))
-                } else {
-                    (RunStatus::Failed, None)
-                };
-                Transition {
-                    status,
-                    checkpoint: checkpoint(Some(cursor), &state),
-                    entry: Some(entry),
-                    next_job_at,
-                    at: finished_at,
+        // A Run woken from a sleep already passed its `if` when it fell asleep.
+        if state.sleep.is_none()
+            && let Some(condition) = &step.r#if
+        {
+            match self.condition(condition, run, started.attempt, &state) {
+                Ok(true) => {}
+                Ok(false) => {
+                    let entry = started.entry(AttemptStatus::Skipped, self.clock.now());
+                    state
+                        .outputs
+                        .insert(step.id.as_str().to_owned(), Value::Null);
+                    return Ok(self.advance_past(definition, started.cursor, state, entry));
+                }
+                Err(error) => {
+                    let message = format!("`if` failed to evaluate: {error}");
+                    let failure = Failure::raised(
+                        FailureCode::InvalidExpression,
+                        ActionError::fatal(message),
+                    );
+                    return Ok(self.fail_step(started, state, None, failure));
                 }
             }
-        })
+        }
+
+        match &step.kind {
+            StepKind::Branch(branch) => Ok(self.branch(run, definition, started, state, branch)),
+            StepKind::Action { action, params } if is_flow(action.as_str()) => {
+                Ok(self.control(run, definition, started, state, params))
+            }
+            _ => {
+                let Attempted { input, result } =
+                    self.attempt(run, step, started.attempt, &state).await;
+                Ok(match result {
+                    Ok(output) => {
+                        let mut entry = started.entry(AttemptStatus::Succeeded, self.clock.now());
+                        entry.input = input;
+                        entry.output = Some(output.clone());
+                        state.outputs.insert(step.id.as_str().to_owned(), output);
+                        self.advance_past(definition, started.cursor, state, entry)
+                    }
+                    Err(failure) => self.fail_step(started, state, input, failure),
+                })
+            }
+        }
     }
 
-    /// The transition that leaves the Run about to execute the Step at `cursor`, or succeeded
-    /// when no Step is left there.
-    fn at(
+    /// Evaluates a condition (`if`, `when`) in the scope of the Step about to run.
+    fn condition(
+        &self,
+        condition: &bia_core::dsl::Expression,
+        run: &Run,
+        attempt: u32,
+        state: &RunState,
+    ) -> Result<bool, String> {
+        let limits = &self.config.expression_limits;
+        let expression = expression::Expression::compile_with(condition.as_str(), limits)
+            .map_err(|error| error.to_string())?;
+        expression
+            .evaluate_condition(&scope(run, attempt, state))
+            .map_err(|error| error.to_string())
+    }
+
+    /// `flow.branch`: evaluates `when` and moves the Cursor into the chosen arm. The Block's
+    /// Output says which arm ran. When the arm is empty the Run carries on after the Block.
+    fn branch(
+        &self,
+        run: &Run,
+        definition: &Definition,
+        started: Started<'_>,
+        mut state: RunState,
+        branch: &Branch,
+    ) -> Transition {
+        let taken = match self.condition(&branch.when, run, started.attempt, &state) {
+            Ok(taken) => taken,
+            Err(error) => {
+                let message = format!("`when` failed to evaluate: {error}");
+                let failure =
+                    Failure::raised(FailureCode::InvalidExpression, ActionError::fatal(message));
+                return self.fail_step(started, state, None, failure);
+            }
+        };
+        let arm = if taken { THEN } else { ELSE };
+        let output = json!({ "arm": arm });
+        let mut entry = started.entry(AttemptStatus::Succeeded, self.clock.now());
+        entry.input = Some(json!({ "when": taken }));
+        entry.output = Some(output.clone());
+        state
+            .outputs
+            .insert(started.step.id.as_str().to_owned(), output);
+        state.attempts = 0;
+        let at = entry.finished_at;
+        let next = started.cursor.enter(definition, arm);
+        self.at(next, state, Some(entry), at)
+    }
+
+    /// `flow.sleep`, `flow.sleep_until`, `flow.fail` and `flow.succeed`: the Actions that act on
+    /// the Run itself. Their Params are resolved without Secrets, so no error or Output can
+    /// leak one.
+    fn control(
+        &self,
+        run: &Run,
+        definition: &Definition,
+        started: Started<'_>,
+        mut state: RunState,
+        params: &Params,
+    ) -> Transition {
+        let now = started.started_at;
+        if let Some(sleep) = state.sleep.take() {
+            return self.wake(definition, started, state, sleep);
+        }
+        let StepKind::Action { action, .. } = &started.step.kind else {
+            unreachable!("only Action Steps reach `control`");
+        };
+        let fail = |this: &Self, started, state, input, code, error: ActionError| {
+            let failure = Failure::raised(code, error);
+            this.fail_step(started, state, input, failure)
+        };
+        let resolved = match resolve_params(
+            params,
+            &scope(run, started.attempt, &state),
+            &self.config.expression_limits,
+        ) {
+            Ok(resolved) => resolved,
+            Err(error) => {
+                let error = ActionError::fatal(error.to_string());
+                let input = Some(Value::Object(params.clone()));
+                return fail(
+                    self,
+                    started,
+                    state,
+                    input,
+                    FailureCode::InvalidTemplate,
+                    error,
+                );
+            }
+        };
+        let input = Some(Value::Object(resolved.recorded));
+        let control = match Control::from_params(action.as_str(), &resolved.call) {
+            Some(Ok(control)) => control,
+            Some(Err(error)) => {
+                return fail(
+                    self,
+                    started,
+                    state,
+                    input,
+                    FailureCode::InvalidParams,
+                    error,
+                );
+            }
+            None => unreachable!("`is_flow` names are all flow Actions"),
+        };
+
+        let until = match control {
+            Control::Fail(message) => {
+                return fail(
+                    self,
+                    started,
+                    state,
+                    input,
+                    FailureCode::FlowFail,
+                    ActionError::fatal(message),
+                );
+            }
+            Control::Succeed => {
+                let mut entry = started.entry(AttemptStatus::Succeeded, now);
+                entry.input = input;
+                entry.output = Some(Value::Null);
+                state
+                    .outputs
+                    .insert(started.step.id.as_str().to_owned(), Value::Null);
+                state.attempts = 0;
+                return self.at(None, state, Some(entry), now);
+            }
+            Control::Sleep(duration) => {
+                TimeDelta::try_milliseconds(i64::try_from(duration.as_millis()).unwrap_or(i64::MAX))
+                    .and_then(|duration| now.checked_add_signed(duration))
+            }
+            Control::SleepUntil(until) => Some(until),
+        };
+        let Some(until) = until else {
+            let error = ActionError::fatal("the sleep ends beyond the dates a timestamp can hold");
+            return fail(
+                self,
+                started,
+                state,
+                input,
+                FailureCode::InvalidParams,
+                error,
+            );
+        };
+
+        let sleep = Sleep::new(now, until, input);
+        if until <= now {
+            // Nothing to wait for: complete in this very Job.
+            return self.wake(definition, started, state, sleep);
+        }
+        // Fall asleep: the Cursor stays on this Step, and the next Job only becomes claimable
+        // when it is time to wake, so no Worker holds the Run meanwhile.
+        state.sleep = Some(sleep);
+        state.attempts = 0;
+        Transition {
+            status: RunStatus::Sleeping,
+            checkpoint: checkpoint(Some(&started.cursor), &state),
+            entry: None,
+            next_job_at: Some(until),
+            at: now,
+        }
+    }
+
+    /// Finishes a sleep, once its time has come. A Job claimed early goes back to sleep.
+    fn wake(
+        &self,
+        definition: &Definition,
+        mut started: Started<'_>,
+        mut state: RunState,
+        sleep: Sleep,
+    ) -> Transition {
+        let now = started.started_at;
+        state.sleep = Some(sleep.clone());
+        if now < sleep.until() {
+            return Transition {
+                status: RunStatus::Sleeping,
+                checkpoint: checkpoint(Some(&started.cursor), &state),
+                entry: None,
+                next_job_at: Some(sleep.until()),
+                at: now,
+            };
+        }
+        started.started_at = sleep.started_at();
+        let output = json!({ "slept_until": sleep.until().to_rfc3339() });
+        let mut entry = started.entry(AttemptStatus::Succeeded, now);
+        entry.input = sleep.input().cloned();
+        entry.output = Some(output.clone());
+        state.sleep = None;
+        state
+            .outputs
+            .insert(started.step.id.as_str().to_owned(), output);
+        self.advance_past(definition, started.cursor, state, entry)
+    }
+
+    /// The transition after a Step finished: the Cursor moves on, through any Blocks it leaves.
+    fn advance_past(
         &self,
         definition: &Definition,
         cursor: Cursor,
+        mut state: RunState,
+        entry: NewTimelineEntry,
+    ) -> Transition {
+        state.attempts = 0;
+        state.sleep = None;
+        let at = entry.finished_at;
+        self.at(cursor.after(definition), state, Some(entry), at)
+    }
+
+    /// The transition after a Step's Attempt failed: a retry when the error is `retryable` and
+    /// the Step's policy allows another Attempt, otherwise the Run fails at this Step.
+    fn fail_step(
+        &self,
+        started: Started<'_>,
+        mut state: RunState,
+        input: Option<Value>,
+        failure: Failure,
+    ) -> Transition {
+        let finished_at = self.clock.now();
+        let mut entry = started.entry(AttemptStatus::Failed, finished_at);
+        entry.input = input;
+        entry.error = Some(failure.to_value());
+        state.attempts = started.attempt;
+        let policy = started.step.retry.as_ref();
+        let max_attempts = policy.map_or(1, |policy| policy.max_attempts);
+        let (status, next_job_at) = if failure.is_retryable() && started.attempt < max_attempts {
+            let delay = policy.map_or(TimeDelta::zero(), |p| retry_delay(p, started.attempt));
+            (RunStatus::Running, Some(finished_at + delay))
+        } else {
+            (RunStatus::Failed, None)
+        };
+        Transition {
+            status,
+            checkpoint: checkpoint(Some(&started.cursor), &state),
+            entry: Some(entry),
+            next_job_at,
+            at: finished_at,
+        }
+    }
+
+    /// The transition that leaves the Run about to execute the Step at `cursor`, or succeeded
+    /// when no Step is left.
+    fn at(
+        &self,
+        cursor: Option<Cursor>,
         state: RunState,
         entry: Option<NewTimelineEntry>,
         at: DateTime<Utc>,
     ) -> Transition {
-        let finished = cursor.step(definition).is_none();
+        let finished = cursor.is_none();
         Transition {
             status: if finished {
                 RunStatus::Succeeded
             } else {
                 RunStatus::Running
             },
-            checkpoint: checkpoint((!finished).then_some(cursor), &state),
+            checkpoint: checkpoint(cursor.as_ref(), &state),
             entry,
             next_job_at: (!finished).then_some(at),
             at,
@@ -290,14 +572,14 @@ impl Interpreter {
     /// Action and calls it under the Step's timeout.
     async fn attempt(&self, run: &Run, step: &Step, attempt: u32, state: &RunState) -> Attempted {
         let (action, params) = match &step.kind {
-            StepKind::Action { action, params } if step.r#if.is_none() => (action, params),
+            StepKind::Action { action, params } => (action, params),
             _ => {
                 return Attempted {
                     input: None,
                     result: Err(Failure::raised(
                         FailureCode::UnsupportedStep,
                         ActionError::fatal(format!(
-                            "Step '{}' uses `if` or a Block, which this build cannot run yet",
+                            "Step '{}' is a Block this build cannot run yet",
                             step.id
                         )),
                     )),

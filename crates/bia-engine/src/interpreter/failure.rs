@@ -56,4 +56,8 @@ pub(crate) enum FailureCode {
     UnknownSecret,
     /// The Step uses something this build cannot run yet, such as a Block.
     UnsupportedStep,
+    /// An `if`, `when` or other condition did not evaluate to a boolean.
+    InvalidExpression,
+    /// The Run reached a `flow.fail` Step.
+    FlowFail,
 }

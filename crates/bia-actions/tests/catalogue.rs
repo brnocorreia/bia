@@ -52,6 +52,10 @@ fn builtin_actions_are_enabled() {
     assert_eq!(
         names,
         [
+            ("flow.fail".to_owned(), true),
+            ("flow.sleep".to_owned(), true),
+            ("flow.sleep_until".to_owned(), true),
+            ("flow.succeed".to_owned(), true),
             ("http.request".to_owned(), true),
             ("transform.expr".to_owned(), true)
         ]
