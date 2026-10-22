@@ -12,14 +12,12 @@ use crate::dsl::ActionName;
 /// What the engine, validation and the API query for Actions. The engine receives it by
 /// injection, so builtin Actions and Action Servers can sit behind the same interface.
 pub trait ActionRegistry: Send + Sync {
-    /// Finds an Action by its `category.operation` name.
     fn lookup(&self, name: &str) -> Lookup;
 
     /// Every Action known, disabled ones included, ordered by name.
     fn catalogue(&self) -> Vec<CatalogueEntry>;
 }
 
-/// The result of looking an Action up by name.
 #[derive(Debug, Clone)]
 pub enum Lookup {
     Enabled(Arc<dyn Action>),
@@ -29,7 +27,6 @@ pub enum Lookup {
     Unknown,
 }
 
-/// One Action as the catalogue lists it.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct CatalogueEntry {
     #[serde(flatten)]
@@ -37,9 +34,6 @@ pub struct CatalogueEntry {
     pub enabled: bool,
 }
 
-/// A registry over a fixed set of in-process Actions, such as the builtin ones.
-///
-/// Dangerous Actions are disabled until enabled by name.
 #[derive(Default)]
 pub struct InMemoryRegistry {
     actions: BTreeMap<ActionName, Arc<dyn Action>>,
@@ -51,7 +45,6 @@ impl InMemoryRegistry {
         Self::default()
     }
 
-    /// Adds an Action under its descriptor's name.
     pub fn register(&mut self, action: Arc<dyn Action>) -> Result<(), DuplicateAction> {
         let name = action.descriptor().name.clone();
         if self.actions.contains_key(&name) {
@@ -101,7 +94,6 @@ impl fmt::Debug for InMemoryRegistry {
     }
 }
 
-/// Two Actions registered under one name.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("an Action named `{name}` is already registered")]
 pub struct DuplicateAction {

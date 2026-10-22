@@ -52,13 +52,11 @@ impl FakeAction {
         }
     }
 
-    /// Succeeds with `output` on every call.
     pub fn returning(mut self, output: Output) -> Self {
         self.behaviour = Behaviour::Return(output);
         self
     }
 
-    /// Fails with `error` on every call.
     pub fn failing(mut self, error: ActionError) -> Self {
         self.behaviour = Behaviour::Fail(error);
         self
@@ -70,13 +68,11 @@ impl FakeAction {
         self
     }
 
-    /// Changes the descriptor, e.g. to mark the Action dangerous or side-effecting.
     pub fn with_descriptor(mut self, change: impl FnOnce(&mut ActionDescriptor)) -> Self {
         change(&mut self.descriptor);
         self
     }
 
-    /// Every call received so far, oldest first.
     pub fn calls(&self) -> Vec<ActionCall> {
         self.calls
             .lock()

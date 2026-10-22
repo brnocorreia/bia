@@ -1,6 +1,5 @@
 //! Workflows, Drafts, publishing and the Active Version (ADR-0009).
 
-// `allow-unwrap-in-tests` covers `#[test]` functions only, not the helpers they share.
 #![allow(clippy::unwrap_used)]
 
 use bia_store::StoreError;

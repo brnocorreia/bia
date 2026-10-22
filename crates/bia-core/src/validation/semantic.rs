@@ -42,14 +42,12 @@ pub(super) fn check(validator: &Validator<'_>, definition: &Definition) -> Vec<D
     checker.diagnostics
 }
 
-/// The two top-level Step lists.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Section {
     Steps,
     OnError,
 }
 
-/// Which nested Step list of a Block.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Arm {
     Then,
@@ -62,7 +60,6 @@ enum Arm {
 }
 
 impl Arm {
-    /// The JSON Pointer from the Block to the list.
     fn path(self) -> String {
         match self {
             Self::Then => "then".into(),
@@ -105,26 +102,21 @@ impl BlockKind {
     }
 }
 
-/// A Block a Step sits inside, and in which of its lists.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Frame {
-    /// The Block's position in document order.
     block: usize,
     kind: BlockKind,
     arm: Arm,
 }
 
-/// Where a Step sits in the Definition.
 #[derive(Debug)]
 struct Placed<'a> {
     id: &'a str,
     path: String,
     section: Section,
-    /// The Blocks around the Step, outermost first.
     frames: Vec<Frame>,
 }
 
-/// Every nested Step list of a Block, in document order.
 fn arms(kind: &StepKind) -> Vec<(Arm, &[Step])> {
     match kind {
         StepKind::Action { .. } => Vec::new(),
@@ -151,16 +143,12 @@ fn arms(kind: &StepKind) -> Vec<(Arm, &[Step])> {
 /// The variables in scope besides `input`, `steps`, `trigger` and `run`.
 #[derive(Debug, Clone, Copy, Default)]
 struct Ctx {
-    /// Inside a `flow.foreach` body: `item` and `index`.
     item: bool,
-    /// Inside a `flow.try` catch: `error`.
     error: bool,
 }
 
-/// The point an Expression is evaluated at.
 #[derive(Debug, Clone, Copy)]
 struct Vantage {
-    /// The Step the Expression belongs to, in document order.
     step: usize,
     /// The Expression runs after the Step's own body: a `flow.loop_until`'s `until`.
     after_body: bool,
@@ -169,11 +157,8 @@ struct Vantage {
 struct Checker<'v, 'a> {
     validator: &'v Validator<'v>,
     definition: &'a Definition,
-    /// Every Step in document order, `on_error` last.
     placed: Vec<Placed<'a>>,
-    /// The first Step with each id.
     first: BTreeMap<&'a str, usize>,
-    /// The next Step `walk` visits, in document order.
     next: usize,
     diagnostics: Vec<Diagnostic>,
 }
@@ -200,7 +185,6 @@ impl<'a> Checker<'_, 'a> {
         self.push(path, code, Severity::Error, message, None);
     }
 
-    /// Records where every Step sits, in the order `walk` visits them.
     fn place(&mut self, steps: &'a [Step], path: &str, section: Section, frames: &mut Vec<Frame>) {
         for (i, step) in steps.iter().enumerate() {
             let path = format!("{path}/{i}");
@@ -329,7 +313,6 @@ impl<'a> Checker<'_, 'a> {
         }
     }
 
-    /// Rules about where a Step sits: unique ids and the size limits.
     fn placement(&mut self, step: &Step, order: usize, path: &str) {
         let first = self.first[step.id.as_str()];
         if first != order {
@@ -435,7 +418,6 @@ impl<'a> Checker<'_, 'a> {
         }
     }
 
-    /// Checks every Template in a Params value.
     fn param(
         &mut self,
         value: &Value,
@@ -445,7 +427,6 @@ impl<'a> Checker<'_, 'a> {
         available: &BTreeSet<&'a str>,
     ) {
         match value {
-            // A string without `{{` is a literal.
             Value::String(source) if source.contains("{{") => {
                 match Template::parse_with(source, &self.validator.limits.expression) {
                     Ok(template) => {
@@ -468,7 +449,6 @@ impl<'a> Checker<'_, 'a> {
         }
     }
 
-    /// Checks a raw CEL field such as `if`, `when` or `until`.
     fn condition(
         &mut self,
         source: &dsl::Expression,
@@ -603,7 +583,6 @@ impl<'a> Checker<'_, 'a> {
             .zip(&here.frames)
             .take_while(|(a, b)| a == b)
             .count();
-        // Both inside one Block, in different lists.
         if let (Some(theirs), Some(ours)) = (there.frames.get(common), here.frames.get(common))
             && theirs.block == ours.block
         {
@@ -627,7 +606,6 @@ impl<'a> Checker<'_, 'a> {
         }) else {
             return later();
         };
-        // A loop's `until` runs after the iteration, nested Blocks included.
         let in_own_body = at.after_body && there.frames.iter().any(|f| f.block == at.step);
         if frame.block >= at.step && !in_own_body {
             return later();

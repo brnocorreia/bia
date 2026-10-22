@@ -7,8 +7,6 @@ use super::{NewTimelineEntry, TimelineEntry};
 use crate::StoreError;
 use crate::run::RunId;
 
-/// Timelines: the ordered record of a Run, one entry per Attempt plus entries about the Run as
-/// a whole.
 pub trait TimelineRepository {
     /// Appends an entry to the end of a Run's Timeline and returns its `seq`.
     fn append(
@@ -18,7 +16,6 @@ pub trait TimelineRepository {
         entry: &NewTimelineEntry,
     ) -> impl Future<Output = Result<i32, StoreError>> + Send;
 
-    /// Lists a Run's Timeline in order.
     fn list(
         &self,
         conn: &mut PgConnection,
@@ -26,7 +23,6 @@ pub trait TimelineRepository {
     ) -> impl Future<Output = Result<Vec<TimelineEntry>, StoreError>> + Send;
 }
 
-/// [`TimelineRepository`] over Postgres.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct PgTimelineRepository;
 

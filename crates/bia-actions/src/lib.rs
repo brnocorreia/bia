@@ -10,16 +10,13 @@ pub mod http;
 mod params;
 pub mod transform;
 
-/// Something that stops the builtin Actions from being set up.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum BuiltinError {
-    /// The HTTP client could not be built, e.g. because the system trust store is unreadable.
     #[error("cannot build the HTTP client: {0}")]
     HttpClient(#[source] reqwest::Error),
 }
 
-/// A registry holding every builtin Action, for `bia-cli` to inject into the engine.
 pub fn builtin_registry() -> Result<InMemoryRegistry, BuiltinError> {
     let mut registry = InMemoryRegistry::new();
     let actions: [Arc<dyn Action>; 2] = [

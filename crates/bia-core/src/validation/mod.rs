@@ -27,17 +27,13 @@ mod suggest;
 pub use code::Code;
 pub use instance::{InvalidSchema, SchemaViolation, schema_violations};
 
-/// One structured validation finding.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Diagnostic {
-    /// JSON Pointer (RFC 6901) to the offending value; empty for the document root.
     pub path: String,
-    /// Stable identifier agents match on.
     pub code: Code,
     pub severity: Severity,
     /// Human-readable explanation. Its wording may change.
     pub message: String,
-    /// A likely fix, such as the closest known name to a typo.
     #[serde(default)]
     pub suggestion: Option<String>,
 }
@@ -80,16 +76,13 @@ impl Target {
 pub trait ResourceLookup {
     fn queue_exists(&self, name: &str) -> bool;
 
-    /// Every Queue name, used to suggest a fix for an unknown one.
     fn queue_names(&self) -> Vec<String>;
 
     fn workflow_exists(&self, id: &str) -> bool;
 
-    /// Every Workflow id, used to suggest a fix for an unknown one.
     fn workflow_ids(&self) -> Vec<String>;
 }
 
-/// A [`ResourceLookup`] over fixed sets of names.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct KnownResources {
     pub queues: BTreeSet<String>,
@@ -133,13 +126,9 @@ impl ResourceLookup for KnownResources {
 /// Configured bounds a Definition must stay within, so a Workflow can't run away (ADR-0012).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Limits {
-    /// Most Steps in one Definition, nested and `on_error` Steps included.
     pub max_steps: usize,
-    /// Most Blocks a Step may sit inside.
     pub max_nesting_depth: usize,
-    /// Largest `max_iterations` a `flow.foreach` or `flow.loop_until` may declare.
     pub max_iterations: u32,
-    /// Bounds on every Expression and Template segment.
     pub expression: crate::expression::Limits,
 }
 
@@ -154,7 +143,6 @@ impl Default for Limits {
     }
 }
 
-/// Validates Definitions against an Action Registry and the resources the caller knows about.
 pub struct Validator<'a> {
     target: Target,
     actions: &'a dyn ActionRegistry,
@@ -163,7 +151,6 @@ pub struct Validator<'a> {
 }
 
 impl<'a> Validator<'a> {
-    /// A validator with the default [`Limits`].
     pub fn new(
         target: Target,
         actions: &'a dyn ActionRegistry,
@@ -182,7 +169,6 @@ impl<'a> Validator<'a> {
         self
     }
 
-    /// Runs every layer on a JSON document.
     pub fn validate_value(&self, value: Value) -> Report {
         match Definition::from_value(value) {
             Ok(definition) => {
@@ -215,10 +201,8 @@ impl std::fmt::Debug for Validator<'_> {
     }
 }
 
-/// The outcome of validating a JSON document.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Report {
-    /// The typed Definition, when the document passed the schema layer.
     pub definition: Option<Definition>,
     pub diagnostics: Vec<Diagnostic>,
 }
@@ -230,7 +214,6 @@ impl Report {
     }
 }
 
-/// `key` escaped as one JSON Pointer token.
 fn token(key: &str) -> String {
     key.replace('~', "~0").replace('/', "~1")
 }

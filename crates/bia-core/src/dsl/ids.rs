@@ -6,7 +6,6 @@ use std::fmt;
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Deserializer, Serialize};
 
-/// Longest identifier or name accepted anywhere in the DSL.
 const MAX_LEN: usize = 64;
 
 /// `[a-z][a-z0-9_]*`
@@ -40,7 +39,6 @@ macro_rules! name_type {
         pub struct $name(String);
 
         impl $name {
-            /// Checks `value` against the DSL's rules for this name.
             pub fn new(value: impl Into<String>) -> Result<Self, InvalidName> {
                 let value = value.into();
                 if value.len() <= MAX_LEN && $check(value.as_str()) {
@@ -50,7 +48,6 @@ macro_rules! name_type {
                 }
             }
 
-            /// The name as written in the Definition.
             pub fn as_str(&self) -> &str {
                 &self.0
             }
@@ -128,23 +125,19 @@ name_type! {
 }
 
 impl ActionName {
-    /// The part before the dot, e.g. `http` in `http.request`.
     pub fn category(&self) -> &str {
         self.parts().0
     }
 
-    /// The part after the dot, e.g. `request` in `http.request`.
     pub fn operation(&self) -> &str {
         self.parts().1
     }
 
     fn parts(&self) -> (&str, &str) {
-        // `new` guarantees exactly one dot.
         self.0.split_once('.').unwrap_or((&self.0, ""))
     }
 }
 
-/// A string that breaks the rules for an identifier or name.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("invalid name `{value}`: expected {expected}, at most 64 characters")]
 pub struct InvalidName {

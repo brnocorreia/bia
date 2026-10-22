@@ -135,7 +135,6 @@ async fn sends_method_headers_query_json_body_and_bearer_auth() {
 async fn sends_a_text_body_with_basic_auth() {
     let server = MockServer::start().await;
     Mock::given(method("PUT"))
-        // "user:pass"
         .and(header("authorization", "Basic dXNlcjpwYXNz"))
         .and(header("content-type", "text/csv"))
         .and(body_string("a,b\n1,2\n"))
@@ -248,7 +247,6 @@ async fn a_timeout_is_retryable() {
 
 #[tokio::test]
 async fn cancellation_aborts_an_in_flight_request() {
-    // A server that accepts the connection and never answers.
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let (accepted, connected) = tokio::sync::oneshot::channel();
@@ -256,7 +254,6 @@ async fn cancellation_aborts_an_in_flight_request() {
         let (socket, _) = listener.accept().await.unwrap();
         accepted.send(()).unwrap();
         let mut buffer = [0; 1024];
-        // Returns once the client closes the connection.
         let mut socket = socket;
         while tokio::io::AsyncReadExt::read(&mut socket, &mut buffer)
             .await

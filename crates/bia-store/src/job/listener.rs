@@ -20,14 +20,12 @@ pub struct JobListener {
 }
 
 impl JobListener {
-    /// Opens a dedicated connection from `pool` and listens on [`NOTIFY_CHANNEL`].
     pub async fn connect(pool: &PgPool) -> Result<Self, StoreError> {
         let mut listener = PgListener::connect_with(pool).await?;
         listener.listen(NOTIFY_CHANNEL).await?;
         Ok(Self { listener })
     }
 
-    /// Waits for the next committed enqueue and returns the kind of Job it added.
     pub async fn recv(&mut self) -> Result<JobKind, StoreError> {
         let notification = self.listener.recv().await?;
         job_kind(notification.payload())

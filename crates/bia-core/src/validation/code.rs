@@ -15,10 +15,8 @@ macro_rules! codes {
         }
 
         impl Code {
-            /// Every code, in catalogue order.
             pub const ALL: &[Self] = &[$( Self::$variant, )+];
 
-            /// The code as it appears in a Diagnostic.
             pub fn as_str(self) -> &'static str {
                 match self {
                     $( Self::$variant => $code, )+
@@ -29,7 +27,6 @@ macro_rules! codes {
 }
 
 codes! {
-    // Schema layer.
     /// The text is not well-formed JSON or YAML.
     InvalidSyntax => "invalid_syntax",
     /// The Definition has no `schema_version`.
@@ -47,7 +44,6 @@ codes! {
     /// A value has the wrong type or format, such as a malformed id or Duration.
     InvalidValue => "invalid_value",
 
-    // Semantic layer.
     /// Two Steps share an id.
     DuplicateStepId => "duplicate_step_id",
     /// Two Triggers share an id.

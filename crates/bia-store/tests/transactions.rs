@@ -1,6 +1,5 @@
 //! A transition's Checkpoint, Timeline entry and Jobs commit or roll back together (ADR-0010).
 
-// `allow-unwrap-in-tests` covers `#[test]` functions only, not the helpers they share.
 #![allow(clippy::unwrap_used)]
 
 use bia_core::dsl::{ActionName, StepId};
@@ -141,7 +140,6 @@ async fn a_rolled_back_transition_leaves_nothing(pool: PgPool) {
     assert_eq!(pending.len(), 1);
     assert_eq!(pending[0].id, first_job);
 
-    // The rolled-back entry did not use up a place in the Timeline.
     assert_eq!(
         PgTimelineRepository
             .append(&mut conn, run.id, &attempt("fetch", 1))

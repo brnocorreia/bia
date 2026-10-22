@@ -33,6 +33,13 @@ Issues live in Linear (project **bia**). One issue is one PR.
 - **Secrets**: resolved values stay out of logs, Outputs, Timelines, errors and test snapshots.
 - **Diagnostic codes** are a public contract for agents: add new codes freely, and rename or remove one only with an ADR.
 - **Dependencies**: use the mainstream, well-maintained crate or package for the job, and record why in the PR description when adding one.
+- **Comments** carry what the code cannot: why it is this way, the invariant or contract a caller relies on, the gotcha. Write the code so it needs no narration, and let names and types say what and how.
+  - Doc a public item when it adds something its name and signature do not: units, ordering, errors, panics, what a caller may rely on. Leave it undocumented when the name already says it (`Reads one Run` on `get`).
+  - Put a concept's overview on the module (`//!`) once, and keep it off the trait, struct and impl that repeat it. Point at the ADR or doc instead of retelling it.
+  - `///` on DSL, Trigger and Action types is the JSON Schema description that agents read, so write it for authors of Definitions and keep it.
+  - An inline `//` explains a non-obvious reason: a workaround, an ordering that matters, a Secret that must not leak. Leave out what the next line plainly does, history that git holds, and ticket numbers.
+  - Name a test after the behaviour it checks; comment only the setup that is not self-evident.
+  - When a change makes a comment untrue, fix or delete it in the same PR.
 - Everything in the repository is written in English.
 
 ## Testing

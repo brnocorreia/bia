@@ -65,7 +65,6 @@ static ENV: LazyLock<Arc<Env>> = LazyLock::new(|| {
     Arc::new(env)
 });
 
-/// A compiled CEL Expression.
 #[derive(Debug, Clone)]
 pub struct Expression {
     source: String,
@@ -75,12 +74,10 @@ pub struct Expression {
 }
 
 impl Expression {
-    /// Compiles `source` with the default [`Limits`].
     pub fn compile(source: &str) -> Result<Self, CompileError> {
         Self::compile_with(source, &Limits::default())
     }
 
-    /// Compiles `source`, rejecting it when it exceeds `limits`.
     pub fn compile_with(source: &str, limits: &Limits) -> Result<Self, CompileError> {
         if source.len() > limits.max_source_len {
             return Err(CompileError::new(
@@ -134,7 +131,6 @@ impl Expression {
         })
     }
 
-    /// The source the Expression was compiled from.
     pub fn source(&self) -> &str {
         &self.source
     }
@@ -144,7 +140,6 @@ impl Expression {
         &self.references
     }
 
-    /// Evaluates the Expression to a JSON value.
     pub fn evaluate(&self, scope: &Scope) -> Result<serde_json::Value, EvalError> {
         let value = self.evaluate_cel(scope)?;
         convert::to_json(&value).map_err(|reason| EvalError::NotJson {
@@ -180,8 +175,6 @@ impl Expression {
     }
 }
 
-/// The number of levels in the syntax tree under `expr`, counted without
-/// recursing, since the tree is not yet known to be shallow.
 fn depth(expr: &IdedExpr) -> usize {
     let mut deepest = 0;
     let mut pending = vec![(expr, 1)];

@@ -10,9 +10,7 @@ use super::{Checkpoint, NewRun, Run, RunFilter, RunId, RunStatus};
 use crate::StoreError;
 use crate::version::why_not_published;
 
-/// Runs: executions pinned to the Version they started on (ADR-0009), and their Checkpoints.
 pub trait RunRepository {
-    /// Creates a `pending` Run at `at`, pinned to a Published Version.
     fn create(
         &self,
         conn: &mut PgConnection,
@@ -20,7 +18,6 @@ pub trait RunRepository {
         at: DateTime<Utc>,
     ) -> impl Future<Output = Result<Run, StoreError>> + Send;
 
-    /// Reads one Run with its Checkpoint.
     fn get(
         &self,
         conn: &mut PgConnection,
@@ -38,7 +35,6 @@ pub trait RunRepository {
         at: DateTime<Utc>,
     ) -> impl Future<Output = Result<(), StoreError>> + Send;
 
-    /// Lists Runs newest first.
     fn list(
         &self,
         conn: &mut PgConnection,
@@ -46,7 +42,6 @@ pub trait RunRepository {
     ) -> impl Future<Output = Result<Vec<Run>, StoreError>> + Send;
 }
 
-/// [`RunRepository`] over Postgres.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct PgRunRepository;
 

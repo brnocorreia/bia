@@ -9,38 +9,30 @@ use serde_path_to_error::Segment;
 
 use super::{Definition, Document, QueueResource, SchemaVersion};
 
-/// A document that could not be parsed, with the place it went wrong.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("{}: {kind}", if path.is_empty() { "/" } else { path })]
 pub struct ParseError {
-    /// JSON Pointer (RFC 6901) to the offending value; empty for the document root.
     pub path: String,
     pub kind: ParseErrorKind,
 }
 
-/// Why a document could not be parsed.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum ParseErrorKind {
-    /// The text is not well-formed JSON or YAML.
     #[error("syntax error: {message}")]
     Syntax { message: String },
-    /// A Definition without `schema_version`.
     #[error(
         "missing `schema_version`; this build supports {}",
         SchemaVersion::CURRENT
     )]
     MissingSchemaVersion,
-    /// A Definition whose `schema_version` this build does not support.
     #[error(
         "unsupported `schema_version` {found}; this build supports {}",
         SchemaVersion::CURRENT
     )]
     UnsupportedSchemaVersion { found: String },
-    /// A document whose `kind` names no known resource.
     #[error("unknown `kind` {found}; expected `queue`, or no `kind` for a Workflow Definition")]
     UnknownKind { found: String },
-    /// Well-formed text that does not have the DSL's shape.
     #[error("{message}")]
     Shape { message: String },
 }
@@ -82,7 +74,6 @@ fn json_to_value(json: &str) -> Result<Value, ParseError> {
     })
 }
 
-/// Deserialises `value` into `T`, reporting where it failed as a JSON Pointer.
 fn typed<T: DeserializeOwned>(value: Value) -> Result<T, ParseError> {
     serde_path_to_error::deserialize(value).map_err(|err| {
         let path = pointer(err.path());
@@ -111,7 +102,6 @@ fn pointer(path: &serde_path_to_error::Path) -> String {
 }
 
 fn check_schema_version(value: &Value) -> Result<(), ParseError> {
-    // A non-object root is reported by the typed pass, with the expected shape.
     let Value::Object(map) = value else {
         return Ok(());
     };
@@ -131,35 +121,29 @@ fn check_schema_version(value: &Value) -> Result<(), ParseError> {
 }
 
 impl Definition {
-    /// Parses a Definition from its JSON value.
     pub fn from_value(value: Value) -> Result<Self, ParseError> {
         check_schema_version(&value)?;
         typed(value)
     }
 
-    /// Parses a Definition from JSON text.
     pub fn from_json(json: &str) -> Result<Self, ParseError> {
         Self::from_value(json_to_value(json)?)
     }
 
-    /// Parses a Definition from YAML text.
     pub fn from_yaml(yaml: &str) -> Result<Self, ParseError> {
         Self::from_value(yaml_to_json(yaml)?)
     }
 }
 
 impl QueueResource {
-    /// Parses a queue resource from its JSON value.
     pub fn from_value(value: Value) -> Result<Self, ParseError> {
         typed(value)
     }
 
-    /// Parses a queue resource from JSON text.
     pub fn from_json(json: &str) -> Result<Self, ParseError> {
         Self::from_value(json_to_value(json)?)
     }
 
-    /// Parses a queue resource from YAML text.
     pub fn from_yaml(yaml: &str) -> Result<Self, ParseError> {
         Self::from_value(yaml_to_json(yaml)?)
     }
@@ -183,12 +167,10 @@ impl Document {
         }
     }
 
-    /// Parses a document from JSON text.
     pub fn from_json(json: &str) -> Result<Self, ParseError> {
         Self::from_value(json_to_value(json)?)
     }
 
-    /// Parses a document from YAML text.
     pub fn from_yaml(yaml: &str) -> Result<Self, ParseError> {
         Self::from_value(yaml_to_json(yaml)?)
     }

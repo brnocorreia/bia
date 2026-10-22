@@ -11,22 +11,18 @@ use crate::dsl::{ActionName, Params};
 #[non_exhaustive]
 pub struct ActionDescriptor {
     pub name: ActionName,
-    /// Shown in the catalogue, the UI and to agents.
     pub description: String,
     pub effect: Effect,
     /// Disabled unless enabled in server config, and only publishable with an `admin` Token
     /// (ADR-0014).
     pub dangerous: bool,
-    /// JSON Schema the resolved Params must satisfy.
     pub param_schema: Schema,
-    /// JSON Schema the Output satisfies.
     pub output_schema: Schema,
     /// Shown to authors, and the source of Mocks in a Dry Run.
     pub examples: Vec<ActionExample>,
 }
 
 impl ActionDescriptor {
-    /// A descriptor that accepts any Params and promises nothing about its Output.
     pub fn new(name: ActionName, description: impl Into<String>, effect: Effect) -> Self {
         Self {
             name,
@@ -59,7 +55,6 @@ impl ActionDescriptor {
         self
     }
 
-    /// The part of the name before the dot, e.g. `http`.
     pub fn category(&self) -> &str {
         self.name.category()
     }
@@ -102,7 +97,6 @@ pub enum Effect {
     SideEffecting,
 }
 
-/// A sample call: Params an author could write and the Output they produce.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ActionExample {
     pub description: String,

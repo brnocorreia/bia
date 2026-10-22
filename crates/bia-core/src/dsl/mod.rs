@@ -77,10 +77,8 @@ pub struct Limits {
 pub struct SchemaVersion(u32);
 
 impl SchemaVersion {
-    /// The only version this build reads and writes.
     pub const CURRENT: Self = Self(1);
 
-    /// Returns the version if this build supports it.
     pub fn new(version: u64) -> Option<Self> {
         (version == u64::from(Self::CURRENT.0)).then_some(Self::CURRENT)
     }
@@ -137,7 +135,6 @@ impl Expression {
         Self(source.into())
     }
 
-    /// The source as written.
     pub fn as_str(&self) -> &str {
         &self.0
     }

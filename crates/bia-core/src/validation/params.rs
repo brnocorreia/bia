@@ -11,21 +11,18 @@ use crate::dsl::Params;
 /// The schema keyword that marks a param as naming a resource (ADR-0029).
 pub(super) const RESOURCE_KEYWORD: &str = "x-bia-resource";
 
-/// A kind of resource a param can name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Resource {
     Queue,
     Workflow,
 }
 
-/// One way Params break their Action's param schema, at a pointer relative to `params`.
 #[derive(Debug)]
 pub(super) struct Mismatch {
     pub(super) location: String,
     pub(super) message: String,
 }
 
-/// A literal resource name in Params, at a pointer relative to `params`.
 #[derive(Debug)]
 pub(super) struct ResourceRef {
     pub(super) resource: Resource,
@@ -109,7 +106,6 @@ fn collect(schema: &Value, value: &Value, location: String, found: &mut Vec<Reso
     }
 }
 
-/// Whether the value at `location`, or any value containing it, is a Template string.
 fn templated_along(instance: &Value, location: &str) -> bool {
     let mut current = instance;
     let tokens = location.split('/').skip(1);

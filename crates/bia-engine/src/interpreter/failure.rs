@@ -30,7 +30,6 @@ impl Failure {
         self.error.is_retryable()
     }
 
-    /// The `error` value of the Timeline entry.
     pub(crate) fn to_value(&self) -> Value {
         serde_json::to_value(self).unwrap_or(Value::Null)
     }

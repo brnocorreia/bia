@@ -18,14 +18,10 @@ use serde_json::{Value, json};
 use crate::BuiltinError;
 use crate::params::{ParamReader, object, schema_for};
 
-/// How long a request may take when its Params set no `timeout`.
 const DEFAULT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
-/// The most redirects followed before the request fails.
 const MAX_REDIRECTS: usize = 10;
 
-/// The largest response body read. A bigger one fails the Attempt, since it would exceed any
-/// sensible Output size anyway.
 const MAX_RESPONSE_BYTES: usize = 10 * 1024 * 1024;
 
 const IDEMPOTENCY_KEY: &str = "idempotency-key";
@@ -274,7 +270,6 @@ impl Action for Request {
         cancel: CancellationToken,
     ) -> BoxFuture<'_, Result<Output, ActionError>> {
         Box::pin(async move {
-            // Dropping the request future closes its connection, aborting the request.
             tokio::select! {
                 result = self.send(call) => result,
                 () = cancel.cancelled() => Err(ActionError::retryable("the request was cancelled")),
@@ -337,7 +332,6 @@ async fn read(mut response: reqwest::Response) -> Result<Response, ActionError> 
     })
 }
 
-/// `application/json`, or any `+json` type such as `application/problem+json`.
 fn is_json_media_type(content_type: &str) -> bool {
     let essence = content_type
         .split(';')
@@ -350,7 +344,6 @@ fn is_json_media_type(content_type: &str) -> bool {
 
 fn status_error(status: u16) -> ActionError {
     let message = format!("the server responded with status {status}");
-    // 408 and 429 are the server asking to be tried again later.
     if (500..600).contains(&status) || matches!(status, 408 | 429) {
         ActionError::retryable(message)
     } else {

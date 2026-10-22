@@ -40,7 +40,6 @@ pub(crate) fn version_state(state: &str) -> Result<VersionState, StoreError> {
     }
 }
 
-/// Reads back a stored Version number.
 pub(crate) fn version_number(number: i32) -> Result<VersionNumber, StoreError> {
     VersionNumber::new(number).ok_or_else(|| StoreError::invalid("version number", number))
 }

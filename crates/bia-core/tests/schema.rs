@@ -1,6 +1,5 @@
 //! The generated JSON Schema: its snapshot, and agreement with the parser and `docs/dsl.md`.
 
-// `allow-unwrap-in-tests` covers `#[test]` functions only, not the helpers they share.
 #![allow(clippy::unwrap_used)]
 
 use bia_core::dsl::{
@@ -61,7 +60,6 @@ fn docs_and_fixtures_satisfy_the_schema() {
             .collect();
         assert!(errors.is_empty(), "{name} fails the schema: {errors:#?}");
 
-        // Canonical JSON satisfies the schema too.
         let canonical = serde_json::to_value(Definition::from_value(value).unwrap()).unwrap();
         assert!(validator.is_valid(&canonical), "canonical {name}");
     }

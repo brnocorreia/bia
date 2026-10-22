@@ -20,7 +20,6 @@ pub enum EngineError {
         workflow: WorkflowId,
         version: i32,
     },
-    /// The Checkpoint holds something this build cannot resume from.
     #[error("checkpoint of run {run} is invalid: {message}")]
     InvalidCheckpoint { run: RunId, message: String },
     #[error(transparent)]

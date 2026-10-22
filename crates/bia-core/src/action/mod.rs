@@ -26,10 +26,8 @@ pub use error::{ActionError, ErrorClass};
 pub use registry::{ActionRegistry, CatalogueEntry, DuplicateAction, InMemoryRegistry, Lookup};
 pub use tokio_util::sync::CancellationToken;
 
-/// The value a Step produces once its Action succeeds.
 pub type Output = Value;
 
-/// The future an Action's `execute` returns.
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// The kind of work a Step performs.
@@ -38,10 +36,8 @@ pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 /// went. It watches `cancel` and returns promptly once it fires; the interpreter knows why it
 /// cancelled, so the error returned then is not what decides the Step's outcome.
 pub trait Action: Send + Sync {
-    /// What the Action is called, takes and returns. It does not change while bia runs.
     fn descriptor(&self) -> &ActionDescriptor;
 
-    /// Runs one Attempt.
     fn execute(
         &self,
         call: ActionCall,
@@ -57,14 +53,11 @@ impl fmt::Debug for dyn Action {
     }
 }
 
-/// Everything one Attempt of an Action receives besides the cancellation token.
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct ActionCall {
-    /// The Step's Params with Templates and Secrets resolved.
     pub params: Params,
     /// Forwarded to external systems that deduplicate requests.
     pub idempotency_key: IdempotencyKey,
-    /// Where the Attempt belongs, for logging correlation.
     pub context: RunContext,
 }
 
@@ -100,14 +93,11 @@ impl fmt::Display for IdempotencyKey {
     }
 }
 
-/// The Run an Attempt belongs to.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RunContext {
     pub run_id: String,
     pub workflow_id: WorkflowId,
-    /// The Version the Run is pinned to.
     pub version: u32,
     pub step_id: StepId,
-    /// Starts at 1.
     pub attempt: u32,
 }

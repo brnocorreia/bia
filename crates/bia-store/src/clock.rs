@@ -4,7 +4,6 @@ use bia_core::action::BoxFuture;
 use bia_core::clock::Clock;
 use chrono::{DateTime, Utc};
 
-/// The Clock production uses: the host's wall-clock time.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SystemClock;
 

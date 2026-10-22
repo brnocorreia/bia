@@ -7,12 +7,10 @@ use serde_json::{Map, Value};
 
 use super::{Definition, QueueResource};
 
-/// The JSON Schema every Definition is validated against, served by `GET /schema`.
 pub fn definition_schema() -> Value {
     schema_for::<Definition>()
 }
 
-/// The JSON Schema of a `kind: queue` resource file.
 pub fn queue_resource_schema() -> Value {
     schema_for::<QueueResource>()
 }

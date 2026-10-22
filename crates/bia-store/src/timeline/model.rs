@@ -9,7 +9,6 @@ use crate::run::RunId;
 pub enum AttemptStatus {
     Succeeded,
     Failed,
-    /// The Step's `if` was false, so its Action never ran.
     Skipped,
 }
 
@@ -29,7 +28,6 @@ pub struct StepAttempt {
     pub step_id: StepId,
     /// Which iteration of the enclosing loops, as in the Idempotency Key; empty outside loops.
     pub iteration_path: String,
-    /// 1 for the first Attempt, then 2, 3… on retries.
     pub attempt: i32,
     pub action: ActionName,
 }
@@ -50,11 +48,9 @@ pub struct NewTimelineEntry {
     pub finished_at: DateTime<Utc>,
 }
 
-/// One recorded entry.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TimelineEntry {
     pub run_id: RunId,
-    /// Position in the Run's Timeline: 1, 2, 3…
     pub seq: i32,
     pub step: Option<StepAttempt>,
     pub status: AttemptStatus,
@@ -66,7 +62,6 @@ pub struct TimelineEntry {
 }
 
 impl TimelineEntry {
-    /// How long the Attempt took.
     pub fn duration(&self) -> TimeDelta {
         self.finished_at - self.started_at
     }

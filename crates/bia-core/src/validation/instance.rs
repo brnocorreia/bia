@@ -4,21 +4,17 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-/// One way a value breaks a JSON Schema.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SchemaViolation {
-    /// JSON Pointer to the offending part of the value; empty for the value itself.
     pub path: String,
     /// What is wrong. It never echoes the value, which may be sensitive.
     pub message: String,
 }
 
-/// A schema that is not valid JSON Schema, so nothing can be checked against it.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("the JSON Schema is invalid: {0}")]
 pub struct InvalidSchema(pub String);
 
-/// Every way `value` breaks `schema`, empty when it conforms.
 pub fn schema_violations(
     schema: &Value,
     value: &Value,

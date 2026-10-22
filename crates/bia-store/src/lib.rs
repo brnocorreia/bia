@@ -29,10 +29,8 @@ pub mod workflow;
 pub use clock::SystemClock;
 pub use error::StoreError;
 
-/// The schema migrations, append-only.
 pub static MIGRATOR: Migrator = sqlx::migrate!();
 
-/// Applies every pending migration.
 pub async fn migrate(pool: &PgPool) -> Result<(), StoreError> {
     MIGRATOR.run(pool).await?;
     Ok(())
