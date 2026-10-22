@@ -1,0 +1,3 @@
+# The Clock also supplies timers
+
+Attempt timeouts, and later Lease heartbeats, wait in process rather than through a delayed Job, and they must follow the same time as everything else for tests to drive them (ADR-0022). The `Clock` trait in `bia-core` therefore has `sleep_until(deadline)` next to `now()`, returning a boxed future like an Action's `execute` (ADR-0027). The system Clock sleeps on tokio's timer; the manual test Clock completes a sleep once a test moves time to or past its deadline, built on tokio's `watch` channel, which only needs tokio's `sync` feature and keeps `bia-core` free of IO. Tests can then time out an Action by advancing the Clock, with no real waiting, and production keeps one source of time.

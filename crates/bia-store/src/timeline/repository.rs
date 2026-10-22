@@ -7,9 +7,10 @@ use super::{NewTimelineEntry, TimelineEntry};
 use crate::StoreError;
 use crate::run::RunId;
 
-/// Timelines: the ordered record of a Run, one entry per Attempt.
+/// Timelines: the ordered record of a Run, one entry per Attempt plus entries about the Run as
+/// a whole.
 pub trait TimelineRepository {
-    /// Appends an Attempt to the end of a Run's Timeline and returns its `seq`.
+    /// Appends an entry to the end of a Run's Timeline and returns its `seq`.
     fn append(
         &self,
         conn: &mut PgConnection,
@@ -36,6 +37,7 @@ impl TimelineRepository for PgTimelineRepository {
         run: RunId,
         entry: &NewTimelineEntry,
     ) -> Result<i32, StoreError> {
+        let step = entry.step.as_ref();
         let mut tx = conn.begin().await?;
 
         let seq = sqlx::query_file_scalar!("src/timeline/queries/next_seq.sql", run.as_uuid())
@@ -47,10 +49,10 @@ impl TimelineRepository for PgTimelineRepository {
             "src/timeline/queries/insert.sql",
             run.as_uuid(),
             seq,
-            entry.step_id.as_str(),
-            entry.iteration_path,
-            entry.attempt,
-            entry.action.as_str(),
+            step.map(|step| step.step_id.as_str()),
+            step.map_or("", |step| step.iteration_path.as_str()),
+            step.map(|step| step.attempt),
+            step.map(|step| step.action.as_str()),
             entry.status.as_str(),
             entry.input,
             entry.output,

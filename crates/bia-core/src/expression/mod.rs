@@ -8,6 +8,7 @@
 mod budget;
 mod convert;
 mod error;
+mod params;
 mod references;
 mod scope;
 mod template;
@@ -19,6 +20,7 @@ use cel::parser::PrattParser;
 use cel::{Context, Env};
 
 pub use error::{CompileError, CompileErrorKind, EvalError};
+pub use params::{ParamsError, ResolvedParams, resolve_params};
 pub use references::References;
 pub use scope::Scope;
 pub use template::Template;
