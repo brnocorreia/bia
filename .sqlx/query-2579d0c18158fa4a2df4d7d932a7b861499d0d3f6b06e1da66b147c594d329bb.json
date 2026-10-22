@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "-- Runs newest first. Every filter is optional.\n-- $1: workflow id, $2: status, $3: list only Runs after this run id, $4: limit\nSELECT id, workflow_id, version, status, input, trigger,\n       cursor AS \"cursor: Json<Vec<Value>>\", state, created_at, updated_at, finished_at\nFROM runs\nWHERE ($1::text IS NULL OR workflow_id = $1)\n  AND ($2::text IS NULL OR status = $2)\n  AND ($3::uuid IS NULL OR (created_at, id) < (SELECT created_at, id FROM runs WHERE id = $3))\nORDER BY created_at DESC, id DESC\nLIMIT $4\n",
+  "query": "-- Runs newest first. Every filter is optional.\n-- $1: workflow id, $2: status, $3: list only Runs after this run id, $4: limit\nSELECT id, workflow_id, version, status, input, trigger,\n       cursor AS \"cursor: Json<Vec<Value>>\", state, created_at, updated_at, finished_at,\n       cancel_requested_at\nFROM runs\nWHERE ($1::text IS NULL OR workflow_id = $1)\n  AND ($2::text IS NULL OR status = $2)\n  AND ($3::uuid IS NULL OR (created_at, id) < (SELECT created_at, id FROM runs WHERE id = $3))\nORDER BY created_at DESC, id DESC\nLIMIT $4\n",
   "describe": {
     "columns": [
       {
@@ -123,6 +123,17 @@
             "name": "finished_at"
           }
         }
+      },
+      {
+        "ordinal": 11,
+        "name": "cancel_requested_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "cancel_requested_at"
+          }
+        }
       }
     ],
     "parameters": {
@@ -144,8 +155,9 @@
       false,
       false,
       false,
+      true,
       true
     ]
   },
-  "hash": "6485b9025cbdaceacfe472c906af72504c087ea36ee2bcfa5d0d4cb439642e8e"
+  "hash": "2579d0c18158fa4a2df4d7d932a7b861499d0d3f6b06e1da66b147c594d329bb"
 }

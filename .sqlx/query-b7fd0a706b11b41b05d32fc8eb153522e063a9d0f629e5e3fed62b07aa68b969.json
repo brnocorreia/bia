@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Flags an unfinished Run for cancellation; a Run flagged before keeps its first request time.\n-- $1: run id, $2: request time\nUPDATE runs\nSET cancel_requested_at = COALESCE(cancel_requested_at, $2)\nWHERE id = $1 AND finished_at IS NULL\nRETURNING id\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b7fd0a706b11b41b05d32fc8eb153522e063a9d0f629e5e3fed62b07aa68b969"
+}

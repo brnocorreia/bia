@@ -8,4 +8,5 @@ SELECT v.workflow_id, v.number, 'pending', $3, $4, $5, $6, $7, $7
 FROM versions v
 WHERE v.workflow_id = $1 AND v.number = $2 AND v.state = 'published'
 RETURNING id, workflow_id, version, status, input, trigger,
-          cursor AS "cursor: Json<Vec<Value>>", state, created_at, updated_at, finished_at
+          cursor AS "cursor: Json<Vec<Value>>", state, created_at, updated_at, finished_at,
+          cancel_requested_at

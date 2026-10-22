@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Makes a Run's waiting Jobs claimable from $2, e.g. a sleeping Run's wake-up once it is\n-- cancelled. Jobs under a Lease and Jobs that gave up are left alone.\n-- $1: run id, $2: when the Jobs become claimable\nUPDATE jobs\nSET run_at = $2\nWHERE run_id = $1 AND failed_at IS NULL AND locked_until IS NULL AND run_at > $2\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "88dd57fdefd0d8c36f238eb8ad70a254ecdf0aa2fd90dd8aefae1a8c74dbd741"
+}

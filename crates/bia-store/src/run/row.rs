@@ -21,6 +21,7 @@ pub(crate) struct RunRow {
     pub(crate) created_at: DateTime<Utc>,
     pub(crate) updated_at: DateTime<Utc>,
     pub(crate) finished_at: Option<DateTime<Utc>>,
+    pub(crate) cancel_requested_at: Option<DateTime<Utc>>,
 }
 
 impl TryFrom<RunRow> for Run {
@@ -41,6 +42,7 @@ impl TryFrom<RunRow> for Run {
             created_at: row.created_at,
             updated_at: row.updated_at,
             finished_at: row.finished_at,
+            cancel_requested_at: row.cancel_requested_at,
         })
     }
 }
