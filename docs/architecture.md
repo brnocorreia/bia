@@ -41,8 +41,10 @@ Engine, scheduler and store read time from an injected `Clock` (ADR-0022), and w
 
 ## Processes
 
-- `bia serve --role all` (dev) or any mix of `api`, `worker` and `scheduler` replicas (ADR-0005).
+- `bia serve --role all` (dev) or any mix of `api`, `worker` and `scheduler` replicas (ADR-0005), e.g. `--role api,worker`. Roles not built yet start and do nothing.
 - `bia migrate` applies migrations.
+- Both read their configuration from a TOML file under `BIA_*` environment variables (ADR-0037, [`configuration.md`](configuration.md)).
+- A Worker runs claimed Jobs as concurrent tasks, heartbeats their Leases, and on SIGTERM stops claiming, waits a grace period, then releases the Leases of what did not finish (ADR-0036).
 - `bia mcp` is a stdio → HTTP proxy for local MCP clients.
 - Every other subcommand is an API client (ADR-0007).
 
@@ -53,7 +55,7 @@ Engine, scheduler and store read time from an injected `Clock` (ADR-0022), and w
 3. In one transaction, the Worker writes the Attempt to the Timeline, updates the Checkpoint and Cursor, completes the Job and enqueues the next Job (or a delayed Job for `sleep`/retry backoff, or nothing while waiting for an Event). Each Job makes one transition: starting the Run (checking its input against the `input_schema`) or one Attempt of one Step (ADR-0032). The Timeline entry shape is ADR-0033.
 4. Run statuses: `pending → running → (sleeping | waiting) → running → succeeded | failed | cancelled`.
 
-Cancellation sets a flag the Worker observes. In-flight Actions receive their cancellation token and stop cooperatively.
+Cancellation sets a flag on the Run that Postgres announces to Workers, which also re-read it on every Lease heartbeat. The Worker running the Run's Attempt fires its cancellation token, the in-flight Action stops cooperatively, and the Run ends `cancelled` without a later Step running; a sleeping Run's wake-up is brought forward so it ends at once (ADR-0036).
 
 ## Interfaces for agents
 
