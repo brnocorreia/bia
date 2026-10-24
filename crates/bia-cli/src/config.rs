@@ -8,7 +8,7 @@ use std::str::FromStr;
 
 use anyhow::{Context, anyhow, bail};
 use bia_core::dsl::Duration;
-use bia_engine::{InterpreterConfig, RunLimits, SchedulerConfig, WorkerConfig};
+use bia_engine::{InterpreterConfig, RetentionConfig, RunLimits, SchedulerConfig, WorkerConfig};
 use chrono::TimeDelta;
 use figment::Figment;
 use figment::providers::{Env, Format, Toml};
@@ -18,9 +18,9 @@ use sqlx::postgres::PgConnectOptions;
 use tracing_subscriber::EnvFilter;
 
 const ENV_PREFIX: &str = "BIA_";
-const SECTIONS: [&str; 4] = ["worker", "scheduler", "log", "limits"];
+const SECTIONS: [&str; 6] = ["worker", "scheduler", "run", "dead_letter", "log", "limits"];
 /// Every key the environment may set, as key paths.
-const KEYS: [&str; 13] = [
+const KEYS: [&str; 16] = [
     "database_url",
     "worker.id",
     "worker.concurrency",
@@ -28,6 +28,9 @@ const KEYS: [&str; 13] = [
     "worker.poll_interval",
     "worker.shutdown_grace",
     "scheduler.poll_interval",
+    "run.retention_days",
+    "run.failed_retention_days",
+    "dead_letter.retention_days",
     "log.format",
     "log.filter",
     "limits.max_steps_per_run",
@@ -43,6 +46,8 @@ pub(crate) struct Config {
     database_url: Option<String>,
     pub(crate) worker: Worker,
     pub(crate) scheduler: Scheduler,
+    run: Run,
+    dead_letter: DeadLetter,
     pub(crate) log: Log,
     limits: Limits,
 }
@@ -62,6 +67,21 @@ pub(crate) struct Worker {
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct Scheduler {
     poll_interval: Duration,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct Run {
+    /// Days succeeded and cancelled Runs are kept after they finish.
+    retention_days: NonZeroU32,
+    /// Days failed Runs are kept after they finish.
+    failed_retention_days: NonZeroU32,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct DeadLetter {
+    retention_days: NonZeroU32,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -96,6 +116,17 @@ fn duration(delta: TimeDelta) -> Duration {
         .unwrap_or_else(|| unreachable!("default durations are small"))
 }
 
+fn whole_days(delta: TimeDelta) -> NonZeroU32 {
+    u32::try_from(delta.num_days())
+        .ok()
+        .and_then(NonZeroU32::new)
+        .unwrap_or(NonZeroU32::MIN)
+}
+
+fn days(days: NonZeroU32) -> TimeDelta {
+    TimeDelta::days(i64::from(days.get()))
+}
+
 fn delta(duration: Duration) -> TimeDelta {
     TimeDelta::from_std(duration.to_std()).unwrap_or(TimeDelta::MAX)
 }
@@ -117,6 +148,24 @@ impl Default for Scheduler {
     fn default() -> Self {
         Self {
             poll_interval: duration(SchedulerConfig::default().poll_interval),
+        }
+    }
+}
+
+impl Default for Run {
+    fn default() -> Self {
+        let defaults = RetentionConfig::default();
+        Self {
+            retention_days: whole_days(defaults.finished_runs),
+            failed_retention_days: whole_days(defaults.failed_runs),
+        }
+    }
+}
+
+impl Default for DeadLetter {
+    fn default() -> Self {
+        Self {
+            retention_days: whole_days(RetentionConfig::default().dead_letters),
         }
     }
 }
@@ -222,6 +271,15 @@ impl Config {
     pub(crate) fn scheduler_config(&self) -> SchedulerConfig {
         SchedulerConfig {
             poll_interval: delta(self.scheduler.poll_interval),
+        }
+    }
+
+    pub(crate) fn retention_config(&self) -> RetentionConfig {
+        RetentionConfig {
+            finished_runs: days(self.run.retention_days),
+            failed_runs: days(self.run.failed_retention_days),
+            dead_letters: days(self.dead_letter.retention_days),
+            ..RetentionConfig::default()
         }
     }
 
@@ -432,6 +490,32 @@ mod tests {
             jail.set_env("BIA_WORKER_LEASE", "30s");
             jail.set_env("BIA_WORKER_POLL_INTERVAL", "soon");
             assert!(error(jail, None).contains("BIA_WORKER_POLL_INTERVAL"));
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn retention_defaults_to_90_days_and_each_kind_is_set_on_its_own() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.set_env("BIA_DATABASE_URL", URL);
+            let retention = load(jail, None).unwrap().retention_config();
+            assert_eq!(retention.finished_runs, TimeDelta::days(90));
+            assert_eq!(retention.failed_runs, TimeDelta::days(90));
+            assert_eq!(retention.dead_letters, TimeDelta::days(90));
+
+            jail.create_file("bia.toml", "[run]\nfailed_retention_days = 365\n")?;
+            jail.set_env("BIA_RUN_RETENTION_DAYS", "30");
+            jail.set_env("BIA_DEAD_LETTER_RETENTION_DAYS", "14");
+            let retention = load(jail, Some("bia.toml")).unwrap().retention_config();
+            assert_eq!(retention.finished_runs, TimeDelta::days(30));
+            assert_eq!(retention.failed_runs, TimeDelta::days(365));
+            assert_eq!(retention.dead_letters, TimeDelta::days(14));
+
+            jail.set_env("BIA_RUN_FAILED_RETENTION_DAYS", "0");
+            let error = error(jail, Some("bia.toml"));
+            assert!(error.contains("run.failed_retention_days"), "{error}");
+            assert!(error.contains("BIA_RUN_FAILED_RETENTION_DAYS"), "{error}");
             Ok(())
         });
     }
