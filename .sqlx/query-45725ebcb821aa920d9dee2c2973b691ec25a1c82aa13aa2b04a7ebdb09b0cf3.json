@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Records that the Chore runs at $2 unless it already ran after $3. Concurrent claimers\n-- queue on the row, and the later ones then see the new ran_at and get no row back.\n-- $1: chore name, $2: now, $3: claim only if it last ran at or before this\nINSERT INTO chores (name, ran_at)\nVALUES ($1, $2)\nON CONFLICT (name) DO UPDATE\nSET ran_at = EXCLUDED.ran_at\nWHERE chores.ran_at <= $3\nRETURNING ran_at\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ran_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "chores",
+            "name": "ran_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "45725ebcb821aa920d9dee2c2973b691ec25a1c82aa13aa2b04a7ebdb09b0cf3"
+}
