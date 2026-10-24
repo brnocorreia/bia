@@ -8,10 +8,12 @@ use std::sync::Arc;
 use anyhow::Context;
 use bia_core::action::CancellationToken;
 use bia_engine::{Interpreter, Retention, Scheduler, Worker};
+use bia_server::ApiState;
 use bia_store::SystemClock;
 use clap::{Parser, Subcommand, ValueEnum};
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
+use tokio::net::TcpListener;
 
 mod config;
 
@@ -95,21 +97,35 @@ async fn migrate(config: &Config) -> anyhow::Result<()> {
 async fn serve(config: &Config, roles: &BTreeSet<Role>) -> anyhow::Result<()> {
     // Each in-flight Job can hold a connection for its transition and one for its heartbeat,
     // and the Worker loop needs one to claim; the listener has its own. The scheduler fires
-    // one Schedule at a time and holds its leader lock on a connection of its own.
+    // one Schedule at a time and holds its leader lock on a connection of its own. The API
+    // gets a few more so requests do not queue behind Jobs.
     let concurrency = u32::try_from(config.worker.concurrency.get()).unwrap_or(u32::MAX);
-    let pool = connect(config, concurrency.saturating_mul(2).saturating_add(2)).await?;
+    let pool = connect(config, concurrency.saturating_mul(2).saturating_add(6)).await?;
     let shutdown = CancellationToken::new();
     tokio::spawn(stop_on_signal(shutdown.clone()));
+    let actions = Arc::new(bia_actions::builtin_registry().context("cannot build the Actions")?);
 
-    if roles.contains(&Role::Api) {
-        tracing::warn!(role = "api", "this Role does nothing yet");
-    }
+    let api = async {
+        if !roles.contains(&Role::Api) {
+            return Ok(());
+        }
+        let bind = config.api.bind;
+        let listener = TcpListener::bind(bind)
+            .await
+            .with_context(|| format!("cannot listen on {bind}"))?;
+        tracing::info!(address = %listener.local_addr()?, "api listening");
+        let router = bia_server::router(ApiState::new(pool.clone(), actions.clone()));
+        bia_server::serve(listener, router, shutdown.clone())
+            .await
+            .context("the api failed")?;
+        tracing::info!("api stopped");
+        Ok(())
+    };
     let worker = async {
         if !roles.contains(&Role::Worker) {
             return Ok(());
         }
-        let actions = bia_actions::builtin_registry().context("cannot build the Actions")?;
-        let interpreter = Interpreter::new(pool.clone(), Arc::new(actions), Arc::new(SystemClock))
+        let interpreter = Interpreter::new(pool.clone(), actions.clone(), Arc::new(SystemClock))
             .with_config(config.interpreter_config());
         let worker = Worker::new(config.worker_id(), interpreter, config.worker_config());
         worker
@@ -133,7 +149,7 @@ async fn serve(config: &Config, roles: &BTreeSet<Role>) -> anyhow::Result<()> {
             .await
             .context("the scheduler failed")
     };
-    tokio::try_join!(worker, scheduler, async {
+    tokio::try_join!(api, worker, scheduler, async {
         shutdown.cancelled().await;
         anyhow::Ok(())
     })?;

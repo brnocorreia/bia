@@ -1,5 +1,6 @@
 //! The `bia` binary migrates an empty database, runs a Run to completion as a Worker, leads as a
-//! scheduler, stops on SIGTERM, and refuses to start with invalid configuration.
+//! scheduler, serves the API, stops on SIGTERM, and refuses to start with invalid
+//! configuration.
 
 #![cfg(unix)]
 #![allow(clippy::unwrap_used)]
@@ -198,4 +199,59 @@ async fn bia_serve_as_a_scheduler_leads_and_stops_on_sigterm(pool: PgPool) {
         .unwrap();
     assert!(stopped.success(), "{stopped:?}");
     assert!(logs.contains("scheduler stopped"), "{logs}");
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn bia_serve_as_the_api_serves_the_schema_and_stops_on_sigterm(pool: PgPool) {
+    let mut api = bia()
+        .args(["serve", "--role", "api"])
+        .env("BIA_DATABASE_URL", database_url(&pool))
+        .env("BIA_LOG_FORMAT", "json")
+        .env("BIA_API_BIND", "127.0.0.1:0")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdout = BufReader::new(api.stdout.take().unwrap()).lines();
+    let mut logs = String::new();
+    let listening = tokio::time::timeout(Duration::from_secs(60), async {
+        while let Some(line) = stdout.next_line().await.unwrap() {
+            logs.push_str(&line);
+            logs.push('\n');
+            let entry: serde_json::Value = serde_json::from_str(&line).unwrap();
+            if entry["fields"]["message"] == "api listening" {
+                return entry["fields"]["address"].as_str().unwrap().to_owned();
+            }
+        }
+        panic!("bia exited before listening");
+    })
+    .await;
+    let address = listening.unwrap_or_else(|_| panic!("the api did not listen; logs:\n{logs}"));
+
+    let client = bia_client::Client::new(&format!("http://{address}")).unwrap();
+    assert_eq!(client.ready().await.unwrap().status, "ready");
+    let schema = client.schema().await.unwrap();
+    assert!(
+        schema
+            .actions
+            .iter()
+            .any(|action| action.name == "http.request"),
+        "the builtin Actions are listed"
+    );
+
+    let terminated = std::process::Command::new("kill")
+        .args(["-TERM", &api.id().unwrap().to_string()])
+        .status()
+        .unwrap();
+    assert!(terminated.success());
+    while let Some(line) = stdout.next_line().await.unwrap() {
+        logs.push_str(&line);
+        logs.push('\n');
+    }
+    let stopped = tokio::time::timeout(Duration::from_secs(60), api.wait())
+        .await
+        .expect("bia did not stop on SIGTERM")
+        .unwrap();
+    assert!(stopped.success(), "{stopped:?}");
+    assert!(logs.contains("api stopped"), "{logs}");
 }
