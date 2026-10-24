@@ -5,7 +5,7 @@
 //! a transaction of its own, and runs the [`Chore`]s that are due. Firing claims the Schedule's
 //! row and creates the Run with its first Job in the same transaction, so an occurrence fires
 //! exactly once even while two schedulers both believe they lead (ADR-0039). Which occurrences
-//! fire is ADR-0040.
+//! fire is ADR-0040. A Chore's run is claimed the same way, once per interval (ADR-0041).
 
 use std::fmt;
 use std::sync::Arc;
@@ -14,6 +14,7 @@ use bia_core::action::{BoxFuture, CancellationToken};
 use bia_core::clock::Clock;
 use bia_core::dsl::{CronTrigger, TriggerKind, WorkflowId};
 use bia_store::StoreError;
+use bia_store::chore::{ChoreClaim, ChoreRepository, PgChoreRepository};
 use bia_store::run::RunId;
 use bia_store::schedule::{
     DueSchedule, LeaderLock, PgScheduleRepository, Schedule, ScheduleRepository,
@@ -51,10 +52,12 @@ impl Default for SchedulerConfig {
 
 /// Periodic upkeep the leading scheduler runs, such as Run retention.
 ///
-/// A Chore runs on the leader every [`interval`](Chore::interval), first when a scheduler
-/// becomes leader. Leadership can move between schedulers, and two may briefly both lead, so a
-/// Chore must be safe to run again early or twice at once.
+/// A Chore runs on the leader once every [`interval`](Chore::interval), counted from its last
+/// run by any scheduler, which Postgres records under its [`name`](Chore::name) (ADR-0041). The
+/// run is claimed before the Chore starts, so one that fails or is cut short waits for its next
+/// interval and must leave its work safe to resume then.
 pub trait Chore: fmt::Debug + Send + Sync {
+    /// Identifies the Chore's last run across schedulers and releases, so it must not change.
     fn name(&self) -> &str;
 
     fn interval(&self) -> TimeDelta;
@@ -182,7 +185,25 @@ impl Scheduler {
             if *due > now {
                 continue;
             }
-            *due = now + chore.interval();
+            let claim = match self.pool.acquire().await {
+                Ok(mut conn) => {
+                    PgChoreRepository
+                        .claim(&mut conn, chore.name(), now, chore.interval())
+                        .await
+                }
+                Err(error) => Err(error.into()),
+            };
+            match claim {
+                Ok(ChoreClaim::Claimed) => *due = now + chore.interval(),
+                Ok(ChoreClaim::RanAt(ran_at)) => {
+                    *due = ran_at + chore.interval();
+                    continue;
+                }
+                Err(error) => {
+                    tracing::error!(chore = chore.name(), %error, "cannot claim chore; retrying on the next poll");
+                    continue;
+                }
+            }
             let span = tracing::info_span!("chore", chore = chore.name());
             if let Err(error) = chore.run(&self.pool, now).instrument(span).await {
                 tracing::error!(chore = chore.name(), %error, "chore failed");
