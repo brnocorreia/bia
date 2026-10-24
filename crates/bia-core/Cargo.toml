@@ -12,6 +12,8 @@ publish.workspace = true
 base64 = "0.22"
 cel = { version = "0.15.0", default-features = false, features = ["chrono", "regex", "ext_encoders", "parser_pratt"] }
 chrono = { version = "0.4.45", default-features = false, features = ["std"] }
+chrono-tz = "0.10.4"
+croner = { version = "4.0.2", default-features = false, features = ["chrono"] }
 jsonschema = { version = "0.59.0", default-features = false }
 schemars = "1.2.3"
 serde = { version = "1.0.229", features = ["derive"] }

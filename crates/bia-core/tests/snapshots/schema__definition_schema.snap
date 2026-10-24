@@ -19,7 +19,7 @@ expression: definition_schema()
       "type": "string"
     },
     "CatchUpPolicy": {
-      "description": "What a cron Trigger does with firings missed while bia was down.",
+      "description": "What a cron Trigger does with firings missed while bia was down: fire `none` of them,\nonly the `latest`, or `all` of them, up to the 100 most recent.",
       "enum": [
         "none",
         "latest",
@@ -86,7 +86,7 @@ expression: definition_schema()
       "type": "object"
     },
     "OverlapPolicy": {
-      "description": "What a cron Trigger does when the previous Run is still active.",
+      "description": "What a cron Trigger does when the previous Run is still active: `skip` the firing,\n`queue` it until that Run finishes, or `allow` it to start at once.",
       "enum": [
         "skip",
         "queue",
@@ -541,10 +541,11 @@ expression: definition_schema()
           "description": "`type: cron`: starts Runs on a cron schedule.",
           "properties": {
             "catch_up": {
-              "$ref": "#/$defs/CatchUpPolicy"
+              "$ref": "#/$defs/CatchUpPolicy",
+              "description": "What to do with firings missed while bia was down. Defaults to `latest`."
             },
             "expr": {
-              "description": "Cron expression, e.g. `0 9 * * *`.",
+              "description": "Cron expression with five fields (minute, hour, day of month, month, day of week),\ne.g. `0 9 * * *`. `L`, `W`, `#` and aliases such as `@daily` are accepted.",
               "type": "string"
             },
             "id": {
@@ -553,16 +554,17 @@ expression: definition_schema()
             },
             "jitter": {
               "$ref": "#/$defs/Duration",
-              "description": "Random delay added to each firing, up to this Duration."
+              "description": "Delay added to each firing, up to this Duration. Each occurrence gets its own delay,\nthe same on every scheduler."
             },
             "overlap": {
-              "$ref": "#/$defs/OverlapPolicy"
+              "$ref": "#/$defs/OverlapPolicy",
+              "description": "What to do when the previous Run of this Trigger is still active. Defaults to `skip`."
             },
             "type": {
               "const": "cron"
             },
             "tz": {
-              "description": "IANA time zone the expression is read in, e.g. `America/Sao_Paulo`.",
+              "description": "IANA time zone the expression is read in, e.g. `America/Sao_Paulo`. Defaults to UTC.",
               "type": "string"
             }
           },
