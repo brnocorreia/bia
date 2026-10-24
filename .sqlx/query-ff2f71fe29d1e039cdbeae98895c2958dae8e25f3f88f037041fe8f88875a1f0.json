@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Locks the Workflow row, so its Active Version cannot change while its Schedules are\n-- rebuilt.\n-- $1: workflow id\nSELECT active_version, scheduled_version\nFROM workflows\nWHERE id = $1\nFOR UPDATE\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "active_version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "workflows",
+            "name": "active_version"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "scheduled_version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "workflows",
+            "name": "scheduled_version"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "ff2f71fe29d1e039cdbeae98895c2958dae8e25f3f88f037041fe8f88875a1f0"
+}

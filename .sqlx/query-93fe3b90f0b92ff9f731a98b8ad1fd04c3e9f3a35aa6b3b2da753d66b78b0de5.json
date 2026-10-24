@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- $1: the scheduler's advisory lock key\nSELECT pg_advisory_unlock($1) AS \"unlocked!\"\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "unlocked!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "93fe3b90f0b92ff9f731a98b8ad1fd04c3e9f3a35aa6b3b2da753d66b78b0de5"
+}
