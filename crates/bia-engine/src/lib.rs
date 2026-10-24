@@ -4,10 +4,12 @@
 
 mod error;
 pub mod interpreter;
+mod scheduler;
 mod secrets;
 mod worker;
 
 pub use error::EngineError;
 pub use interpreter::{Advanced, Interpreter, InterpreterConfig, cancel_run, start_run};
+pub use scheduler::{CATCH_UP_LIMIT, Chore, MISSED_AFTER, QUEUE_LIMIT, Scheduler, SchedulerConfig};
 pub use secrets::{NoSecrets, SecretResolver};
 pub use worker::{Worker, WorkerConfig};
