@@ -2,13 +2,13 @@
 //! environment. Naming and precedence are ADR-0037; the keys are listed in
 //! `docs/configuration.md`, which must follow any change to them.
 
-use std::num::NonZeroUsize;
+use std::num::{NonZeroU32, NonZeroU64, NonZeroUsize};
 use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Context, anyhow, bail};
 use bia_core::dsl::Duration;
-use bia_engine::WorkerConfig;
+use bia_engine::{InterpreterConfig, RunLimits, WorkerConfig};
 use chrono::TimeDelta;
 use figment::Figment;
 use figment::providers::{Env, Format, Toml};
@@ -18,9 +18,9 @@ use sqlx::postgres::PgConnectOptions;
 use tracing_subscriber::EnvFilter;
 
 const ENV_PREFIX: &str = "BIA_";
-const SECTIONS: [&str; 2] = ["worker", "log"];
+const SECTIONS: [&str; 3] = ["worker", "log", "limits"];
 /// Every key the environment may set, as key paths.
-const KEYS: [&str; 8] = [
+const KEYS: [&str; 12] = [
     "database_url",
     "worker.id",
     "worker.concurrency",
@@ -29,6 +29,10 @@ const KEYS: [&str; 8] = [
     "worker.shutdown_grace",
     "log.format",
     "log.filter",
+    "limits.max_steps_per_run",
+    "limits.max_iterations",
+    "limits.max_subworkflow_depth",
+    "limits.max_output_bytes",
 ];
 
 // No `Debug`: the database URL usually carries a password.
@@ -38,6 +42,7 @@ pub(crate) struct Config {
     database_url: Option<String>,
     pub(crate) worker: Worker,
     pub(crate) log: Log,
+    limits: Limits,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -57,6 +62,16 @@ pub(crate) struct Log {
     pub(crate) format: LogFormat,
     /// A `tracing` filter directive, e.g. `info` or `info,bia_engine=debug`.
     pub(crate) filter: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct Limits {
+    max_steps_per_run: NonZeroU64,
+    max_iterations: NonZeroU32,
+    /// 0 forbids Subworkflows.
+    max_subworkflow_depth: u32,
+    max_output_bytes: NonZeroU64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -89,6 +104,19 @@ impl Default for Log {
         Self {
             format: LogFormat::Text,
             filter: "info".to_owned(),
+        }
+    }
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        let defaults = RunLimits::default();
+        Self {
+            max_steps_per_run: NonZeroU64::new(defaults.max_steps_per_run)
+                .unwrap_or(NonZeroU64::MIN),
+            max_iterations: NonZeroU32::new(defaults.max_iterations).unwrap_or(NonZeroU32::MIN),
+            max_subworkflow_depth: defaults.max_subworkflow_depth,
+            max_output_bytes: NonZeroU64::new(defaults.max_output_bytes).unwrap_or(NonZeroU64::MIN),
         }
     }
 }
@@ -170,6 +198,19 @@ impl Config {
             ..WorkerConfig::default()
         }
     }
+
+    pub(crate) fn interpreter_config(&self) -> InterpreterConfig {
+        let limits = &self.limits;
+        InterpreterConfig {
+            limits: RunLimits {
+                max_steps_per_run: limits.max_steps_per_run.get(),
+                max_iterations: limits.max_iterations.get(),
+                max_subworkflow_depth: limits.max_subworkflow_depth,
+                max_output_bytes: limits.max_output_bytes.get(),
+            },
+            ..InterpreterConfig::default()
+        }
+    }
 }
 
 /// One extraction error, naming the key and the file or variable its value came from.
@@ -216,6 +257,7 @@ mod tests {
     use std::num::NonZeroUsize;
     use std::path::Path;
 
+    use bia_engine::RunLimits;
     use chrono::TimeDelta;
     use figment::Jail;
 
@@ -353,6 +395,44 @@ mod tests {
             jail.set_env("BIA_WORKER_LEASE", "30s");
             jail.set_env("BIA_WORKER_POLL_INTERVAL", "soon");
             assert!(error(jail, None).contains("BIA_WORKER_POLL_INTERVAL"));
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn global_limits_come_from_the_file_and_the_environment() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.set_env("BIA_DATABASE_URL", URL);
+            assert_eq!(
+                load(jail, None).unwrap().interpreter_config().limits,
+                RunLimits::default()
+            );
+
+            jail.create_file(
+                "bia.toml",
+                "[limits]\nmax_steps_per_run = 50\nmax_subworkflow_depth = 0\n",
+            )?;
+            jail.set_env("BIA_LIMITS_MAX_OUTPUT_BYTES", "1024");
+
+            let limits = load(jail, Some("bia.toml"))
+                .unwrap()
+                .interpreter_config()
+                .limits;
+            assert_eq!(
+                limits,
+                RunLimits {
+                    max_steps_per_run: 50,
+                    max_subworkflow_depth: 0,
+                    max_output_bytes: 1024,
+                    ..RunLimits::default()
+                }
+            );
+
+            jail.set_env("BIA_LIMITS_MAX_ITERATIONS", "0");
+            let error = error(jail, Some("bia.toml"));
+            assert!(error.contains("limits.max_iterations"), "{error}");
+            assert!(error.contains("BIA_LIMITS_MAX_ITERATIONS"), "{error}");
             Ok(())
         });
     }

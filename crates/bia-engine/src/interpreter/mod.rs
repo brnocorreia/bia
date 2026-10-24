@@ -39,9 +39,11 @@ use crate::{EngineError, NoSecrets, SecretResolver};
 
 mod checkpoint;
 mod failure;
+mod limits;
 
 use checkpoint::{Cursor, ELSE, RunState, Sleep, THEN, checkpoint};
 use failure::{Failure, FailureCode};
+pub use limits::{Limit, LimitExceeded, RunLimits};
 
 /// Settings the interpreter applies where a Definition says nothing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,6 +53,7 @@ pub struct InterpreterConfig {
     /// it is dropped.
     pub cancel_grace: TimeDelta,
     pub expression_limits: expression::Limits,
+    pub limits: RunLimits,
 }
 
 impl Default for InterpreterConfig {
@@ -59,6 +62,7 @@ impl Default for InterpreterConfig {
             default_timeout: TimeDelta::minutes(5),
             cancel_grace: TimeDelta::seconds(5),
             expression_limits: expression::Limits::default(),
+            limits: RunLimits::default(),
         }
     }
 }
@@ -322,6 +326,15 @@ impl Interpreter {
             started_at: self.clock.now(),
             cursor,
         };
+        let limits = self.config.limits.for_definition(definition);
+
+        // A retry or a wake-up continues a Step the Run already took up.
+        if state.attempts == 0 && state.sleep.is_none() {
+            state.steps += 1;
+            if let Err(exceeded) = limits.check_steps(state.steps) {
+                return Ok(self.fail_step(started, state, None, exceeded.failure()));
+            }
+        }
 
         // A Run woken from a sleep already passed its `if` when it fell asleep.
         if state.sleep.is_none()
@@ -358,6 +371,9 @@ impl Interpreter {
                     .await;
                 Ok(match outcome {
                     Outcome::Succeeded(output) => {
+                        if let Err(exceeded) = limits.check_output(&output) {
+                            return Ok(self.fail_step(started, state, input, exceeded.failure()));
+                        }
                         let mut entry = started.entry(AttemptStatus::Succeeded, self.clock.now());
                         entry.input = input;
                         entry.output = Some(output.clone());

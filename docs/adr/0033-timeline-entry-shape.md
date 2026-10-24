@@ -5,3 +5,4 @@ The Timeline is what operators and agents read to explain a Run, and it becomes 
 ## Amendments
 
 - Status `cancelled` joins `succeeded`, `failed` and `skipped` (ADR-0036). A cancelled Run has exactly one such entry: the Attempt its cancellation cut short, with its input and no error, or, when no Attempt was in flight, a Run-level entry with no input. The status says what happened, so no error code is added for it.
+- The limit codes `run_step_limit_exceeded`, `iteration_limit_exceeded`, `subworkflow_depth_exceeded` and `output_limit_exceeded` join the interpreter's codes (ADR-0038). Their `details` are `{ "limit", "max", "actual" }`, and an entry failed by `output_limit_exceeded` records no Output.
