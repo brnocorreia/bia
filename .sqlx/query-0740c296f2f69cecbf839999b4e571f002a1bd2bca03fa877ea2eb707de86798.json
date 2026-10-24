@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT ran_at FROM chores WHERE name = $1\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ran_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "chores",
+            "name": "ran_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0740c296f2f69cecbf839999b4e571f002a1bd2bca03fa877ea2eb707de86798"
+}

@@ -159,7 +159,7 @@ The one scheduler, among those running, that holds the Postgres advisory lock an
 _Avoid_: primary, master
 
 **Chore**:
-Periodic upkeep the Leader runs on an interval, such as Run retention. Unlike a Job, it is not stored or claimed.
+Periodic upkeep the Leader runs once per interval, such as Run retention. Postgres records when each Chore last ran, so it runs once per interval across schedulers. Unlike a Job, it carries no work of its own to store and no Worker claims it.
 _Avoid_: task, cron job
 
 **Clock**:

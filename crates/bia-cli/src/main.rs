@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use bia_core::action::CancellationToken;
-use bia_engine::{Interpreter, Scheduler, Worker};
+use bia_engine::{Interpreter, Retention, Scheduler, Worker};
 use bia_store::SystemClock;
 use clap::{Parser, Subcommand, ValueEnum};
 use sqlx::PgPool;
@@ -126,7 +126,8 @@ async fn serve(config: &Config, roles: &BTreeSet<Role>) -> anyhow::Result<()> {
             pool.clone(),
             Arc::new(SystemClock),
             config.scheduler_config(),
-        );
+        )
+        .with_chore(Arc::new(Retention::new(config.retention_config())));
         scheduler
             .run(shutdown.clone())
             .await

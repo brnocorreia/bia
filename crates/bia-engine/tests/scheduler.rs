@@ -589,7 +589,7 @@ impl Chore for Counting {
 }
 
 #[sqlx::test(migrator = "bia_store::MIGRATOR")]
-async fn only_the_leader_runs_chores_and_a_stopping_leader_hands_over(pool: PgPool) {
+async fn a_chore_runs_once_per_interval_across_schedulers_and_leader_changes(pool: PgPool) {
     let h = Harness::new(pool, "2026-01-01T00:00:00Z");
     let chore = Arc::new(Counting::default());
     let count = || chore.runs.load(Ordering::SeqCst);
@@ -605,9 +605,33 @@ async fn only_the_leader_runs_chores_and_a_stopping_leader_hands_over(pool: PgPo
         .await;
 
     leader.shut_down().await;
+    h.clock.advance(TimeDelta::minutes(59));
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(
+        count(),
+        2,
+        "the new leader waits out the interval the old one started"
+    );
     h.advance_until("the new leader to run the chore", || async { count() == 3 })
         .await;
     follower.shut_down().await;
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn a_scheduler_that_becomes_leader_again_does_not_rerun_a_chore_early(pool: PgPool) {
+    let h = Harness::new(pool, "2026-01-01T00:00:00Z");
+    let chore = Arc::new(Counting::default());
+    let count = || chore.runs.load(Ordering::SeqCst);
+    let first = h.start(h.scheduler("scheduler-a").with_chore(chore.clone()));
+    h.advance_until("the chore to run", || async { count() == 1 })
+        .await;
+    first.kill();
+
+    let second = h.start(h.scheduler("scheduler-b").with_chore(chore.clone()));
+    h.clock.advance(TimeDelta::minutes(30));
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(count(), 1);
+    second.shut_down().await;
 }
 
 #[sqlx::test(migrator = "bia_store::MIGRATOR")]

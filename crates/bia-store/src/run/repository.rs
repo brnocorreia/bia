@@ -49,6 +49,18 @@ pub trait RunRepository {
         id: RunId,
         at: DateTime<Utc>,
     ) -> impl Future<Output = Result<bool, StoreError>> + Send;
+
+    /// Deletes up to `limit` Runs with one of the finished `statuses` that finished before
+    /// `finished_before`, oldest first, with their Timelines and Jobs. Returns how many it
+    /// deleted. Unfinished statuses match nothing. Runs another transaction holds are skipped,
+    /// so concurrent callers never wait on each other.
+    fn delete_finished(
+        &self,
+        conn: &mut PgConnection,
+        statuses: &[RunStatus],
+        finished_before: DateTime<Utc>,
+        limit: u32,
+    ) -> impl Future<Output = Result<u64, StoreError>> + Send;
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -152,5 +164,28 @@ impl RunRepository for PgRunRepository {
             return Err(StoreError::RunNotFound(id));
         }
         Ok(flagged)
+    }
+
+    async fn delete_finished(
+        &self,
+        conn: &mut PgConnection,
+        statuses: &[RunStatus],
+        finished_before: DateTime<Utc>,
+        limit: u32,
+    ) -> Result<u64, StoreError> {
+        let statuses: Vec<String> = statuses
+            .iter()
+            .map(|status| status.as_str().to_owned())
+            .collect();
+        let deleted = sqlx::query_file!(
+            "src/run/queries/delete_finished.sql",
+            &statuses,
+            finished_before,
+            i64::from(limit),
+        )
+        .execute(&mut *conn)
+        .await?
+        .rows_affected();
+        Ok(deleted)
     }
 }
