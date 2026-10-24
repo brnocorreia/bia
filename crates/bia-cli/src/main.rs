@@ -107,7 +107,8 @@ async fn serve(config: &Config, roles: &BTreeSet<Role>) -> anyhow::Result<()> {
     }
     if roles.contains(&Role::Worker) {
         let actions = bia_actions::builtin_registry().context("cannot build the Actions")?;
-        let interpreter = Interpreter::new(pool, Arc::new(actions), Arc::new(SystemClock));
+        let interpreter = Interpreter::new(pool, Arc::new(actions), Arc::new(SystemClock))
+            .with_config(config.interpreter_config());
         let worker = Worker::new(config.worker_id(), interpreter, config.worker_config());
         worker.run(shutdown).await.context("the worker failed")?;
     } else {
