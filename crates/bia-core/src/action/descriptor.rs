@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize, Serializer};
 use super::Output;
 use crate::dsl::{ActionName, Params};
 
-/// An Action's metadata: the source for validation, `GET /schema` and Dry Run.
+/// An Action's metadata: the source for validation, `GET /v1/schema` and Dry Run.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct ActionDescriptor {
