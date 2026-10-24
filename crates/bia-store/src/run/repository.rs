@@ -40,6 +40,15 @@ pub trait RunRepository {
         conn: &mut PgConnection,
         filter: &RunFilter,
     ) -> impl Future<Output = Result<Vec<Run>, StoreError>> + Send;
+
+    /// Flags the Run for cancellation at `at` and notifies Workers once the surrounding
+    /// transaction commits. Returns `false`, changing nothing, when the Run already finished.
+    fn request_cancel(
+        &self,
+        conn: &mut PgConnection,
+        id: RunId,
+        at: DateTime<Utc>,
+    ) -> impl Future<Output = Result<bool, StoreError>> + Send;
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -126,5 +135,22 @@ impl RunRepository for PgRunRepository {
         .into_iter()
         .map(Run::try_from)
         .collect()
+    }
+
+    async fn request_cancel(
+        &self,
+        conn: &mut PgConnection,
+        id: RunId,
+        at: DateTime<Utc>,
+    ) -> Result<bool, StoreError> {
+        let flagged =
+            sqlx::query_file_scalar!("src/run/queries/request_cancel.sql", id.as_uuid(), at)
+                .fetch_optional(&mut *conn)
+                .await?
+                .is_some();
+        if !flagged && self.get(conn, id).await?.is_none() {
+            return Err(StoreError::RunNotFound(id));
+        }
+        Ok(flagged)
     }
 }

@@ -6,6 +6,10 @@
 //! one (ADR-0010). No transaction stays open while an Action runs. A crash between the Action
 //! and that commit leaves the Checkpoint as it was, so the Job is claimed again once its Lease
 //! expires and the Step re-runs with the same Idempotency Key.
+//!
+//! A Run flagged for cancellation ends `cancelled` at its next transition, and the Worker
+//! cancels the Attempt in flight through the token it passes to
+//! [`Interpreter::advance_cancellable`] (ADR-0036).
 
 use std::collections::BTreeSet;
 use std::fmt;
@@ -29,6 +33,7 @@ use bia_store::version::{PgVersionRepository, VersionNumber, VersionRepository};
 use chrono::{DateTime, TimeDelta, Utc};
 use serde_json::{Value, json};
 use sqlx::{Acquire, PgConnection, PgPool};
+use tracing::Instrument;
 
 use crate::{EngineError, NoSecrets, SecretResolver};
 
@@ -130,7 +135,14 @@ fn is_flow(name: &str) -> bool {
 
 struct Attempted {
     input: Option<Value>,
-    result: Result<Output, Failure>,
+    outcome: Outcome,
+}
+
+enum Outcome {
+    Succeeded(Output),
+    Failed(Failure),
+    /// The Run was cancelled while the Action ran.
+    Cancelled,
 }
 
 impl Interpreter {
@@ -154,6 +166,14 @@ impl Interpreter {
         self
     }
 
+    pub(crate) fn pool(&self) -> &PgPool {
+        &self.pool
+    }
+
+    pub(crate) fn clock(&self) -> &dyn Clock {
+        &*self.clock
+    }
+
     /// Handles a claimed `advance_run` Job: makes one transition of its Run and commits it
     /// together with the Job's completion.
     ///
@@ -162,17 +182,40 @@ impl Interpreter {
     /// another Worker took the Job over, and the Job is left for its Lease to expire or for
     /// the caller to fail.
     pub async fn advance(&self, claimed: &Claimed) -> Result<Advanced, EngineError> {
+        self.advance_cancellable(claimed, &CancellationToken::new())
+            .await
+    }
+
+    /// [`advance`](Self::advance), where `cancel` firing stops the Attempt in flight: its
+    /// Action's cancellation token fires, and the Run ends `cancelled` without a later Step
+    /// running. Fire it only for a Run flagged for cancellation.
+    pub async fn advance_cancellable(
+        &self,
+        claimed: &Claimed,
+        cancel: &CancellationToken,
+    ) -> Result<Advanced, EngineError> {
         let run_id = claimed
             .job
             .run_id
             .ok_or(EngineError::JobWithoutRun(claimed.job.id))?;
+        self.advance_run(run_id, &claimed.lease, cancel)
+            .instrument(tracing::info_span!("run", run_id = %run_id))
+            .await
+    }
+
+    async fn advance_run(
+        &self,
+        run_id: RunId,
+        lease: &Lease,
+        cancel: &CancellationToken,
+    ) -> Result<Advanced, EngineError> {
         let (run, definition) = self.load(run_id).await?;
 
         let transition = match run.status {
             status if status.is_finished() => {
                 // A Run that already ended needs nothing more; only the Job completes.
                 let mut tx = self.pool.begin().await?;
-                PgJobRepository.ack(&mut tx, &claimed.lease).await?;
+                PgJobRepository.ack(&mut tx, lease).await?;
                 tx.commit().await?;
                 return Ok(Advanced {
                     run: run.id,
@@ -180,8 +223,9 @@ impl Interpreter {
                     next_job_at: None,
                 });
             }
+            _ if run.cancel_requested_at.is_some() => self.cancelled(&run),
             RunStatus::Pending => self.start(&run, &definition),
-            _ => self.step(&run, &definition).await?,
+            _ => self.step(&run, &definition, cancel).await?,
         };
 
         let advanced = Advanced {
@@ -189,7 +233,12 @@ impl Interpreter {
             status: transition.status,
             next_job_at: transition.next_job_at,
         };
-        self.commit(&claimed.lease, run.id, transition).await?;
+        let recorded = transition
+            .entry
+            .as_ref()
+            .map(|entry| (entry.step.clone(), entry.status));
+        self.commit(lease, run.id, transition).await?;
+        log_transition(&advanced, recorded);
         Ok(advanced)
     }
 
@@ -208,6 +257,26 @@ impl Interpreter {
                 version: run.version.get(),
             })?;
         Ok((run, version.definition))
+    }
+
+    /// Ends a Run flagged for cancellation between Attempts. The Cursor stays where it was.
+    fn cancelled(&self, run: &Run) -> Transition {
+        let now = self.clock.now();
+        Transition {
+            status: RunStatus::Cancelled,
+            checkpoint: run.checkpoint.clone(),
+            entry: Some(NewTimelineEntry {
+                step: None,
+                status: AttemptStatus::Cancelled,
+                input: None,
+                output: None,
+                error: None,
+                started_at: now,
+                finished_at: now,
+            }),
+            next_job_at: None,
+            at: now,
+        }
     }
 
     /// `pending → running`, or `failed` when the input does not match the `input_schema`.
@@ -233,7 +302,12 @@ impl Interpreter {
         self.at(Cursor::start(definition), RunState::default(), None, now)
     }
 
-    async fn step(&self, run: &Run, definition: &Definition) -> Result<Transition, EngineError> {
+    async fn step(
+        &self,
+        run: &Run,
+        definition: &Definition,
+        cancel: &CancellationToken,
+    ) -> Result<Transition, EngineError> {
         let cursor = Cursor::decode(run.id, &run.checkpoint.cursor, definition)?;
         let mut state = RunState::decode(run.id, &run.checkpoint.state)?;
         let step = cursor
@@ -279,17 +353,19 @@ impl Interpreter {
                 Ok(self.control(run, definition, started, state, params))
             }
             _ => {
-                let Attempted { input, result } =
-                    self.attempt(run, step, started.attempt, &state).await;
-                Ok(match result {
-                    Ok(output) => {
+                let Attempted { input, outcome } = self
+                    .attempt(run, step, started.attempt, &state, cancel)
+                    .await;
+                Ok(match outcome {
+                    Outcome::Succeeded(output) => {
                         let mut entry = started.entry(AttemptStatus::Succeeded, self.clock.now());
                         entry.input = input;
                         entry.output = Some(output.clone());
                         state.outputs.insert(step.id.as_str().to_owned(), output);
                         self.advance_past(definition, started.cursor, state, entry)
                     }
-                    Err(failure) => self.fail_step(started, state, input, failure),
+                    Outcome::Failed(failure) => self.fail_step(started, state, input, failure),
+                    Outcome::Cancelled => self.cancel_step(started, state, input),
                 })
             }
         }
@@ -531,6 +607,27 @@ impl Interpreter {
         }
     }
 
+    /// The transition after the Run was cancelled during an Attempt: the Run ends `cancelled`
+    /// with its Cursor on this Step.
+    fn cancel_step(
+        &self,
+        started: Started<'_>,
+        mut state: RunState,
+        input: Option<Value>,
+    ) -> Transition {
+        let finished_at = self.clock.now();
+        let mut entry = started.entry(AttemptStatus::Cancelled, finished_at);
+        entry.input = input;
+        state.attempts = started.attempt;
+        Transition {
+            status: RunStatus::Cancelled,
+            checkpoint: checkpoint(Some(&started.cursor), &state),
+            entry: Some(entry),
+            next_job_at: None,
+            at: finished_at,
+        }
+    }
+
     fn at(
         &self,
         cursor: Option<Cursor>,
@@ -552,13 +649,20 @@ impl Interpreter {
         }
     }
 
-    async fn attempt(&self, run: &Run, step: &Step, attempt: u32, state: &RunState) -> Attempted {
+    async fn attempt(
+        &self,
+        run: &Run,
+        step: &Step,
+        attempt: u32,
+        state: &RunState,
+        cancel: &CancellationToken,
+    ) -> Attempted {
         let (action, params) = match &step.kind {
             StepKind::Action { action, params } => (action, params),
             _ => {
                 return Attempted {
                     input: None,
-                    result: Err(Failure::raised(
+                    outcome: Outcome::Failed(Failure::raised(
                         FailureCode::UnsupportedStep,
                         ActionError::fatal(format!(
                             "Step '{}' is a Block this build cannot run yet",
@@ -571,7 +675,7 @@ impl Interpreter {
         let written = Some(Value::Object(params.clone()));
         let fail = |input: Option<Value>, code, error| Attempted {
             input,
-            result: Err(Failure::raised(code, error)),
+            outcome: Outcome::Failed(Failure::raised(code, error)),
         };
 
         let action = match self.actions.lookup(action.as_str()) {
@@ -609,7 +713,7 @@ impl Interpreter {
                 Err(error) => {
                     return Attempted {
                         input: written,
-                        result: Err(Failure::from_action(error)),
+                        outcome: Outcome::Failed(Failure::from_action(error)),
                     };
                 }
             }
@@ -654,9 +758,15 @@ impl Interpreter {
             .and_then(|timeout| TimeDelta::from_std(timeout.to_std()).ok())
             .unwrap_or(self.config.default_timeout);
 
+        tracing::debug!(
+            step_id = %step.id,
+            attempt,
+            action = %action.descriptor().name,
+            "attempt started"
+        );
         Attempted {
             input: recorded,
-            result: self.call(&*action, call, timeout).await,
+            outcome: self.call(&*action, call, timeout, cancel).await,
         }
     }
 
@@ -665,22 +775,25 @@ impl Interpreter {
         action: &dyn bia_core::action::Action,
         call: ActionCall,
         timeout: TimeDelta,
-    ) -> Result<Output, Failure> {
-        let cancel = CancellationToken::new();
+        run_cancel: &CancellationToken,
+    ) -> Outcome {
+        // A child token fires with the Run's cancellation, and on its own for a timeout.
+        let cancel = run_cancel.child_token();
         let deadline = self.clock.now() + timeout;
         let mut execution = action.execute(call, cancel.clone());
         tokio::select! {
-            result = &mut execution => result.map_err(Failure::from_action),
+            biased;
+            () = run_cancel.cancelled() => {
+                self.stop(execution, &cancel).await;
+                Outcome::Cancelled
+            }
+            result = &mut execution => match result {
+                Ok(output) => Outcome::Succeeded(output),
+                Err(error) => Outcome::Failed(Failure::from_action(error)),
+            },
             () = self.clock.sleep_until(deadline) => {
-                cancel.cancel();
-                // The Action gets a moment to stop cooperatively; whatever it returns now
-                // does not decide the outcome, and dropping it stops it anyway.
-                let grace = self.clock.now() + self.config.cancel_grace;
-                tokio::select! {
-                    _ = execution => {}
-                    () = self.clock.sleep_until(grace) => {}
-                }
-                Err(Failure::raised(
+                self.stop(execution, &cancel).await;
+                Outcome::Failed(Failure::raised(
                     FailureCode::Timeout,
                     ActionError::retryable(format!(
                         "Attempt timed out after {}",
@@ -688,6 +801,21 @@ impl Interpreter {
                     )),
                 ))
             }
+        }
+    }
+
+    /// Cancels an Action and gives it a moment to stop cooperatively. Whatever it returns then
+    /// does not decide the outcome, and dropping it stops it anyway.
+    async fn stop(
+        &self,
+        execution: bia_core::action::BoxFuture<'_, Result<Output, ActionError>>,
+        cancel: &CancellationToken,
+    ) {
+        cancel.cancel();
+        let grace = self.clock.now() + self.config.cancel_grace;
+        tokio::select! {
+            _ = execution => {}
+            () = self.clock.sleep_until(grace) => {}
         }
     }
 
@@ -721,6 +849,35 @@ impl Interpreter {
     }
 }
 
+/// Requests cancellation of a Run at `at` (ADR-0036). The Run ends `cancelled` at its next
+/// transition: a Worker running one of its Attempts cancels it, and a Run waiting on a delayed
+/// Job, or on none, gets a Job due at `at`. Returns `false`, changing nothing, when the Run
+/// already finished.
+pub async fn cancel_run(
+    conn: &mut PgConnection,
+    run: RunId,
+    at: DateTime<Utc>,
+) -> Result<bool, EngineError> {
+    let mut tx = conn.begin().await?;
+    if !PgRunRepository.request_cancel(&mut tx, run, at).await? {
+        return Ok(false);
+    }
+    let live = PgJobRepository
+        .list_for_run(&mut tx, run)
+        .await?
+        .into_iter()
+        .any(|job| job.failed_at.is_none());
+    if live {
+        PgJobRepository.bring_forward(&mut tx, run, at).await?;
+    } else {
+        PgJobRepository
+            .enqueue(&mut tx, &NewJob::advance_run(run, at))
+            .await?;
+    }
+    tx.commit().await?;
+    Ok(true)
+}
+
 /// Creates a `pending` Run of a Published Version at `at`, with the Job that starts it. Both
 /// commit together.
 pub async fn start_run(
@@ -750,6 +907,30 @@ pub async fn start_run(
         .await?;
     tx.commit().await?;
     Ok(run)
+}
+
+/// Logs a committed transition inside the Run's span, so every line carries its Run id.
+/// Inputs, Outputs and errors stay on the Timeline: they are not for logs.
+fn log_transition(advanced: &Advanced, recorded: Option<(Option<StepAttempt>, AttemptStatus)>) {
+    if let Some((step, status)) = recorded {
+        let status = status.as_str();
+        match step {
+            Some(step) => tracing::info!(
+                step_id = %step.step_id,
+                attempt = step.attempt,
+                action = %step.action,
+                status,
+                "attempt finished"
+            ),
+            None => tracing::info!(status, "run entry recorded"),
+        }
+    }
+    let status = advanced.status.as_str();
+    if advanced.status.is_finished() {
+        tracing::info!(status, "run finished");
+    } else {
+        tracing::debug!(status, next_job_at = ?advanced.next_job_at, "run advanced");
+    }
 }
 
 fn input_failure(definition: &Definition, input: &Value) -> Option<Failure> {

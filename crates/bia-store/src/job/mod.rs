@@ -5,7 +5,7 @@ mod model;
 mod repository;
 mod row;
 
-pub use listener::{JobListener, NOTIFY_CHANNEL};
+pub use listener::{CANCEL_CHANNEL, JobListener, NOTIFY_CHANNEL, Wakeup};
 pub use model::{
     Backoff, Claimed, DEFAULT_MAX_ATTEMPTS, Failed, Job, JobId, JobKind, Lease, NewJob,
 };

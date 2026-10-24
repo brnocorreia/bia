@@ -10,6 +10,9 @@ pub enum AttemptStatus {
     Succeeded,
     Failed,
     Skipped,
+    /// Cut short by Run cancellation: the Attempt in flight, or, in an entry without a Step,
+    /// the Run itself when no Attempt was running.
+    Cancelled,
 }
 
 impl AttemptStatus {
@@ -18,6 +21,7 @@ impl AttemptStatus {
             Self::Succeeded => "succeeded",
             Self::Failed => "failed",
             Self::Skipped => "skipped",
+            Self::Cancelled => "cancelled",
         }
     }
 }

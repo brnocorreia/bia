@@ -49,6 +49,25 @@ pub trait JobRepository {
         lease: &Lease,
     ) -> impl Future<Output = Result<(), StoreError>> + Send;
 
+    /// Gives up `lease` without completing the Job, e.g. on shutdown, so another claimer can
+    /// take it at once instead of waiting for the Lease to expire. Wakes idle claimers once
+    /// the surrounding transaction commits. The Attempt still counts.
+    fn release(
+        &self,
+        conn: &mut PgConnection,
+        lease: &Lease,
+    ) -> impl Future<Output = Result<(), StoreError>> + Send;
+
+    /// Makes the Run's Jobs that are not due yet claimable from `at`, leaving Jobs under a
+    /// Lease and Jobs that gave up as they are. Returns how many Jobs moved. Sends no
+    /// notification.
+    fn bring_forward(
+        &self,
+        conn: &mut PgConnection,
+        run: RunId,
+        at: DateTime<Utc>,
+    ) -> impl Future<Output = Result<u64, StoreError>> + Send;
+
     /// Records that the Attempt under `lease` failed with `error`. The Job is retried after
     /// `backoff`, or gives up once it has used `max_attempts` Attempts.
     fn fail(
@@ -164,6 +183,31 @@ impl JobRepository for PgJobRepository {
             return Err(StoreError::LeaseLost(lease.job_id()));
         }
         Ok(())
+    }
+
+    async fn release(&self, conn: &mut PgConnection, lease: &Lease) -> Result<(), StoreError> {
+        sqlx::query_file_scalar!(
+            "src/job/queries/release.sql",
+            lease.job_id().get(),
+            lease.attempt(),
+        )
+        .fetch_optional(&mut *conn)
+        .await?
+        .ok_or(StoreError::LeaseLost(lease.job_id()))?;
+        Ok(())
+    }
+
+    async fn bring_forward(
+        &self,
+        conn: &mut PgConnection,
+        run: RunId,
+        at: DateTime<Utc>,
+    ) -> Result<u64, StoreError> {
+        let moved = sqlx::query_file!("src/job/queries/bring_forward.sql", run.as_uuid(), at)
+            .execute(&mut *conn)
+            .await?
+            .rows_affected();
+        Ok(moved)
     }
 
     async fn fail(

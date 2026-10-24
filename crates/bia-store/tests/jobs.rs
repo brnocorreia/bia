@@ -10,6 +10,7 @@ use bia_core::clock::{Clock, ManualClock};
 use bia_store::StoreError;
 use bia_store::job::{
     Backoff, Claimed, Failed, JobId, JobKind, JobListener, JobRepository, NewJob, PgJobRepository,
+    Wakeup,
 };
 use bia_store::run::RunId;
 use chrono::TimeDelta;
@@ -196,6 +197,76 @@ async fn an_extended_lease_keeps_the_job(pool: PgPool) {
 }
 
 #[sqlx::test]
+async fn a_released_job_is_claimable_at_once_and_its_old_lease_is_fenced(pool: PgPool) {
+    let clock = ManualClock::new(t0());
+    let mut listener = JobListener::connect(&pool).await.unwrap();
+    let mut conn = pool.acquire().await.unwrap();
+    let run = a_run(&mut conn).await;
+    PgJobRepository
+        .enqueue(&mut conn, &NewJob::advance_run(run, clock.now()))
+        .await
+        .unwrap();
+    listener.recv().await.unwrap();
+    let first = claim(&mut conn, "worker-a", &clock).await.remove(0);
+
+    PgJobRepository
+        .release(&mut conn, &first.lease)
+        .await
+        .unwrap();
+
+    let woken = tokio::time::timeout(Duration::from_secs(10), listener.recv())
+        .await
+        .expect("a release wakes listeners")
+        .unwrap();
+    assert_eq!(woken, Wakeup::JobClaimable(JobKind::AdvanceRun));
+    let second = claim(&mut conn, "worker-b", &clock).await.remove(0);
+    assert_eq!(
+        second.job.id, first.job.id,
+        "no wait for the Lease to expire"
+    );
+    assert_eq!(second.lease.attempt(), 2, "the released Attempt counts");
+    let late = PgJobRepository.ack(&mut conn, &first.lease).await;
+    assert!(matches!(late, Err(StoreError::LeaseLost(_))), "{late:?}");
+    let again = PgJobRepository.release(&mut conn, &first.lease).await;
+    assert!(matches!(again, Err(StoreError::LeaseLost(_))), "{again:?}");
+}
+
+#[sqlx::test]
+async fn bringing_a_run_forward_moves_only_its_waiting_jobs(pool: PgPool) {
+    let clock = ManualClock::new(t0());
+    let mut conn = pool.acquire().await.unwrap();
+    let version = published_workflow(&mut conn, "onboarding-email").await;
+    let run = start_run(&mut conn, &version, t0()).await.id;
+    let other = start_run(&mut conn, &version, t0()).await.id;
+    let later = t0() + TimeDelta::days(3);
+    let waiting = PgJobRepository
+        .enqueue(&mut conn, &NewJob::advance_run(run, later))
+        .await
+        .unwrap();
+    let elsewhere = PgJobRepository
+        .enqueue(&mut conn, &NewJob::advance_run(other, later))
+        .await
+        .unwrap();
+
+    let moved = PgJobRepository
+        .bring_forward(&mut conn, run, clock.now())
+        .await
+        .unwrap();
+
+    assert_eq!(moved, 1);
+    let claimed = claim(&mut conn, "worker-a", &clock).await;
+    let claimed: Vec<_> = claimed.iter().map(|claimed| claimed.job.id).collect();
+    assert_eq!(claimed, [waiting]);
+    let untouched = PgJobRepository.get(&mut conn, elsewhere).await.unwrap();
+    assert_eq!(untouched.unwrap().run_at, later);
+    let moved = PgJobRepository
+        .bring_forward(&mut conn, run, clock.now())
+        .await
+        .unwrap();
+    assert_eq!(moved, 0, "a Job under a Lease stays as it is");
+}
+
+#[sqlx::test]
 async fn a_delayed_job_is_claimable_from_its_run_at(pool: PgPool) {
     let clock = ManualClock::new(t0());
     let mut conn = pool.acquire().await.unwrap();
@@ -314,7 +385,7 @@ async fn a_committed_enqueue_wakes_a_listener(pool: PgPool) {
         .await
         .expect("no notification arrived")
         .unwrap();
-    assert_eq!(woken, JobKind::AdvanceRun);
+    assert_eq!(woken, Wakeup::JobClaimable(JobKind::AdvanceRun));
 }
 
 /// Every behavioural timestamp comes from the Clock (ADR-0022), so no compile-checked query

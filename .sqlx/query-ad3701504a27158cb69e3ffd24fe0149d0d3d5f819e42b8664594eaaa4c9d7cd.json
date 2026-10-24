@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "-- Creates a pending Run pinned to a Published Version; inserts no row otherwise.\n-- $1: workflow id, $2: version number, $3: input, $4: trigger, $5: Cursor, $6: state,\n-- $7: creation time\nINSERT INTO runs (\n    workflow_id, version, status, input, trigger, cursor, state, created_at, updated_at\n)\nSELECT v.workflow_id, v.number, 'pending', $3, $4, $5, $6, $7, $7\nFROM versions v\nWHERE v.workflow_id = $1 AND v.number = $2 AND v.state = 'published'\nRETURNING id, workflow_id, version, status, input, trigger,\n          cursor AS \"cursor: Json<Vec<Value>>\", state, created_at, updated_at, finished_at\n",
+  "query": "-- $1: run id\nSELECT id, workflow_id, version, status, input, trigger,\n       cursor AS \"cursor: Json<Vec<Value>>\", state, created_at, updated_at, finished_at,\n       cancel_requested_at\nFROM runs\nWHERE id = $1\n",
   "describe": {
     "columns": [
       {
@@ -123,17 +123,22 @@
             "name": "finished_at"
           }
         }
+      },
+      {
+        "ordinal": 11,
+        "name": "cancel_requested_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "cancel_requested_at"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
-        "Text",
-        "Int4",
-        "Jsonb",
-        "Jsonb",
-        "Jsonb",
-        "Jsonb",
-        "Timestamptz"
+        "Uuid"
       ]
     },
     "nullable": [
@@ -147,8 +152,9 @@
       false,
       false,
       false,
+      true,
       true
     ]
   },
-  "hash": "d28e8c8b42376007187eb273cdc4558826162e881e241f02b71538d9b1fffac4"
+  "hash": "ad3701504a27158cb69e3ffd24fe0149d0d3d5f819e42b8664594eaaa4c9d7cd"
 }

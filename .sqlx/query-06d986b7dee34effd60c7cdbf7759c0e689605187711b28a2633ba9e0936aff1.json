@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Gives up a Lease so the Job is claimable at once, and wakes idle claimers. The Job keeps\n-- its attempt count, which stays the fencing token for the released Lease.\n-- $1: job id, $2: the Lease's attempt\nWITH released AS (\n    UPDATE jobs\n    SET locked_by = NULL, locked_until = NULL\n    WHERE id = $1 AND attempts = $2 AND locked_until IS NOT NULL\n    RETURNING kind\n)\nSELECT released.kind\nFROM released, pg_notify('bia_jobs', released.kind)\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "kind"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "06d986b7dee34effd60c7cdbf7759c0e689605187711b28a2633ba9e0936aff1"
+}

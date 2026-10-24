@@ -62,6 +62,7 @@ fn attempt_status(status: &str) -> Result<AttemptStatus, StoreError> {
         "succeeded" => AttemptStatus::Succeeded,
         "failed" => AttemptStatus::Failed,
         "skipped" => AttemptStatus::Skipped,
+        "cancelled" => AttemptStatus::Cancelled,
         other => return Err(StoreError::invalid("attempt status", other)),
     })
 }

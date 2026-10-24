@@ -143,7 +143,7 @@ An internal unit of engine work (advance a Run, fire a Schedule, deliver a Messa
 _Avoid_: task
 
 **Lease**:
-A time-bounded claim a Worker holds on a Job; when it expires the Job becomes claimable again.
+A time-bounded claim a Worker holds on a Job, extended by heartbeats while the Job runs; when it expires, or the Worker releases it on shutdown, the Job becomes claimable again.
 _Avoid_: lock (for this meaning)
 
 ### Operation and access

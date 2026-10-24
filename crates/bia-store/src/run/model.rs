@@ -78,6 +78,9 @@ pub struct Run {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub finished_at: Option<DateTime<Utc>>,
+    /// When cancellation was first requested. A Run flagged but not yet finished is still being
+    /// stopped: the Worker running it ends it `cancelled` at its next transition.
+    pub cancel_requested_at: Option<DateTime<Utc>>,
 }
 
 /// What a new Run starts from.
