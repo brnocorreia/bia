@@ -13,7 +13,9 @@ use bia_core::action::{
 };
 use bia_core::clock::{Clock, ManualClock};
 use bia_core::dsl::{ActionName, Definition};
-use bia_engine::{Advanced, EngineError, Interpreter, SecretResolver, start_run};
+use bia_engine::{
+    Advanced, EngineError, Interpreter, InterpreterConfig, RunLimits, SecretResolver, start_run,
+};
 use bia_store::StoreError;
 use bia_store::job::{Claimed, JobRepository, PgJobRepository};
 use bia_store::run::{PgRunRepository, Run, RunId, RunRepository, RunStatus};
@@ -50,6 +52,14 @@ impl Harness {
             clock,
             interpreter,
         }
+    }
+
+    fn with_limits(mut self, limits: RunLimits) -> Self {
+        self.interpreter = self.interpreter.with_config(InterpreterConfig {
+            limits,
+            ..InterpreterConfig::default()
+        });
+        self
     }
 
     fn with_secrets(mut self, secrets: impl SecretResolver + 'static) -> Self {
@@ -1290,4 +1300,190 @@ async fn invalid_flow_params_fail_the_step(pool: PgPool) {
         timeline[0].error.as_ref().unwrap()["code"],
         "invalid_params"
     );
+}
+
+fn small_limits() -> RunLimits {
+    RunLimits {
+        max_steps_per_run: 3,
+        max_output_bytes: 64,
+        ..RunLimits::default()
+    }
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn an_output_over_max_output_bytes_fails_the_step_without_retrying_or_storing_it(
+    pool: PgPool,
+) {
+    let big = Arc::new(FakeAction::new("test.big").returning(json!({ "body": "x".repeat(100) })));
+    let after = Arc::new(FakeAction::new("test.after"));
+    let h = Harness::new(
+        pool,
+        &ManualClock::new(t0()),
+        vec![big.clone(), after.clone()],
+    )
+    .with_limits(small_limits());
+    let run = h
+        .start(
+            definition(
+                "oversized",
+                vec![
+                    json!({
+                        "id": "fetch",
+                        "action": "test.big",
+                        "params": { "page": 1 },
+                        "retry": { "max_attempts": 3, "initial": "1s" },
+                    }),
+                    json!({ "id": "after", "action": "test.after" }),
+                ],
+            ),
+            json!({}),
+        )
+        .await;
+
+    h.drive().await;
+
+    let failed = h.run(run).await;
+    assert_eq!(failed.status, RunStatus::Failed);
+    assert_eq!(
+        big.calls().len(),
+        1,
+        "a limit error does not consume retries"
+    );
+    assert!(after.calls().is_empty());
+    let timeline = h.timeline(run).await;
+    assert_eq!(ran(&timeline), [("fetch", AttemptStatus::Failed)]);
+    assert_eq!(timeline[0].output, None);
+    assert_eq!(timeline[0].input, Some(json!({ "page": 1 })));
+    let error = timeline[0].error.as_ref().unwrap();
+    assert_eq!(error["class"], "fatal");
+    assert_eq!(error["code"], "output_limit_exceeded");
+    assert_eq!(
+        error["details"],
+        json!({ "limit": "max_output_bytes", "max": 64, "actual": 111 })
+    );
+    let state = failed.checkpoint.state.to_string();
+    assert!(!state.contains("xxxx"), "the Output is not stored: {state}");
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn a_run_past_max_steps_per_run_fails_naming_the_limit_and_retries_do_not_count(
+    pool: PgPool,
+) {
+    // Four Steps fit a limit of 4 but not of 3; the flaky Step's retry is still one Step.
+    for (max_steps_per_run, status) in [(3, RunStatus::Failed), (4, RunStatus::Succeeded)] {
+        let clock = ManualClock::new(t0());
+        let echo_action = Arc::new(FakeAction::new("test.echo"));
+        let flaky = Arc::new(Flaky::new(&clock, 1, TimeDelta::zero()));
+        let h = Harness::new(
+            pool.clone(),
+            &clock,
+            vec![echo_action.clone(), flaky.clone()],
+        )
+        .with_limits(RunLimits {
+            max_steps_per_run,
+            ..RunLimits::default()
+        });
+        let run = h
+            .start(
+                definition(
+                    &format!("steps-{max_steps_per_run}"),
+                    vec![
+                        echo("first", 1),
+                        json!({
+                            "id": "flaky",
+                            "action": "test.flaky",
+                            "retry": { "max_attempts": 2, "initial": "1s" },
+                        }),
+                        echo("third", 3),
+                        echo("fourth", 4),
+                    ],
+                ),
+                json!({}),
+            )
+            .await;
+
+        h.drive().await;
+        h.clock.advance(TimeDelta::seconds(1));
+        h.drive().await;
+
+        assert_eq!(h.run(run).await.status, status);
+        let timeline = h.timeline(run).await;
+        let fourth = if status == RunStatus::Failed {
+            AttemptStatus::Failed
+        } else {
+            AttemptStatus::Succeeded
+        };
+        assert_eq!(
+            ran(&timeline),
+            [
+                ("first", AttemptStatus::Succeeded),
+                ("flaky", AttemptStatus::Failed),
+                ("flaky", AttemptStatus::Succeeded),
+                ("third", AttemptStatus::Succeeded),
+                ("fourth", fourth),
+            ]
+        );
+        if status == RunStatus::Failed {
+            assert_eq!(echo_action.calls().len(), 2, "the fourth Step never runs");
+            let error = timeline[4].error.as_ref().unwrap();
+            assert_eq!(error["class"], "fatal");
+            assert_eq!(error["code"], "run_step_limit_exceeded");
+            assert_eq!(
+                error["details"],
+                json!({ "limit": "max_steps_per_run", "max": 3, "actual": 4 })
+            );
+            assert!(
+                error["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains("max_steps_per_run")
+            );
+            assert_eq!(h.jobs_left(run).await, 0);
+        }
+    }
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn a_definition_lowers_max_steps_per_run_and_blocks_and_skipped_steps_count(pool: PgPool) {
+    let echo_action = Arc::new(FakeAction::new("test.echo"));
+    let h = Harness::new(pool, &ManualClock::new(t0()), vec![echo_action.clone()])
+        .with_limits(small_limits());
+    let run = h
+        .start(
+            json!({
+                "schema_version": 1,
+                "id": "lowered",
+                "limits": { "max_steps_per_run": 2 },
+                "steps": [
+                    {
+                        "id": "decide",
+                        "action": "flow.branch",
+                        "when": "true",
+                        "then": [{ "id": "never", "action": "test.echo", "if": "false" }],
+                    },
+                    echo("after", 1),
+                ],
+            }),
+            json!({}),
+        )
+        .await;
+
+    h.drive().await;
+
+    assert_eq!(h.run(run).await.status, RunStatus::Failed);
+    let timeline = h.timeline(run).await;
+    assert_eq!(
+        ran(&timeline),
+        [
+            ("decide", AttemptStatus::Succeeded),
+            ("never", AttemptStatus::Skipped),
+            ("after", AttemptStatus::Failed),
+        ]
+    );
+    assert_eq!(
+        timeline[2].error.as_ref().unwrap()["details"]["max"],
+        2,
+        "the Definition's limit is lower than the global 3"
+    );
+    assert!(echo_action.calls().is_empty());
 }

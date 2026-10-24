@@ -61,7 +61,7 @@ pub struct Definition {
     pub on_error: Vec<Step>,
 }
 
-/// Per-Workflow limits.
+/// Per-Workflow limits. Each one can only lower the server's global limit of the same name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Limits {
@@ -69,6 +69,17 @@ pub struct Limits {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(range(min = 1))]
     pub max_concurrent_runs: Option<u32>,
+    /// Most Steps one Run may take up. A Step counts once each time the Run reaches it, also
+    /// when skipped or failed; retries do not count again. Past it the Run fails with
+    /// `run_step_limit_exceeded`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 1))]
+    pub max_steps_per_run: Option<u64>,
+    /// Largest Output a Step may produce, in bytes of compact JSON. A larger one fails the Step
+    /// with `output_limit_exceeded` and is not stored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 1))]
+    pub max_output_bytes: Option<u64>,
 }
 
 /// The DSL version a Definition is written in.

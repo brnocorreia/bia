@@ -4,8 +4,8 @@
 //! rebuilds the Schedules of Workflows whose Active Version changed, fires each due Schedule in
 //! a transaction of its own, and runs the [`Chore`]s that are due. Firing claims the Schedule's
 //! row and creates the Run with its first Job in the same transaction, so an occurrence fires
-//! exactly once even while two schedulers both believe they lead (ADR-0038). Which occurrences
-//! fire is ADR-0039.
+//! exactly once even while two schedulers both believe they lead (ADR-0039). Which occurrences
+//! fire is ADR-0040.
 
 use std::fmt;
 use std::sync::Arc;

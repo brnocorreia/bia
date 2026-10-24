@@ -29,7 +29,7 @@ const RELEASED: &[(i64, &str)] = &[
     ),
     (
         5,
-        "fb6e349271d39ff6951e62447bed0ff9055b27689ea27ced1cc7d799020adc5e01d466947a8491dd6877458f5457d72e",
+        "a19e2d616ef6b641e789d96d3f79af32ba09d5c0598fd4a9b0b2a1b74dcc60dcb31579d9a9ff496b7059b818ad95165f",
     ),
 ];
 

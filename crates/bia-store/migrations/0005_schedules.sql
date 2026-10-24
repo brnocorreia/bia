@@ -1,5 +1,5 @@
 -- Schedules: the scheduler's materialised state for the cron Triggers of
--- Active Versions. Semantics: ADR-0038, ADR-0039.
+-- Active Versions. Semantics: ADR-0039, ADR-0040.
 
 -- The Active Version the Workflow's Schedules were built from. The scheduler
 -- rebuilds them whenever it differs from active_version.

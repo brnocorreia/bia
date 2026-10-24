@@ -74,11 +74,23 @@ expression: definition_schema()
     },
     "Limits": {
       "additionalProperties": false,
-      "description": "Per-Workflow limits.",
+      "description": "Per-Workflow limits. Each one can only lower the server's global limit of the same name.",
       "properties": {
         "max_concurrent_runs": {
           "description": "Most Runs of this Workflow active at once.",
           "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_output_bytes": {
+          "description": "Largest Output a Step may produce, in bytes of compact JSON. A larger one fails the Step\nwith `output_limit_exceeded` and is not stored.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_steps_per_run": {
+          "description": "Most Steps one Run may take up. A Step counts once each time the Run reaches it, also\nwhen skipped or failed; retries do not count again. Past it the Run fails with\n`run_step_limit_exceeded`.",
+          "format": "uint64",
           "minimum": 1,
           "type": "integer"
         }

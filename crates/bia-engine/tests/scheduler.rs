@@ -1,6 +1,6 @@
 //! The scheduler fires cron Triggers of Active Versions on time, in their time zone and with
 //! jitter, honours the Overlap and Catch-up Policies, and fires each occurrence exactly once
-//! across scheduler replicas, including when the leader dies (ADR-0038, ADR-0039).
+//! across scheduler replicas, including when the leader dies (ADR-0039, ADR-0040).
 
 #![allow(clippy::unwrap_used)]
 

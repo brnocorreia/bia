@@ -101,6 +101,18 @@ Human Tasks: `human.approval`, `human.form` (fields from a JSON Schema), `human.
 - JSON numbers without a fractional part are `int`; other numbers are `double`. Results become JSON again, with `bytes` as base64, `timestamp` as RFC 3339 and `duration` as `"1.5s"`.
 - Limits: an expression is at most 8 KiB, at most 32 levels deep, and spends at most 100,000 cost units per evaluation. Each `map`/`filter`/`all`/`exists`/`exists_one` iteration costs 1 plus the size of what it produces.
 
+## Limits
+
+A Run is held to the server's global limits (ADR-0012, ADR-0038; configured as in [`configuration.md`](configuration.md)). A Definition's top-level `limits` can lower, never raise, two of them; a higher value is capped at the global limit.
+
+| Field | Meaning |
+|---|---|
+| `max_concurrent_runs` | Most Runs of this Workflow active at once. |
+| `max_steps_per_run` | Most Steps one Run may take up (global default 10,000). A Step counts once each time the Run reaches it, also when skipped or failed; retries and waking from a sleep do not count again. |
+| `max_output_bytes` | Largest Output a Step may produce, in bytes of compact JSON (global default 256 KiB). |
+
+A loop's `max_iterations` lowers the global `max_iterations` (default 10,000) for that loop, and `flow.subworkflow` is bounded by `max_subworkflow_depth` (default 8). Going past any limit fails the Step with a `fatal` error, so it consumes no retries. Its Timeline `code` is `run_step_limit_exceeded`, `iteration_limit_exceeded`, `subworkflow_depth_exceeded` or `output_limit_exceeded`, and its `details` are `{ "limit", "max", "actual" }`. An Output over the limit is not stored.
+
 ## Triggers
 
 | `type` | Fields |
@@ -116,7 +128,7 @@ Every Trigger has an `id` (`[a-z][a-z0-9_]*`) unique within the Definition, and 
 
 ### Cron
 
-Only the cron Triggers of the Active Version fire. Activating another Version replaces them within a second; a Trigger whose `expr`, `tz` and `jitter` did not change keeps its next occurrence. Semantics: ADR-0039.
+Only the cron Triggers of the Active Version fire. Activating another Version replaces them within a second; a Trigger whose `expr`, `tz` and `jitter` did not change keeps its next occurrence. Semantics: ADR-0040.
 
 - `expr` has five fields: minute, hour, day of month, month, day of week (`0 9 * * 1-5`). `L`, `W`, `#`, names (`MON`, `JAN`) and aliases (`@hourly`, `@daily`, `@weekly`, `@monthly`, `@yearly`) work; seconds do not.
 - `tz` is an IANA time zone, UTC by default. Occurrences follow its wall clock: `0 9 * * *` stays at 09:00 local across DST changes, a time skipped by a change fires right after the gap, and a time repeated by one fires once.

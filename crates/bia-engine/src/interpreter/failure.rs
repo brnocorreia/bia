@@ -59,4 +59,12 @@ pub(crate) enum FailureCode {
     InvalidExpression,
     /// The Run reached a `flow.fail` Step.
     FlowFail,
+    /// The Run would take up more Steps than `max_steps_per_run`.
+    RunStepLimitExceeded,
+    /// A loop would run more iterations than `max_iterations`.
+    IterationLimitExceeded,
+    /// A Subworkflow would nest deeper than `max_subworkflow_depth`.
+    SubworkflowDepthExceeded,
+    /// The Action returned an Output larger than `max_output_bytes`; it was not stored.
+    OutputLimitExceeded,
 }

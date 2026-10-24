@@ -140,6 +140,10 @@ pub(crate) struct RunState {
     /// Attempts the Step at the Cursor has finished so far; the next one is `attempts + 1`.
     #[serde(default)]
     pub(crate) attempts: u32,
+    /// Steps the Run has taken up so far, the one at the Cursor included once it started;
+    /// what `max_steps_per_run` counts.
+    #[serde(default)]
+    pub(crate) steps: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) sleep: Option<Sleep>,
 }

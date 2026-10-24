@@ -1,5 +1,5 @@
 //! Schedules: the scheduler's materialised state for the cron Triggers of Active Versions, and
-//! the advisory lock that elects one scheduler to fire them (ADR-0038).
+//! the advisory lock that elects one scheduler to fire them (ADR-0039).
 
 mod leader;
 mod model;

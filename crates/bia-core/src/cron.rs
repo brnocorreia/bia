@@ -4,7 +4,7 @@
 //! Vixie-cron dialect, plus `L`, `W`, `#` and aliases such as `@daily`, parsed by `croner`.
 //! Occurrences follow the wall clock of the time zone: across a DST change `0 9 * * *` stays at
 //! 09:00 local, a time skipped by the change fires at the first instant after the gap, and a
-//! time repeated by it fires once. Semantics: ADR-0039.
+//! time repeated by it fires once. Semantics: ADR-0040.
 
 use chrono::{DateTime, TimeDelta, Utc};
 use chrono_tz::Tz;

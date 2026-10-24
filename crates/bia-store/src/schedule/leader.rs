@@ -13,7 +13,7 @@ const KEY: i64 = 0x6269_615f_7363_6864;
 /// The lock lives on a connection of its own, outside the pool, because a session lock stays
 /// with its connection: a pooled one would carry it back into the pool. When the process dies
 /// or the connection drops, Postgres releases the lock and another scheduler can take it.
-/// Leadership only saves work: firing stays exactly-once without it (ADR-0038).
+/// Leadership only saves work: firing stays exactly-once without it (ADR-0039).
 pub struct LeaderLock {
     options: PgConnectOptions,
     conn: Option<PgConnection>,

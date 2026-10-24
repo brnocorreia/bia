@@ -1,5 +1,5 @@
 //! What one claim of a Schedule fires: the Catch-up Policy picks among the occurrences that
-//! fell due, then the Overlap Policy decides which of them start now (ADR-0039).
+//! fell due, then the Overlap Policy decides which of them start now (ADR-0040).
 
 use bia_core::cron::{Cron, jitter};
 use bia_core::dsl::{CatchUpPolicy, OverlapPolicy};

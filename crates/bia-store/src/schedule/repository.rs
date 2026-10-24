@@ -13,7 +13,7 @@ use crate::workflow::workflow_id;
 
 /// Schedules are rebuilt by the scheduler whenever a Workflow's Active Version changes, and
 /// fired under a row lock, so any number of schedulers can call these methods at once without
-/// firing an occurrence twice (ADR-0038).
+/// firing an occurrence twice (ADR-0039).
 pub trait ScheduleRepository {
     /// Workflows whose Schedules were not built from their current Active Version, including
     /// Workflows that have none any more.
