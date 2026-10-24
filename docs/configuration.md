@@ -19,6 +19,7 @@ A file key `section.name` is the variable `BIA_SECTION_NAME`. Durations are a wh
 | `worker.lease` | `BIA_WORKER_LEASE` | `30s` | How long a claim holds a Job, at least `1s`. A heartbeat extends it every third of its duration while the Job runs, so it bounds how long a crashed Worker's Jobs wait before another Worker takes them. |
 | `worker.poll_interval` | `BIA_WORKER_POLL_INTERVAL` | `5s` | How often an idle Worker claims without a notification, which bounds how late a delayed Job, such as a sleep or a retry, starts. |
 | `worker.shutdown_grace` | `BIA_WORKER_SHUTDOWN_GRACE` | `20s` | How long in-flight Jobs may keep running after SIGTERM or SIGINT. Jobs still running then are stopped and their Leases released to another Worker. Keep it below your orchestrator's kill timeout. |
+| `scheduler.poll_interval` | `BIA_SCHEDULER_POLL_INTERVAL` | `1s` | How often a scheduler fires due cron Triggers and checks whether it leads. It bounds how late an occurrence fires and how long another scheduler takes over after the leader dies. |
 | `log.format` | `BIA_LOG_FORMAT` | `text` | `text` for people, `json` for log pipelines. |
 | `log.filter` | `BIA_LOG_FILTER` | `info` | A [`tracing` filter directive](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html), e.g. `info,bia_engine=debug`. |
 
@@ -35,6 +36,9 @@ database_url = "postgres://bia:bia@localhost:5432/bia"
 concurrency = 32
 lease = "1m"
 
+[scheduler]
+poll_interval = "2s"
+
 [log]
 format = "json"
 ```
@@ -46,4 +50,4 @@ BIA_WORKER_CONCURRENCY=8 bia serve --config bia.toml --role worker
 
 ## Signals
 
-The first SIGTERM or SIGINT starts the graceful shutdown described under `worker.shutdown_grace`. A second one exits at once, leaving unfinished Jobs to be claimed again once their Leases expire.
+The first SIGTERM or SIGINT starts the graceful shutdown described under `worker.shutdown_grace`, and a leading scheduler hands leadership to another one at once. A second one exits at once, leaving unfinished Jobs to be claimed again once their Leases expire.

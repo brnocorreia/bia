@@ -114,6 +114,17 @@ Human Tasks: `human.approval`, `human.form` (fields from a JSON Schema), `human.
 
 Every Trigger has an `id` (`[a-z][a-z0-9_]*`) unique within the Definition, and only the fields of its `type`. The Trigger payload becomes `input` (validated against `input_schema`), and its metadata becomes `trigger`.
 
+### Cron
+
+Only the cron Triggers of the Active Version fire. Activating another Version replaces them within a second; a Trigger whose `expr`, `tz` and `jitter` did not change keeps its next occurrence. Semantics: ADR-0039.
+
+- `expr` has five fields: minute, hour, day of month, month, day of week (`0 9 * * 1-5`). `L`, `W`, `#`, names (`MON`, `JAN`) and aliases (`@hourly`, `@daily`, `@weekly`, `@monthly`, `@yearly`) work; seconds do not.
+- `tz` is an IANA time zone, UTC by default. Occurrences follow its wall clock: `0 9 * * *` stays at 09:00 local across DST changes, a time skipped by a change fires right after the gap, and a time repeated by one fires once.
+- `jitter` delays each firing by up to the Duration. Each occurrence gets its own delay, the same on every scheduler replica.
+- `overlap` decides what happens while the previous Run this Trigger started is still active: `skip` (default) drops the occurrence, `queue` starts it once that Run finishes, holding at most 100 and skipping further ones, and `allow` starts it at once.
+- `catch_up` decides what happens to occurrences missed while no scheduler ran, meaning reached more than a minute after they were due: `none` drops them, `latest` (default) fires the newest one, and `all` fires each, up to the 100 most recent. The fired occurrences then go through `overlap`, so `all` with `skip` fires only the first.
+- A cron Run's input is `{}`, and its `trigger` is `{ "type": "cron", "id": "<trigger id>", "scheduled_at": "<occurrence, RFC 3339 UTC>" }`. `scheduled_at` is the occurrence before jitter, even when the Run started later from the queue or after downtime.
+
 ## Queue resources
 
 Queues are declared separately from Workflows (ADR-0015). A resource file is told apart from a Definition by its top-level `kind`; Definitions never have one (ADR-0025). Only `kind` and `name` are required.

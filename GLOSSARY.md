@@ -75,7 +75,7 @@ A declaration in a Definition of what starts a Run: cron, queue, webhook, manual
 _Avoid_: hook, listener
 
 **Schedule**:
-The scheduler's materialised state for a cron Trigger: when it fires next, its Overlap Policy and Catch-up Policy.
+The scheduler's materialised state for a cron Trigger of an Active Version: when it fires next, its Overlap Policy and Catch-up Policy, the occurrences it holds back and the Run it started last.
 
 **Overlap Policy**:
 What a cron Trigger does when the previous Run is still active: `skip`, `queue` or `allow`.
@@ -139,7 +139,7 @@ The Queue that receives Messages which exhausted their retries.
 _Avoid_: DLQ in prose (fine in identifiers), error queue
 
 **Job**:
-An internal unit of engine work (advance a Run, fire a Schedule, deliver a Message) claimed by a Worker. Never user-facing.
+An internal unit of engine work (advance a Run, deliver a Message) claimed by a Worker. Never user-facing.
 _Avoid_: task
 
 **Lease**:
@@ -153,6 +153,14 @@ A responsibility a `bia serve` process takes on: `api`, `worker`, `scheduler`, o
 
 **Worker**:
 A process with the `worker` Role, which claims Jobs and executes Actions.
+
+**Leader**:
+The one scheduler, among those running, that holds the Postgres advisory lock and so fires Schedules and runs Chores.
+_Avoid_: primary, master
+
+**Chore**:
+Periodic upkeep the Leader runs on an interval, such as Run retention. Unlike a Job, it is not stored or claimed.
+_Avoid_: task, cron job
 
 **Clock**:
 Where the engine, scheduler and store read the current time from, and wait on it: the system Clock in production, a manual Clock that tests move forward.
