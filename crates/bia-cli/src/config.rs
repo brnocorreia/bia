@@ -8,7 +8,7 @@ use std::str::FromStr;
 
 use anyhow::{Context, anyhow, bail};
 use bia_core::dsl::Duration;
-use bia_engine::{InterpreterConfig, RunLimits, WorkerConfig};
+use bia_engine::{InterpreterConfig, RunLimits, SchedulerConfig, WorkerConfig};
 use chrono::TimeDelta;
 use figment::Figment;
 use figment::providers::{Env, Format, Toml};
@@ -18,15 +18,16 @@ use sqlx::postgres::PgConnectOptions;
 use tracing_subscriber::EnvFilter;
 
 const ENV_PREFIX: &str = "BIA_";
-const SECTIONS: [&str; 3] = ["worker", "log", "limits"];
+const SECTIONS: [&str; 4] = ["worker", "scheduler", "log", "limits"];
 /// Every key the environment may set, as key paths.
-const KEYS: [&str; 12] = [
+const KEYS: [&str; 13] = [
     "database_url",
     "worker.id",
     "worker.concurrency",
     "worker.lease",
     "worker.poll_interval",
     "worker.shutdown_grace",
+    "scheduler.poll_interval",
     "log.format",
     "log.filter",
     "limits.max_steps_per_run",
@@ -41,6 +42,7 @@ const KEYS: [&str; 12] = [
 pub(crate) struct Config {
     database_url: Option<String>,
     pub(crate) worker: Worker,
+    pub(crate) scheduler: Scheduler,
     pub(crate) log: Log,
     limits: Limits,
 }
@@ -54,6 +56,12 @@ pub(crate) struct Worker {
     lease: Duration,
     poll_interval: Duration,
     shutdown_grace: Duration,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct Scheduler {
+    poll_interval: Duration,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -81,20 +89,34 @@ pub(crate) enum LogFormat {
     Json,
 }
 
+/// A default `TimeDelta` as a config Duration, in whole seconds.
+fn duration(delta: TimeDelta) -> Duration {
+    let seconds = u64::try_from(delta.num_seconds()).unwrap_or_default();
+    Duration::new(seconds, bia_core::dsl::DurationUnit::Seconds)
+        .unwrap_or_else(|| unreachable!("default durations are small"))
+}
+
+fn delta(duration: Duration) -> TimeDelta {
+    TimeDelta::from_std(duration.to_std()).unwrap_or(TimeDelta::MAX)
+}
+
 impl Default for Worker {
     fn default() -> Self {
         let defaults = WorkerConfig::default();
-        let duration = |delta: TimeDelta| {
-            let seconds = u64::try_from(delta.num_seconds()).unwrap_or_default();
-            Duration::new(seconds, bia_core::dsl::DurationUnit::Seconds)
-                .unwrap_or_else(|| unreachable!("default durations are small"))
-        };
         Self {
             id: None,
             concurrency: defaults.concurrency,
             lease: duration(defaults.lease),
             poll_interval: duration(defaults.poll_interval),
             shutdown_grace: duration(defaults.shutdown_grace),
+        }
+    }
+}
+
+impl Default for Scheduler {
+    fn default() -> Self {
+        Self {
+            poll_interval: duration(SchedulerConfig::default().poll_interval),
         }
     }
 }
@@ -162,6 +184,9 @@ impl Config {
         if self.worker.poll_interval.as_millis() == 0 {
             bail!("invalid configuration: `worker.poll_interval` must be more than 0s");
         }
+        if self.scheduler.poll_interval.as_millis() == 0 {
+            bail!("invalid configuration: `scheduler.poll_interval` must be more than 0s");
+        }
         EnvFilter::try_new(&self.log.filter).with_context(|| {
             format!(
                 "invalid configuration: `log.filter` `{}` is not a tracing filter",
@@ -181,21 +206,22 @@ impl Config {
     }
 
     pub(crate) fn worker_id(&self) -> String {
-        self.worker.id.clone().unwrap_or_else(|| {
-            let host = std::env::var("HOSTNAME").unwrap_or_else(|_| "bia".to_owned());
-            format!("{host}-{}", std::process::id())
-        })
+        self.worker.id.clone().unwrap_or_else(process_name)
     }
 
     pub(crate) fn worker_config(&self) -> WorkerConfig {
-        let delta =
-            |duration: Duration| TimeDelta::from_std(duration.to_std()).unwrap_or(TimeDelta::MAX);
         WorkerConfig {
             concurrency: self.worker.concurrency,
             lease: delta(self.worker.lease),
             poll_interval: delta(self.worker.poll_interval),
             shutdown_grace: delta(self.worker.shutdown_grace),
             ..WorkerConfig::default()
+        }
+    }
+
+    pub(crate) fn scheduler_config(&self) -> SchedulerConfig {
+        SchedulerConfig {
+            poll_interval: delta(self.scheduler.poll_interval),
         }
     }
 
@@ -211,6 +237,12 @@ impl Config {
             ..InterpreterConfig::default()
         }
     }
+}
+
+/// `<HOSTNAME>-<pid>`, naming this process in Leases and logs.
+pub(crate) fn process_name() -> String {
+    let host = std::env::var("HOSTNAME").unwrap_or_else(|_| "bia".to_owned());
+    format!("{host}-{}", std::process::id())
 }
 
 /// One extraction error, naming the key and the file or variable its value came from.
@@ -297,6 +329,7 @@ mod tests {
             )?;
             jail.set_env("BIA_WORKER_CONCURRENCY", "32");
             jail.set_env("BIA_WORKER_POLL_INTERVAL", "250ms");
+            jail.set_env("BIA_SCHEDULER_POLL_INTERVAL", "2s");
 
             let config = load(jail, Some("bia.toml")).unwrap();
 
@@ -309,6 +342,10 @@ mod tests {
             assert_eq!(worker.lease, TimeDelta::minutes(1), "the file wins");
             assert_eq!(worker.poll_interval, TimeDelta::milliseconds(250));
             assert_eq!(worker.shutdown_grace, TimeDelta::seconds(20), "default");
+            assert_eq!(
+                config.scheduler_config().poll_interval,
+                TimeDelta::seconds(2)
+            );
             assert_eq!(config.log.format, LogFormat::Json);
             assert_eq!(config.log.filter, "info");
             Ok(())

@@ -1,0 +1,167 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- One Schedule with something to fire at $1: an occurrence that fell due, or a queued one\n-- whose previous Run finished. Only Schedules of the current Active Version qualify; sharing\n-- the Workflow row lock means a Version that stops being active cannot fire afterwards.\n-- Schedules another scheduler is firing are skipped.\n-- $1: now\nSELECT s.workflow_id, s.trigger_id, s.version, s.expr, s.tz, s.jitter, s.overlap, s.catch_up,\n       s.next_at, s.due_at, s.queued, s.last_run_id,\n       (r.id IS NOT NULL AND r.finished_at IS NULL) AS \"previous_active!\"\nFROM schedules s\nJOIN workflows w ON w.id = s.workflow_id AND w.active_version = s.version\nLEFT JOIN runs r ON r.id = s.last_run_id\nWHERE s.due_at <= $1\n   OR (cardinality(s.queued) > 0 AND (r.id IS NULL OR r.finished_at IS NOT NULL))\nORDER BY s.due_at, s.workflow_id, s.trigger_id\nLIMIT 1\nFOR UPDATE OF s SKIP LOCKED\nFOR SHARE OF w\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "workflow_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "workflow_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "trigger_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "trigger_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "expr",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "expr"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "tz",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "tz"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "jitter",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "jitter"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "overlap",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "overlap"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "catch_up",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "catch_up"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "next_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "next_at"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "due_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "due_at"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "queued",
+        "type_info": "TimestamptzArray",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "queued"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "last_run_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "last_run_id"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "previous_active!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "20ec896917e37be0a8c529f8edb2622226189986c65b295638c15376afc983fc"
+}

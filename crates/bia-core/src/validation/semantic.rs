@@ -17,6 +17,7 @@ use super::params::{self, Resource};
 use super::suggest::did_you_mean;
 use super::{Code, Diagnostic, Severity, Validator, token};
 use crate::action::Lookup;
+use crate::cron::CronError;
 use crate::dsl::{self, BLOCK_ACTIONS, Definition, Join, Params, Step, StepKind, TriggerKind};
 use crate::expression::{CompileError, CompileErrorKind, Expression, References, Template};
 
@@ -228,12 +229,28 @@ impl<'a> Checker<'_, 'a> {
                     seen.insert(trigger.id.as_str(), i);
                 }
             }
-            if let TriggerKind::Queue(queue) = &trigger.kind {
-                self.resource(
+            match &trigger.kind {
+                TriggerKind::Queue(queue) => self.resource(
                     Resource::Queue,
                     queue.queue.as_str(),
                     format!("{path}/queue"),
-                );
+                ),
+                TriggerKind::Cron(cron) => {
+                    if let Err(error) = cron.cron() {
+                        let field = match error {
+                            CronError::UnknownTimeZone(_) => "tz",
+                            CronError::InvalidExpression { .. } | CronError::NeverFires(_) => {
+                                "expr"
+                            }
+                        };
+                        self.error(
+                            format!("{path}/{field}"),
+                            Code::InvalidValue,
+                            error.to_string(),
+                        );
+                    }
+                }
+                _ => {}
             }
         }
     }

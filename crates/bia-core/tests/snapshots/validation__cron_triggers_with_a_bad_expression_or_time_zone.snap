@@ -1,0 +1,27 @@
+---
+source: crates/bia-core/tests/validation.rs
+expression: "validate(Target::Draft,\njson!({\n    \"schema_version\": 1, \"id\": \"t\", \"steps\": [], \"triggers\":\n    [{ \"id\": \"short\", \"type\": \"cron\", \"expr\": \"0 9 * *\" },\n    { \"id\": \"never\", \"type\": \"cron\", \"expr\": \"0 0 30 2 *\" },\n    {\n        \"id\": \"away\", \"type\": \"cron\", \"expr\": \"0 9 * * *\", \"tz\":\n        \"Mars/Olympus\"\n    },\n    {\n        \"id\": \"fine\", \"type\": \"cron\", \"expr\": \"@daily\", \"tz\":\n        \"America/Sao_Paulo\"\n    },]\n}),)"
+---
+[
+  {
+    "path": "/triggers/0/expr",
+    "code": "invalid_value",
+    "severity": "error",
+    "message": "invalid cron expression `0 9 * *`: Invalid pattern: Pattern must have 5 fields when seconds are disallowed.",
+    "suggestion": null
+  },
+  {
+    "path": "/triggers/1/expr",
+    "code": "invalid_value",
+    "severity": "error",
+    "message": "cron expression `0 0 30 2 *` never fires",
+    "suggestion": null
+  },
+  {
+    "path": "/triggers/2/tz",
+    "code": "invalid_value",
+    "severity": "error",
+    "message": "unknown time zone `Mars/Olympus`: expected an IANA name such as `America/Sao_Paulo`",
+    "suggestion": null
+  }
+]

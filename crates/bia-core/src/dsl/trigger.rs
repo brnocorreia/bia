@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize, Serializer};
 
 use super::schema::tagged_object;
 use super::{Duration, QueueName, TriggerId};
+use crate::cron::{Cron, CronError};
 
 /// A declaration of what starts a Run.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -50,21 +51,40 @@ impl TriggerKind {
 /// `type: cron`: starts Runs on a cron schedule.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
 pub struct CronTrigger {
-    /// Cron expression, e.g. `0 9 * * *`.
+    /// Cron expression with five fields (minute, hour, day of month, month, day of week),
+    /// e.g. `0 9 * * *`. `L`, `W`, `#` and aliases such as `@daily` are accepted.
     pub expr: String,
-    /// IANA time zone the expression is read in, e.g. `America/Sao_Paulo`.
+    /// IANA time zone the expression is read in, e.g. `America/Sao_Paulo`. Defaults to UTC.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tz: Option<String>,
-    /// Random delay added to each firing, up to this Duration.
+    /// Delay added to each firing, up to this Duration. Each occurrence gets its own delay,
+    /// the same on every scheduler.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub jitter: Option<Duration>,
+    /// What to do when the previous Run of this Trigger is still active. Defaults to `skip`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub overlap: Option<OverlapPolicy>,
+    /// What to do with firings missed while bia was down. Defaults to `latest`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub catch_up: Option<CatchUpPolicy>,
 }
 
-/// What a cron Trigger does when the previous Run is still active.
+impl CronTrigger {
+    pub fn cron(&self) -> Result<Cron, CronError> {
+        Cron::new(&self.expr, self.tz.as_deref())
+    }
+
+    pub fn overlap_policy(&self) -> OverlapPolicy {
+        self.overlap.unwrap_or(OverlapPolicy::Skip)
+    }
+
+    pub fn catch_up_policy(&self) -> CatchUpPolicy {
+        self.catch_up.unwrap_or(CatchUpPolicy::Latest)
+    }
+}
+
+/// What a cron Trigger does when the previous Run is still active: `skip` the firing,
+/// `queue` it until that Run finishes, or `allow` it to start at once.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum OverlapPolicy {
@@ -73,13 +93,34 @@ pub enum OverlapPolicy {
     Allow,
 }
 
-/// What a cron Trigger does with firings missed while bia was down.
+impl OverlapPolicy {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Skip => "skip",
+            Self::Queue => "queue",
+            Self::Allow => "allow",
+        }
+    }
+}
+
+/// What a cron Trigger does with firings missed while bia was down: fire `none` of them,
+/// only the `latest`, or `all` of them, up to the 100 most recent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum CatchUpPolicy {
     None,
     Latest,
     All,
+}
+
+impl CatchUpPolicy {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Latest => "latest",
+            Self::All => "all",
+        }
+    }
 }
 
 /// `type: queue`: starts Runs from the Messages of a Queue.

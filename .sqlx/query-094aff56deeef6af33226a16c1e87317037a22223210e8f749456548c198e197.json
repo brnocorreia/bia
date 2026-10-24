@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Workflows whose Schedules were not built from their current Active Version.\nSELECT id\nFROM workflows\nWHERE active_version IS DISTINCT FROM scheduled_version\nORDER BY id\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "workflows",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "094aff56deeef6af33226a16c1e87317037a22223210e8f749456548c198e197"
+}

@@ -1,5 +1,5 @@
-//! The `bia` binary migrates an empty database, runs a Run to completion as a Worker, stops on
-//! SIGTERM, and refuses to start with invalid configuration.
+//! The `bia` binary migrates an empty database, runs a Run to completion as a Worker, leads as a
+//! scheduler, stops on SIGTERM, and refuses to start with invalid configuration.
 
 #![cfg(unix)]
 #![allow(clippy::unwrap_used)]
@@ -17,6 +17,7 @@ use bia_store::version::{PgVersionRepository, VersionRepository};
 use bia_store::workflow::{PgWorkflowRepository, WorkflowRepository};
 use serde_json::json;
 use sqlx::PgPool;
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
 fn bia() -> Command {
@@ -155,4 +156,46 @@ async fn invalid_configuration_fails_at_startup_with_a_clear_message() {
         stderr.contains("`worker.concurrency` in BIA_WORKER_CONCURRENCY"),
         "{stderr}"
     );
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn bia_serve_as_a_scheduler_leads_and_stops_on_sigterm(pool: PgPool) {
+    let mut scheduler = bia()
+        .args(["serve", "--role", "scheduler"])
+        .env("BIA_DATABASE_URL", database_url(&pool))
+        .env("BIA_LOG_FORMAT", "json")
+        .env("BIA_SCHEDULER_POLL_INTERVAL", "100ms")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdout = BufReader::new(scheduler.stdout.take().unwrap()).lines();
+    let mut logs = String::new();
+    let leading = tokio::time::timeout(Duration::from_secs(60), async {
+        while let Some(line) = stdout.next_line().await.unwrap() {
+            logs.push_str(&line);
+            logs.push('\n');
+            if line.contains("\"leading\"") {
+                return;
+            }
+        }
+    })
+    .await;
+    assert!(leading.is_ok(), "the scheduler did not lead; logs:\n{logs}");
+
+    let terminated = std::process::Command::new("kill")
+        .args(["-TERM", &scheduler.id().unwrap().to_string()])
+        .status()
+        .unwrap();
+    assert!(terminated.success());
+    while let Some(line) = stdout.next_line().await.unwrap() {
+        logs.push_str(&line);
+        logs.push('\n');
+    }
+    let stopped = tokio::time::timeout(Duration::from_secs(60), scheduler.wait())
+        .await
+        .expect("bia did not stop on SIGTERM")
+        .unwrap();
+    assert!(stopped.success(), "{stopped:?}");
+    assert!(logs.contains("scheduler stopped"), "{logs}");
 }

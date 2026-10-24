@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Deletes the Workflow's Schedules for Triggers not in $2.\n-- $1: workflow id, $2: trigger ids to keep\nDELETE FROM schedules\nWHERE workflow_id = $1 AND NOT (trigger_id = ANY ($2))\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9f4a9f4775541f681b04bb3bb4901c7878e3062517271e41c5b5c4d0916ef0c2"
+}

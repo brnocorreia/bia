@@ -527,6 +527,19 @@ fn shape_errors_are_diagnostics_with_paths() {
 }
 
 #[test]
+fn cron_triggers_with_a_bad_expression_or_time_zone() {
+    insta::assert_json_snapshot!(validate(
+        Target::Draft,
+        json!({ "schema_version": 1, "id": "t", "steps": [], "triggers": [
+            { "id": "short", "type": "cron", "expr": "0 9 * *" },
+            { "id": "never", "type": "cron", "expr": "0 0 30 2 *" },
+            { "id": "away", "type": "cron", "expr": "0 9 * * *", "tz": "Mars/Olympus" },
+            { "id": "fine", "type": "cron", "expr": "@daily", "tz": "America/Sao_Paulo" },
+        ]}),
+    ));
+}
+
+#[test]
 fn the_code_catalogue_is_stable() {
     let catalogue: Vec<&str> = Code::ALL.iter().map(|code| code.as_str()).collect();
     insta::assert_json_snapshot!(catalogue);

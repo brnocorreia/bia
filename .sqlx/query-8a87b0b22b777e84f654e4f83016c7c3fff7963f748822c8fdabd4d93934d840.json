@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- $1: workflow id, $2: trigger id\nDELETE FROM schedules\nWHERE workflow_id = $1 AND trigger_id = $2\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8a87b0b22b777e84f654e4f83016c7c3fff7963f748822c8fdabd4d93934d840"
+}

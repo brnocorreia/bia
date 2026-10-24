@@ -45,12 +45,13 @@ Engine, scheduler and store read time from an injected `Clock` (ADR-0022), and w
 - `bia migrate` applies migrations.
 - Both read their configuration from a TOML file under `BIA_*` environment variables (ADR-0037, [`configuration.md`](configuration.md)).
 - A Worker runs claimed Jobs as concurrent tasks, heartbeats their Leases, and on SIGTERM stops claiming, waits a grace period, then releases the Leases of what did not finish (ADR-0036).
+- Any number of schedulers poll, and the one holding a Postgres advisory lock leads: it rebuilds the Schedules of Workflows whose Active Version changed, fires due Schedules, each in one transaction that claims the Schedule row and creates the Run with its first Job, and runs Chores such as retention. Firing stays exactly-once even if two schedulers briefly both lead (ADR-0039, ADR-0040).
 - `bia mcp` is a stdio → HTTP proxy for local MCP clients.
 - Every other subcommand is an API client (ADR-0007).
 
 ## Run lifecycle
 
-1. A Trigger fires (Schedule, Message, webhook, manual, Event), and the server creates a Run pinned to the Active Version, plus a Job to advance it.
+1. A Trigger fires (Schedule, Message, webhook, manual, Event), and the server or the scheduler creates a Run pinned to the Active Version, plus a Job to advance it, in one transaction.
 2. A Worker claims the Job under a Lease, loads the Checkpoint and executes the Step at the Cursor: it resolves Templates and Secrets, calls the Action with the Idempotency Key and enforces the timeout.
 3. In one transaction, the Worker writes the Attempt to the Timeline, updates the Checkpoint and Cursor, completes the Job and enqueues the next Job (or a delayed Job for `sleep`/retry backoff, or nothing while waiting for an Event). Each Job makes one transition: starting the Run (checking its input against the `input_schema`) or one Attempt of one Step (ADR-0032). The Timeline entry shape is ADR-0033.
 4. Run statuses: `pending → running → (sleeping | waiting) → running → succeeded | failed | cancelled`.

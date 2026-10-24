@@ -1,0 +1,160 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- $1: workflow id\nSELECT workflow_id, trigger_id, version, expr, tz, jitter, overlap, catch_up, next_at, due_at,\n       queued, last_run_id\nFROM schedules\nWHERE workflow_id = $1\nORDER BY trigger_id\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "workflow_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "workflow_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "trigger_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "trigger_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "expr",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "expr"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "tz",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "tz"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "jitter",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "jitter"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "overlap",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "overlap"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "catch_up",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "catch_up"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "next_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "next_at"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "due_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "due_at"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "queued",
+        "type_info": "TimestamptzArray",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "queued"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "last_run_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "last_run_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "6f96bf5631a46524a2005b9d81904ed2e0ee6d44ba1408ded3f5359838495fd5"
+}
