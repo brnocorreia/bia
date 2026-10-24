@@ -46,7 +46,7 @@ Issues live in Linear (project **bia**). One issue is one PR.
 
 Test observable behaviour at the highest seam that reaches it. There are five seams; pick the first that fits:
 
-1. **HTTP API** (default): an in-process server against the `docker compose` Postgres, driven through `bia-client`. Use it for anything crossing crates: Definitions, Runs, Timelines, Events, Queues, webhooks, Scopes. MCP tests only check that each tool maps to its endpoint and respects Scopes.
+1. **HTTP API** (default): an in-process server against the `docker compose` Postgres, driven through `bia-client`. The harness in `crates/bia-server/tests/common` gives each test its own server and database (ADR-0042). Use it for anything crossing crates: Definitions, Runs, Timelines, Events, Queues, webhooks, Scopes. MCP tests only check that each tool maps to its endpoint and respects Scopes.
 2. **`bia-core` public API**: validation, Diagnostics and Expressions, with `insta` snapshots for Diagnostics and the generated JSON Schema.
 3. **`Action` trait**: one builtin Action at a time, with `wiremock` for outbound HTTP.
 4. **Store/engine concurrency**: `#[sqlx::test]` for races the API cannot reproduce deterministically (claims, Lease expiry, scheduler leadership).
