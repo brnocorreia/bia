@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use bia_core::action::CancellationToken;
-use bia_engine::{Interpreter, Worker};
+use bia_engine::{Interpreter, Scheduler, Worker};
 use bia_store::SystemClock;
 use clap::{Parser, Subcommand, ValueEnum};
 use sqlx::PgPool;
@@ -94,25 +94,47 @@ async fn migrate(config: &Config) -> anyhow::Result<()> {
 
 async fn serve(config: &Config, roles: &BTreeSet<Role>) -> anyhow::Result<()> {
     // Each in-flight Job can hold a connection for its transition and one for its heartbeat,
-    // and the Worker loop needs one to claim; the listener has its own.
+    // and the Worker loop needs one to claim; the listener has its own. The scheduler fires
+    // one Schedule at a time and holds its leader lock on a connection of its own.
     let concurrency = u32::try_from(config.worker.concurrency.get()).unwrap_or(u32::MAX);
-    let pool = connect(config, concurrency.saturating_mul(2).saturating_add(1)).await?;
+    let pool = connect(config, concurrency.saturating_mul(2).saturating_add(2)).await?;
     let shutdown = CancellationToken::new();
     tokio::spawn(stop_on_signal(shutdown.clone()));
 
-    for (role, name) in [(Role::Api, "api"), (Role::Scheduler, "scheduler")] {
-        if roles.contains(&role) {
-            tracing::warn!(role = name, "this Role does nothing yet");
+    if roles.contains(&Role::Api) {
+        tracing::warn!(role = "api", "this Role does nothing yet");
+    }
+    let worker = async {
+        if !roles.contains(&Role::Worker) {
+            return Ok(());
         }
-    }
-    if roles.contains(&Role::Worker) {
         let actions = bia_actions::builtin_registry().context("cannot build the Actions")?;
-        let interpreter = Interpreter::new(pool, Arc::new(actions), Arc::new(SystemClock));
+        let interpreter = Interpreter::new(pool.clone(), Arc::new(actions), Arc::new(SystemClock));
         let worker = Worker::new(config.worker_id(), interpreter, config.worker_config());
-        worker.run(shutdown).await.context("the worker failed")?;
-    } else {
+        worker
+            .run(shutdown.clone())
+            .await
+            .context("the worker failed")
+    };
+    let scheduler = async {
+        if !roles.contains(&Role::Scheduler) {
+            return Ok(());
+        }
+        let scheduler = Scheduler::new(
+            config::process_name(),
+            pool.clone(),
+            Arc::new(SystemClock),
+            config.scheduler_config(),
+        );
+        scheduler
+            .run(shutdown.clone())
+            .await
+            .context("the scheduler failed")
+    };
+    tokio::try_join!(worker, scheduler, async {
         shutdown.cancelled().await;
-    }
+        anyhow::Ok(())
+    })?;
     tracing::info!("stopped");
     Ok(())
 }
