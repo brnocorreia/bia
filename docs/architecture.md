@@ -12,7 +12,7 @@ How bia's pieces fit together. Terms are defined in [`GLOSSARY.md`](../GLOSSARY.
        ┌──────────────── bia-store (Postgres) ────────────────┐
        │ workflows · versions · runs · timeline · jobs ·       │
        │ queues · messages · schedules · events · secrets ·    │
-       │ tokens                                                │
+       │ tokens · chores                                       │
        └──────────────────────────┬────────────────────────────┘
                                   │ SKIP LOCKED claims, Leases, LISTEN/NOTIFY
                bia-engine (Workers: interpreter + Checkpoints;
@@ -45,7 +45,7 @@ Engine, scheduler and store read time from an injected `Clock` (ADR-0022), and w
 - `bia migrate` applies migrations.
 - Both read their configuration from a TOML file under `BIA_*` environment variables (ADR-0037, [`configuration.md`](configuration.md)).
 - A Worker runs claimed Jobs as concurrent tasks, heartbeats their Leases, and on SIGTERM stops claiming, waits a grace period, then releases the Leases of what did not finish (ADR-0036).
-- Any number of schedulers poll, and the one holding a Postgres advisory lock leads: it rebuilds the Schedules of Workflows whose Active Version changed, fires due Schedules, each in one transaction that claims the Schedule row and creates the Run with its first Job, and runs Chores such as retention. Firing stays exactly-once even if two schedulers briefly both lead (ADR-0039, ADR-0040).
+- Any number of schedulers poll, and the one holding a Postgres advisory lock leads: it rebuilds the Schedules of Workflows whose Active Version changed, fires due Schedules, each in one transaction that claims the Schedule row and creates the Run with its first Job, and runs Chores such as Run retention. Firing, and each interval of a Chore, stay exactly-once even if two schedulers briefly both lead (ADR-0039, ADR-0040, ADR-0041).
 - `bia mcp` is a stdio → HTTP proxy for local MCP clients.
 - Every other subcommand is an API client (ADR-0007).
 

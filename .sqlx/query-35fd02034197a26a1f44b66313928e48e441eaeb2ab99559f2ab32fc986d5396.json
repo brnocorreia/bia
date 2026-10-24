@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Deletes up to $3 finished Runs, oldest first; their Timeline entries and Jobs go with them.\n-- $1: statuses, $2: delete only Runs finished before this, $3: limit\nDELETE FROM runs\nWHERE id IN (\n    SELECT id\n    FROM runs\n    WHERE status = ANY($1)\n      AND finished_at IS NOT NULL\n      AND finished_at < $2\n    ORDER BY finished_at\n    LIMIT $3\n    FOR UPDATE SKIP LOCKED\n)\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "TextArray",
+        "Timestamptz",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "35fd02034197a26a1f44b66313928e48e441eaeb2ab99559f2ab32fc986d5396"
+}

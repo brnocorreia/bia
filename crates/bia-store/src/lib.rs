@@ -1,7 +1,7 @@
 //! Postgres persistence: migrations, repositories, Queue and Job primitives.
 //!
-//! One module per domain (`workflow`, `version`, `run`, `timeline`, `job`, `schedule`), each
-//! laid out the same way:
+//! One module per domain (`workflow`, `version`, `run`, `timeline`, `job`, `schedule`,
+//! `chore`), each laid out the same way:
 //!
 //! - `model.rs`: the values its repository takes and returns.
 //! - `row.rs`: rows as Postgres returns them, converted into models with `TryFrom`.
@@ -18,6 +18,7 @@
 use sqlx::PgPool;
 use sqlx::migrate::Migrator;
 
+pub mod chore;
 mod clock;
 mod error;
 pub mod job;
