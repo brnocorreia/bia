@@ -3,7 +3,7 @@
 #![allow(clippy::unwrap_used)]
 
 use bia_store::workflow::{PgWorkflowRepository, WorkflowRepository};
-use bia_store::{MIGRATOR, migrate};
+use bia_store::{MIGRATOR, migrate, pending_migrations};
 use sqlx::PgPool;
 
 mod common;
@@ -36,6 +36,23 @@ const RELEASED: &[(i64, &str)] = &[
         "8ee87e0dcff266208a87c8297bc8bc13cdeaa1042dba2a12f6c6b5c0a4c4a9bed3c9c1a41f377acba9e2d7c7325d4218",
     ),
 ];
+
+#[sqlx::test(migrations = false)]
+async fn every_migration_is_pending_until_migrate_runs(pool: PgPool) {
+    let all: Vec<i64> = MIGRATOR.iter().map(|migration| migration.version).collect();
+    assert_eq!(pending_migrations(&pool).await.unwrap(), all);
+
+    migrate(&pool).await.unwrap();
+    assert_eq!(pending_migrations(&pool).await.unwrap(), Vec::<i64>::new());
+
+    let last = *all.last().unwrap();
+    sqlx::query("DELETE FROM _sqlx_migrations WHERE version = $1")
+        .bind(last)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(pending_migrations(&pool).await.unwrap(), vec![last]);
+}
 
 #[sqlx::test(migrations = false)]
 async fn migrations_apply_to_an_empty_database(pool: PgPool) {
