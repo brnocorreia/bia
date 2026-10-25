@@ -20,6 +20,7 @@ use tokio::net::TcpListener;
 mod api;
 mod client_config;
 mod config;
+mod mcp;
 
 use client_config::ClientConfig;
 use config::{Config, LogFormat};
@@ -61,6 +62,9 @@ enum Command {
         #[command(subcommand)]
         command: api::RunCommand,
     },
+    /// Speaks MCP on stdin and stdout for a local client such as Claude Code, forwarding to the
+    /// server's `/mcp` endpoint with the Token in `BIA_TOKEN`.
+    Mcp,
     /// Manages API Tokens.
     Token {
         #[command(subcommand)]
@@ -126,6 +130,11 @@ async fn main() -> anyhow::Result<ExitCode> {
         }
         Command::Migrate => {
             migrate(&server(&cli)?).await?;
+            true
+        }
+        Command::Mcp => {
+            let config = ClientConfig::load(cli.config.as_deref())?;
+            mcp::proxy(config.url(cli.url.as_deref()), config.token()).await?;
             true
         }
         Command::Token { ref command } => {

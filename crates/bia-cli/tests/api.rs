@@ -17,6 +17,7 @@ use bia_store::SystemClock;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tempfile::TempDir;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
 use tokio::process::Command;
 
@@ -614,6 +615,114 @@ fn files_that_do_not_parse_stop_apply_before_anything_is_sent() {
     assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("broken.yaml: invalid YAML"), "{stderr}");
+}
+
+/// A running `bia mcp` whose stdio the test speaks JSON-RPC over.
+struct McpProxy {
+    stdin: tokio::process::ChildStdin,
+    lines: tokio::io::Lines<BufReader<tokio::process::ChildStdout>>,
+    _child: tokio::process::Child,
+}
+
+impl McpProxy {
+    fn start(h: &Harness, token: &str) -> Self {
+        let mut child = Command::new(env!("CARGO_BIN_EXE_bia"))
+            .arg("mcp")
+            .env_remove("BIA_CONFIG")
+            .env("BIA_URL", &h.url)
+            .env("BIA_TOKEN", token)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap();
+        Self {
+            stdin: child.stdin.take().unwrap(),
+            lines: BufReader::new(child.stdout.take().unwrap()).lines(),
+            _child: child,
+        }
+    }
+
+    /// Sends a request and returns its reply.
+    async fn request(&mut self, id: u32, method: &str, params: Value) -> Value {
+        let message = json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params });
+        self.send(&message).await;
+        let line = tokio::time::timeout(Duration::from_secs(30), self.lines.next_line())
+            .await
+            .expect("no reply from bia mcp")
+            .unwrap()
+            .expect("bia mcp closed stdout");
+        let reply: Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(reply["id"], id, "{reply}");
+        reply
+    }
+
+    async fn send(&mut self, message: &Value) {
+        self.stdin
+            .write_all(format!("{message}\n").as_bytes())
+            .await
+            .unwrap();
+    }
+
+    async fn initialize(&mut self) -> Value {
+        let reply = self
+            .request(
+                1,
+                "initialize",
+                json!({
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {},
+                    "clientInfo": { "name": "test", "version": "0" },
+                }),
+            )
+            .await;
+        self.send(&json!({ "jsonrpc": "2.0", "method": "notifications/initialized" }))
+            .await;
+        reply
+    }
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn bia_mcp_proxies_a_full_session_to_the_server(pool: PgPool) {
+    let h = start(pool).await;
+    let mut mcp = McpProxy::start(&h, &h.agent);
+
+    let initialized = mcp.initialize().await;
+    assert!(initialized["result"]["capabilities"]["tools"].is_object());
+
+    let listed = mcp.request(2, "tools/list", json!({})).await;
+    let names: Vec<&str> = listed["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|tool| tool["name"].as_str().unwrap())
+        .collect();
+    assert!(names.contains(&"validate_workflow"));
+    assert!(!names.contains(&"publish_version"));
+
+    let definition: Value = serde_json::from_str(&greet_json()).unwrap();
+    let saved = mcp
+        .request(
+            3,
+            "tools/call",
+            json!({
+                "name": "create_draft",
+                "arguments": { "workflow_id": "greet", "definition": definition },
+            }),
+        )
+        .await;
+    assert_eq!(saved["result"]["isError"], false, "{saved}");
+    assert_eq!(saved["result"]["structuredContent"]["version"]["number"], 1);
+    assert_eq!(h.client.list_versions("greet").await.unwrap().len(), 1);
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn bia_mcp_reports_a_refused_token_as_a_json_rpc_error(pool: PgPool) {
+    let h = start(pool).await;
+    let mut mcp = McpProxy::start(&h, "not-a-token");
+    let reply = mcp.request(1, "tools/list", json!({})).await;
+    let message = reply["error"]["message"].as_str().unwrap();
+    assert!(message.contains("invalid_token"), "{reply}");
 }
 
 fn write_all(dir: &Path, name: &str, text: &str) {
