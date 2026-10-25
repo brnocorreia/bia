@@ -48,7 +48,11 @@ Engine, scheduler and store read time from an injected `Clock` (ADR-0022), and w
 - A Worker runs claimed Jobs as concurrent tasks, heartbeats their Leases, and on SIGTERM stops claiming, waits a grace period, then releases the Leases of what did not finish (ADR-0036).
 - Any number of schedulers poll, and the one holding a Postgres advisory lock leads: it rebuilds the Schedules of Workflows whose Active Version changed, fires due Schedules, each in one transaction that claims the Schedule row and creates the Run with its first Job, and runs Chores such as Run retention. Firing, and each interval of a Chore, stay exactly-once even if two schedulers briefly both lead (ADR-0039, ADR-0040, ADR-0041).
 - `bia mcp` is a stdio → HTTP proxy for local MCP clients.
-- Every other subcommand is an API client (ADR-0007).
+- Every other subcommand is an API client (ADR-0007), `bia token create --bootstrap` included: it mints the first admin Token through the API with the bootstrap key `serve` was started with (ADR-0043).
+
+## Access
+
+Every route but the probes, `/openapi.json` and bootstrapping needs a Token whose Scope the handler checks with an `Admin`, `Agent` or `Webhook` extractor (ADR-0008, ADR-0043). Tokens are stored as SHA-256 hashes. CORS allows only the configured origins.
 
 ## Run lifecycle
 

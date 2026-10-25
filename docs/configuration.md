@@ -14,6 +14,8 @@ A file key `section.name` is the variable `BIA_SECTION_NAME`. Durations are a wh
 | File key | Variable | Default | Meaning |
 |---|---|---|---|
 | `database_url` | `BIA_DATABASE_URL` (or `DATABASE_URL`) | none, required | The Postgres URL, `postgres://user:password@host:port/database`. |
+| `cors_origins` | `BIA_CORS_ORIGINS` | none | Browser origins allowed to call the API, for a UI hosted elsewhere, written as the browser sends them (`https://bia.example.com`, `http://localhost:5173`): a TOML array, or comma-separated in the variable. `*` allows any origin. A preflight from any other origin fails. Callers that are not browsers are unaffected. |
+| `bootstrap_key` | `BIA_BOOTSTRAP_KEY` | none | A secret of at least 32 characters that lets `bia token create --bootstrap` mint the first admin Token. It works only while no unrevoked admin Token exists; leave it unset to turn bootstrapping off. See [Tokens](#tokens). |
 | `api.bind` | `BIA_API_BIND` | `127.0.0.1:8080` | The address and port the `api` Role listens on. It defaults to loopback; set `0.0.0.0:8080` to accept connections from other hosts, such as in a container. |
 | `worker.id` | `BIA_WORKER_ID` | `<HOSTNAME>-<pid>` | The name a Worker records on the Leases it holds, for diagnosis. It need not be unique. |
 | `worker.concurrency` | `BIA_WORKER_CONCURRENCY` | `16` | How many Jobs a Worker runs at once, at least 1. The connection pool holds up to twice as many connections, plus one. |
@@ -39,10 +41,25 @@ Unknown keys in the file are errors. `BIA_*` variables that name no key are igno
 
 Logs about a Run carry its `run_id`, and logs about a Job its `job_id`. Inputs, Outputs, errors and Secrets are never logged; read them on the Run's Timeline.
 
+## Tokens
+
+Every API route except `GET /health`, `GET /ready`, `GET /openapi.json` and bootstrapping needs a Token, sent as `Authorization: Bearer <token>`. Its Scope decides what it may call: `admin` everything, `agent` everything but publishing, activation and administering Tokens, `webhook` only the webhook Trigger it is bound to (ADR-0008, ADR-0043). bia stores only a hash of each Token, so a lost value cannot be recovered, only replaced.
+
+On a fresh install, start the server with a bootstrap key and mint the first admin Token with the same key:
+
+```sh
+export BIA_BOOTSTRAP_KEY="$(openssl rand -hex 32)"
+bia serve &
+export BIA_TOKEN="$(bia token create --bootstrap --name admin)"
+```
+
+Once an unrevoked admin Token exists, bootstrapping refuses (`already_bootstrapped`), so the key cannot mint another; create more Tokens with the admin Token instead, e.g. `bia token create --name claude-desktop --scope agent`. If every admin Token is revoked, bootstrapping works again, which is how to regain access; unset `BIA_BOOTSTRAP_KEY` to turn it off. `bia token create` talks to the API at `BIA_URL` (default `http://127.0.0.1:8080`) and reads credentials only from `BIA_TOKEN` and `BIA_BOOTSTRAP_KEY`, never from arguments. Token values and the bootstrap key are never logged.
+
 ## Example
 
 ```toml
 database_url = "postgres://bia:bia@localhost:5432/bia"
+cors_origins = ["https://bia.example.com"]
 
 [worker]
 concurrency = 32
