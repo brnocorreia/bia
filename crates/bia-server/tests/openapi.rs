@@ -65,3 +65,47 @@ async fn the_server_serves_the_committed_document(pool: PgPool) {
 
     assert_eq!(served, COMMITTED.trim_end());
 }
+
+/// Generators such as `openapi-typescript` reject a document with a dangling `$ref` or a path
+/// parameter its path template lacks, and the UI types are generated from this file.
+#[test]
+fn the_committed_document_is_self_consistent() {
+    let document: Value = serde_json::from_str(COMMITTED).unwrap();
+    for (path, operations) in document["paths"].as_object().unwrap() {
+        for (method, operation) in operations.as_object().unwrap() {
+            for parameter in operation["parameters"].as_array().into_iter().flatten() {
+                if parameter["in"] == "path" {
+                    let name = parameter["name"].as_str().unwrap();
+                    assert!(
+                        path.contains(&format!("{{{name}}}")),
+                        "{method} {path}: `{name}` is a path parameter the path lacks"
+                    );
+                }
+            }
+        }
+    }
+    let mut refs = Vec::new();
+    collect_refs(&document, &mut refs);
+    for reference in refs {
+        let pointer = reference.trim_start_matches('#');
+        assert!(
+            document.pointer(pointer).is_some(),
+            "dangling reference {reference}"
+        );
+    }
+}
+
+fn collect_refs(value: &Value, found: &mut Vec<String>) {
+    match value {
+        Value::Object(map) => {
+            for (key, inner) in map {
+                match (key.as_str(), inner) {
+                    ("$ref", Value::String(target)) => found.push(target.clone()),
+                    _ => collect_refs(inner, found),
+                }
+            }
+        }
+        Value::Array(items) => items.iter().for_each(|item| collect_refs(item, found)),
+        _ => {}
+    }
+}

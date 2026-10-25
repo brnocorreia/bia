@@ -108,6 +108,7 @@ pub(crate) enum TargetName {
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ValidateQuery {
     /// What to validate for. Defaults to `draft`.
@@ -116,6 +117,7 @@ pub(crate) struct ValidateQuery {
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct DiffQuery {
     /// The Version number to diff from.
