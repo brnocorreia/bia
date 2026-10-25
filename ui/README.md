@@ -96,3 +96,7 @@ When a handler changes, run `just openapi` at the repository root, then `pnpm ge
 ### Editor end-to-end tests
 
 Monaco turns typed newlines into auto-indented lines, so `e2e/editor.spec.ts` pastes text (a synthetic `paste` event) to set the editor's content.
+
+## Dry Run from the editor
+
+`src/dry-run/dry-run-panel.tsx` is passed to `DefinitionEditor` as `sidePanel` by the new and edit routes (ADR-0056). It dry-runs the editor's current text through `POST /v1/dry-run` (`api/dry-run.ts`) with an input and Mocks, and renders `report.timeline` with `<Timeline dryRun />`. Mocks are JSON in the API's format, one per Step id, so they can be copied to a CLI file ("Copy Mocks as JSON"). A Definition that does not validate shows the Diagnostics instead of a Timeline. The last input and Mocks are remembered per Workflow in `localStorage["bia.dryRun.<id>"]`. Pure logic (Step discovery, request building, storage) is in `dry-run/model.ts` with Vitest; `e2e/dry-run.spec.ts` covers the flows.
