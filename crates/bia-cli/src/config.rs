@@ -11,6 +11,7 @@ use anyhow::{Context, anyhow, bail};
 use bia_core::dsl::Duration;
 use bia_engine::{InterpreterConfig, RetentionConfig, RunLimits, SchedulerConfig, WorkerConfig};
 use bia_server::{ApiConfig, BootstrapKey, CorsOrigins};
+use bia_store::secret::MasterKey;
 use chrono::TimeDelta;
 use figment::Figment;
 use figment::providers::{Env, Format, Toml};
@@ -30,8 +31,9 @@ const SECTIONS: [&str; 7] = [
     "limits",
 ];
 /// Every key the environment may set, as key paths.
-const KEYS: [&str; 19] = [
+const KEYS: [&str; 20] = [
     "database_url",
+    "master_key",
     "cors_origins",
     "bootstrap_key",
     "api.bind",
@@ -61,6 +63,8 @@ pub(crate) struct Config {
     cors_origins: Origins,
     /// Lets `bia token create --bootstrap` mint the first admin Token.
     bootstrap_key: Option<String>,
+    /// Encrypts Secrets: 64 hex digits.
+    master_key: Option<String>,
     /// Read by the API commands (`ClientConfig`), which share this file.
     #[allow(dead_code)]
     url: Option<String>,
@@ -310,6 +314,7 @@ impl Config {
         let cors_origins = CorsOrigins::parse(&self.cors_origins.0)
             .context("invalid configuration: `cors_origins`")?;
         // The message never echoes the key.
+        let master_key = self.master_key()?;
         let bootstrap_key = self
             .bootstrap_key
             .as_deref()
@@ -319,7 +324,17 @@ impl Config {
         Ok(ApiConfig {
             cors_origins,
             bootstrap_key,
+            master_key,
         })
+    }
+
+    /// The key Secrets are encrypted under, if one is set. The error never echoes it.
+    pub(crate) fn master_key(&self) -> anyhow::Result<Option<MasterKey>> {
+        self.master_key
+            .as_deref()
+            .map(MasterKey::parse)
+            .transpose()
+            .context("invalid configuration: `master_key`")
     }
 
     pub(crate) fn database_url(&self) -> anyhow::Result<&str> {
@@ -593,12 +608,30 @@ mod tests {
         Jail::expect_with(|jail| {
             jail.clear_env();
             jail.set_env("BIA_DATABASE_URL", URL);
-            jail.set_env("BIA_MASTER_KEY", "for a later release");
+            jail.set_env("BIA_VAULT_ADDR", "for a later release");
             assert!(load(jail, None).is_ok());
 
             jail.create_file("bia.toml", "[worker]\nconcurency = 4\n")?;
             let error = error(jail, Some("bia.toml"));
             assert!(error.contains("concurency"), "{error}");
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn a_master_key_is_64_hex_digits_and_a_bad_one_is_refused_without_echoing_it() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.set_env("BIA_DATABASE_URL", URL);
+            assert!(load(jail, None).unwrap().master_key().unwrap().is_none());
+
+            jail.set_env("BIA_MASTER_KEY", "ab".repeat(32));
+            assert!(load(jail, None).unwrap().master_key().unwrap().is_some());
+
+            jail.set_env("BIA_MASTER_KEY", "short-but-secret");
+            let error = error(jail, None);
+            assert!(error.contains("master_key"), "{error}");
+            assert!(!error.contains("short-but-secret"), "{error}");
             Ok(())
         });
     }

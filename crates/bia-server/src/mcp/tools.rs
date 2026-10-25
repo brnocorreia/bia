@@ -56,6 +56,15 @@ or disabled. Use it to pick Actions and to shape their `params`. Returns `{ acti
         build: |_| Ok(get("/v1/workflows".into(), None)),
     },
     ToolDef {
+        name: "list_secrets",
+        description: "Lists the names of the Secrets the server holds, with when each was \
+created and last set. Reference one in a Step's `params` as `{{ secrets.NAME }}`. Values are \
+never returned by any tool, and no tool sets or deletes a Secret. Maps to `GET /v1/secrets`.",
+        read_only: true,
+        schema: || object(json!({}), &[]),
+        build: |_| Ok(get("/v1/secrets".into(), None)),
+    },
+    ToolDef {
         name: "get_workflow",
         description: "Shows one Workflow and which Version is Active. Fails with \
 `workflow_not_found` when it does not exist. Maps to `GET /v1/workflows/{workflow_id}`.",

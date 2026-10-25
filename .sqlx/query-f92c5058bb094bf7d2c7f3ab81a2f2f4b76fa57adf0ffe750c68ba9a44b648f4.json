@@ -1,0 +1,55 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- $1: name, $2: ciphertext, $3: nonce, $4: now\nINSERT INTO secrets (name, ciphertext, nonce, created_at, updated_at)\nVALUES ($1, $2, $3, $4, $4)\nON CONFLICT (name) DO UPDATE\nSET ciphertext = EXCLUDED.ciphertext, nonce = EXCLUDED.nonce, updated_at = EXCLUDED.updated_at\nRETURNING name, created_at, updated_at\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "secrets",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "secrets",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "secrets",
+            "name": "updated_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f92c5058bb094bf7d2c7f3ab81a2f2f4b76fa57adf0ffe750c68ba9a44b648f4"
+}

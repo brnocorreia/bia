@@ -35,6 +35,7 @@ use serde_json::{Value, json};
 use sqlx::{Acquire, PgConnection, PgPool};
 use tracing::Instrument;
 
+use crate::secrets::Masker;
 use crate::{EngineError, NoSecrets, NotResumable, SecretResolver};
 
 mod checkpoint;
@@ -722,9 +723,13 @@ impl Interpreter {
         };
 
         let mut scope = scope(run, attempt, state);
+        let mut masker = Masker::default();
         for name in secrets_read(params) {
             match self.secrets.resolve(&name).await {
-                Ok(Some(value)) => scope = scope.with_secret(name, value),
+                Ok(Some(value)) => {
+                    masker.add(&value);
+                    scope = scope.with_secret(name, value);
+                }
                 Ok(None) => {
                     let message = format!("Secret '{name}' is not defined");
                     return fail(
@@ -762,7 +767,7 @@ impl Interpreter {
         if !violations.is_empty() {
             let failure = ActionError::fatal("Params do not match the Action's param schema")
                 .with_details(json!({ "violations": violations }));
-            return fail(recorded, FailureCode::InvalidParams, failure);
+            return fail(recorded, FailureCode::InvalidParams, masker.error(failure));
         }
 
         let call = ActionCall {
@@ -790,6 +795,14 @@ impl Interpreter {
         let outcome = match self.mocked(step, action.descriptor(), attempt) {
             Some(outcome) => outcome,
             None => self.call(&*action, call, timeout, cancel).await,
+        };
+        let outcome = match outcome {
+            Outcome::Succeeded(output) => Outcome::Succeeded(masker.json(output)),
+            Outcome::Failed(Failure { error, code }) => Outcome::Failed(Failure {
+                error: masker.error(error),
+                code,
+            }),
+            Outcome::Cancelled => Outcome::Cancelled,
         };
         Attempted {
             input: recorded,

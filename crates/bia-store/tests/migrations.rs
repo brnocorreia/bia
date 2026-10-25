@@ -39,6 +39,10 @@ const RELEASED: &[(i64, &str)] = &[
         7,
         "60bc2b088ed0cf3e1b16583ceb9aa5b634d11650d2811882f88120015204964b2c90bd83653f4ffa30c5a9a8115f5f45",
     ),
+    (
+        8,
+        "2286cbcbbdda50cde85d99c5ce34befd869c0c10ec5a00c7de0890c44780f013bd9c6a2d7a500e5428eee2782c652b75",
+    ),
 ];
 
 #[sqlx::test(migrations = false)]

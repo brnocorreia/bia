@@ -188,4 +188,4 @@ What a Token may do: `admin` (everything), `agent` (author Drafts, dry-run, trig
 A named sensitive value referenced as `secrets.NAME` in Params, resolved only at execution time and never persisted in Outputs or the Timeline.
 
 **Secret Provider**:
-A source Secrets are resolved from: the internal encrypted store first, external managers later.
+A source Secrets are resolved from: the internal encrypted store first, external managers later. The internal one encrypts under the master key (`BIA_MASTER_KEY`); no route, command or tool returns a value.

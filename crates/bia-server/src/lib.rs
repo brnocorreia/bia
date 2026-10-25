@@ -17,6 +17,7 @@ use axum::response::IntoResponse;
 use axum::routing::get;
 use bia_core::action::{ActionRegistry, CancellationToken};
 use bia_core::clock::Clock;
+use bia_store::secret::MasterKey;
 use sqlx::PgPool;
 use tokio::net::TcpListener;
 use utoipa::openapi::security::{Http, HttpAuthScheme, SecurityScheme};
@@ -53,6 +54,8 @@ pub struct ApiConfig {
     pub cors_origins: CorsOrigins,
     /// Turns on `POST /v1/tokens/bootstrap`, which mints the first admin Token.
     pub bootstrap_key: Option<BootstrapKey>,
+    /// Encrypts Secrets. Without it, the Secret routes that write answer `master_key_missing`.
+    pub master_key: Option<MasterKey>,
 }
 
 impl ApiState {
@@ -133,6 +136,11 @@ fn documented() -> OpenApiRouter<ApiState> {
         ))
         .routes(routes!(routes::token::revoke_token))
         .routes(routes!(routes::token::bootstrap_token))
+        .routes(routes!(routes::secret::list_secrets))
+        .routes(routes!(
+            routes::secret::put_secret,
+            routes::secret::delete_secret
+        ))
         .routes(routes!(routes::workflow::list_workflows))
         .routes(routes!(routes::workflow::get_workflow))
         .routes(routes!(

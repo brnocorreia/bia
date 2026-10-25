@@ -9,9 +9,10 @@ use std::sync::Arc;
 use anyhow::{Context, bail};
 use bia_client::{NewToken, Scope, WebhookBinding};
 use bia_core::action::CancellationToken;
-use bia_engine::{Interpreter, Retention, Scheduler, Worker};
+use bia_engine::{InternalSecrets, Interpreter, Retention, Scheduler, Worker};
 use bia_server::ApiState;
 use bia_store::SystemClock;
+use bia_store::secret::{PgSecretRepository, SecretRepository};
 use clap::{Parser, Subcommand, ValueEnum};
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
@@ -65,6 +66,11 @@ enum Command {
     /// Speaks MCP on stdin and stdout for a local client such as Claude Code, forwarding to the
     /// server's `/mcp` endpoint with the Token in `BIA_TOKEN`.
     Mcp,
+    /// Sets, lists and deletes Secrets. No command shows a value.
+    Secret {
+        #[command(subcommand)]
+        command: api::SecretCommand,
+    },
     /// Manages API Tokens.
     Token {
         #[command(subcommand)]
@@ -143,6 +149,9 @@ async fn main() -> anyhow::Result<ExitCode> {
         }
         Command::Workflow { command } => {
             api::workflow(&api_context(&cli.config, &cli.url, cli.json)?, command).await
+        }
+        Command::Secret { command } => {
+            api::secret(&api_context(&cli.config, &cli.url, cli.json)?, command).await
         }
         Command::Run { command } => {
             api::run(&api_context(&cli.config, &cli.url, cli.json)?, command).await
@@ -259,6 +268,8 @@ async fn serve(config: &Config, roles: &BTreeSet<Role>) -> anyhow::Result<()> {
     // gets a few more so requests do not queue behind Jobs.
     let concurrency = u32::try_from(config.worker.concurrency.get()).unwrap_or(u32::MAX);
     let pool = connect(config, concurrency.saturating_mul(2).saturating_add(6)).await?;
+    let master_key = config.master_key()?;
+    require_master_key_for_secrets(&pool, master_key.is_some()).await?;
     let shutdown = CancellationToken::new();
     tokio::spawn(stop_on_signal(shutdown.clone()));
     let actions = Arc::new(bia_actions::builtin_registry().context("cannot build the Actions")?);
@@ -286,7 +297,11 @@ async fn serve(config: &Config, roles: &BTreeSet<Role>) -> anyhow::Result<()> {
             return Ok(());
         }
         let interpreter = Interpreter::new(pool.clone(), actions.clone(), Arc::new(SystemClock))
-            .with_config(config.interpreter_config());
+            .with_config(config.interpreter_config())
+            .with_secrets(Arc::new(InternalSecrets::new(
+                pool.clone(),
+                master_key.clone(),
+            )));
         let worker = Worker::new(config.worker_id(), interpreter, config.worker_config());
         worker
             .run(shutdown.clone())
@@ -314,6 +329,25 @@ async fn serve(config: &Config, roles: &BTreeSet<Role>) -> anyhow::Result<()> {
         anyhow::Ok(())
     })?;
     tracing::info!("stopped");
+    Ok(())
+}
+
+/// Secrets are encrypted, so a server without the key could neither read them nor tell the
+/// operator why Steps fail: refuse to start instead.
+async fn require_master_key_for_secrets(pool: &PgPool, has_key: bool) -> anyhow::Result<()> {
+    if has_key {
+        return Ok(());
+    }
+    let mut conn = pool
+        .acquire()
+        .await
+        .context("cannot connect to the database")?;
+    if PgSecretRepository.any(&mut conn).await? {
+        bail!(
+            "invalid configuration: Secrets exist but `master_key` is not set; set BIA_MASTER_KEY \
+             to the key they were stored under"
+        );
+    }
     Ok(())
 }
 

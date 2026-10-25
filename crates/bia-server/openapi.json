@@ -738,6 +738,201 @@
         ]
       }
     },
+    "/v1/secrets": {
+      "get": {
+        "tags": [
+          "secrets"
+        ],
+        "summary": "Every Secret by name, without values. Needs an `admin` or `agent` Token: an agent writing a\nDefinition needs the names to reference.",
+        "operationId": "list_secrets",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/v1/secrets/{name}": {
+      "put": {
+        "tags": [
+          "secrets"
+        ],
+        "summary": "Creates the Secret, or replaces its value. Needs an `admin` Token. The value is encrypted\nunder the server's `BIA_MASTER_KEY` and cannot be read back, only replaced.",
+        "operationId": "put_secret",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "Letters, digits and `_`, not starting with a digit.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutSecretRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretInfo"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_request`: the name or the value is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`master_key_missing`: the server has no `BIA_MASTER_KEY`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "secrets"
+        ],
+        "summary": "Deletes a Secret. Needs an `admin` Token. Steps that read it then fail with\n`unknown_secret`.",
+        "operationId": "delete_secret",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "The Secret's name.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretDeleted"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`secret_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
     "/v1/tokens": {
       "get": {
         "tags": [
@@ -2368,6 +2563,8 @@
           "run_finished",
           "run_not_finished",
           "run_not_resumable",
+          "secret_not_found",
+          "master_key_missing",
           "not_ready",
           "internal_error"
         ]
@@ -2464,6 +2661,20 @@
                 "type": "null"
               }
             ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "PutSecretRequest": {
+        "type": "object",
+        "description": "The value of a Secret, to store.",
+        "required": [
+          "value"
+        ],
+        "properties": {
+          "value": {
+            "type": "string",
+            "description": "Encrypted before it is stored and never returned by any route. At least one character."
           }
         },
         "additionalProperties": false
@@ -2647,6 +2858,57 @@
           "agent",
           "webhook"
         ]
+      },
+      "SecretDeleted": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "SecretInfo": {
+        "type": "object",
+        "description": "A Secret, without its value.",
+        "required": [
+          "name",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "name": {
+            "type": "string",
+            "description": "Read as `secrets.NAME` in a Step's `params`.",
+            "example": "API_TOKEN"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the value was last set."
+          }
+        }
+      },
+      "SecretList": {
+        "type": "object",
+        "required": [
+          "secrets"
+        ],
+        "properties": {
+          "secrets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SecretInfo"
+            },
+            "description": "Every Secret by name."
+          }
+        }
       },
       "Severity": {
         "type": "string",
