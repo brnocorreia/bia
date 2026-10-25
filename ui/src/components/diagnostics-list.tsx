@@ -4,12 +4,23 @@ import { Badge } from "@/components/ui/badge";
 export type Diagnostic = components["schemas"]["Diagnostic"];
 
 /** Diagnostics as the API returns them: severity, the JSON Pointer path, message, suggestion. */
-export function DiagnosticsList({ diagnostics }: { diagnostics: Diagnostic[] }) {
+export function DiagnosticsList({
+  diagnostics,
+  onSelect,
+}: {
+  diagnostics: Diagnostic[];
+  /** Makes each entry a button, e.g. to jump to its place in an editor. */
+  onSelect?: (diagnostic: Diagnostic) => void;
+}) {
   if (diagnostics.length === 0) return null;
   return (
     <ul aria-label="Diagnostics" className="flex flex-col gap-2">
       {diagnostics.map((d, index) => (
-        <li key={index} className="rounded-md border p-3 text-sm text-foreground">
+        <li
+          key={index}
+          className={`rounded-md border p-3 text-sm text-foreground ${onSelect ? "cursor-pointer hover:bg-accent" : ""}`}
+          onClick={onSelect && (() => onSelect(d))}
+        >
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant={d.severity === "error" ? "destructive" : "secondary"}>
               {d.severity}

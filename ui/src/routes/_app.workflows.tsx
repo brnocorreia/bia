@@ -19,7 +19,15 @@ function Workflows() {
   const workflows = useWorkflows();
   return (
     <section>
-      <h1 className="text-2xl font-semibold">Workflows</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Workflows</h1>
+        <Link
+          to="/workflows/new"
+          className="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:bg-primary/90"
+        >
+          New Workflow
+        </Link>
+      </div>
       {workflows.isPending && <p className="mt-4 text-sm text-muted-foreground">Loading…</p>}
       {workflows.error && (
         <p role="alert" className="mt-4 text-sm text-destructive">
@@ -28,7 +36,7 @@ function Workflows() {
       )}
       {workflows.data?.length === 0 && (
         <p className="mt-4 text-sm text-muted-foreground">
-          No Workflows yet. Save a Draft through the API, the CLI or an agent to create one.
+          No Workflows yet. Create one here, or save a Draft through the API, the CLI or an agent.
         </p>
       )}
       {workflows.data && workflows.data.length > 0 && (

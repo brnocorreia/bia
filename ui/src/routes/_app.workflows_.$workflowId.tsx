@@ -141,6 +141,14 @@ function WorkflowDetail() {
                       >
                         View
                       </Button>
+                      <Link
+                        to="/workflows/$workflowId/edit"
+                        params={{ workflowId }}
+                        search={{ v: version.number }}
+                        className="rounded-md px-2.5 py-1 text-sm hover:bg-accent"
+                      >
+                        Edit
+                      </Link>
                       {version.state === "draft" && (
                         <Button
                           size="sm"
