@@ -12,6 +12,10 @@ publish.workspace = true
 name = "bia"
 path = "src/main.rs"
 
+[features]
+# Serves the UI from the binary; needs a built `ui/dist` (see `just ui-build`).
+ui = ["bia-server/ui"]
+
 [dependencies]
 anyhow = "1.0.104"
 bia-core.workspace = true

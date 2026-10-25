@@ -71,6 +71,7 @@ test("config.json decides which API the UI talks to, with no rebuild", async ({
 });
 
 test("the served config.json points at the test API", async ({ page, adminToken }) => {
+  test.skip(e2eEnv().embedded, "the embedded UI uses its own origin; see embedded.spec.ts");
   await startSessionWith(page, adminToken);
   const config = await page.request.get("/config.json");
   expect(await config.json()).toEqual({ apiUrl: e2eEnv().apiUrl });

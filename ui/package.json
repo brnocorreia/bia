@@ -18,7 +18,8 @@
     "lint": "pnpm gen:routes && eslint . && prettier --check .",
     "format": "prettier --write .",
     "test": "pnpm gen:routes && vitest run",
-    "test:e2e": "pnpm build && playwright test"
+    "test:e2e": "pnpm build && playwright test",
+    "test:e2e:embedded": "pnpm build && BIA_E2E_EMBEDDED=1 playwright test"
   },
   "dependencies": {
     "@radix-ui/react-label": "^2.1.17",

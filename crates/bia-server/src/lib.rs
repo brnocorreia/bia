@@ -32,6 +32,8 @@ mod extract;
 mod mcp;
 mod resources;
 mod routes;
+#[cfg(feature = "ui")]
+mod ui;
 
 pub use auth::BootstrapKey;
 pub use cors::{CorsOrigins, InvalidOrigin};
@@ -194,9 +196,24 @@ fn api(state: ApiState) -> Router {
             "/openapi.json",
             get(move || async move { ([(header::CONTENT_TYPE, "application/json")], document) }),
         )
-        .fallback(|| async { ApiError::route_not_found().into_response() })
+        .fallback(not_found)
         .method_not_allowed_fallback(|| async { ApiError::method_not_allowed().into_response() })
         .with_state(state)
+}
+
+/// Unmatched routes answer with the uniform error body, except that the embedded UI (`ui`
+/// feature) takes the screens it owns.
+async fn not_found(
+    method: axum::http::Method,
+    uri: axum::http::Uri,
+    headers: axum::http::HeaderMap,
+) -> axum::response::Response {
+    #[cfg(feature = "ui")]
+    if let Some(page) = ui::fallback(&method, &uri, &headers) {
+        return page;
+    }
+    let _ = (&method, &uri, &headers);
+    ApiError::route_not_found().into_response()
 }
 
 /// Serves `router` on `listener` until `shutdown` fires, then lets in-flight requests finish.

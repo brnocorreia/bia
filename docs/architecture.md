@@ -73,7 +73,7 @@ Cancellation sets a flag on the Run that Postgres announces to Workers, which al
 
 ## UI
 
-A static SPA in `ui/`, deployed to any static host or embedded in the binary (ADR-0013). It is built in phases: Run observation and operation → schema-aware JSON/YAML editor with Diagnostics and Dry Run → visual editor (React Flow) synced both ways with the Definition → param forms generated from Action schemas. See `ui/README.md` for the screen layout, API client, Token session (ADR-0050) and checks.
+A static SPA in `ui/`, deployed to any static host or embedded in the binary (ADR-0013). It is built in phases: Run observation and operation → schema-aware JSON/YAML editor with Diagnostics and Dry Run → visual editor (React Flow) synced both ways with the Definition → param forms generated from Action schemas. The embedded build is served from `/` as the API router's fallback (ADR-0052); `docs/deploy-ui.md` covers all three deployments. See `ui/README.md` for the screen layout, API client, Token session (ADR-0050) and checks.
 
 ## Where it evolves
 

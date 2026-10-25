@@ -131,3 +131,55 @@ jobs:
         with:
           name: playwright-report
           path: ui/playwright-report
+
+  embedded-ui:
+    name: embedded-ui
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: bia
+          POSTGRES_PASSWORD: bia
+          POSTGRES_DB: bia
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bia -d bia"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      BIA_E2E_DATABASE_URL: postgres://bia:bia@localhost:5432/bia_e2e
+      BIA_E2E_EMBEDDED: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: ui/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: ui/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: ui
+      - run: pnpm build
+        working-directory: ui
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Build without the UI feature
+        run: cargo build -p bia-cli --locked
+      - name: Build with the UI feature
+        run: cargo build -p bia-cli --features ui --locked
+      - run: pnpm exec playwright install --with-deps chromium
+        working-directory: ui
+      - run: pnpm exec playwright test
+        working-directory: ui
+        env:
+          BIA_E2E_BIN: ${{ github.workspace }}/target/debug/bia
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report-embedded
+          path: ui/playwright-report

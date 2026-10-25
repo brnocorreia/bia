@@ -39,9 +39,21 @@ ui-types:
 ui-check:
     cd ui && pnpm install --frozen-lockfile && pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm check:api
 
+# Build the UI bundle (`ui/dist`) that the `ui` Cargo feature embeds
+ui-build:
+    cd ui && pnpm install --frozen-lockfile && pnpm build
+
+# Build `bia` with the UI embedded (release profile; builds the bundle first)
+build-ui: ui-build
+    cargo build --release -p bia-cli --features ui --locked
+
 # UI end-to-end tests against a real `bia serve` (needs Postgres; see ui/README.md)
 ui-e2e:
     cd ui && pnpm test:e2e
+
+# UI end-to-end tests against the UI embedded in `bia` (needs Postgres)
+ui-e2e-embedded:
+    cd ui && pnpm test:e2e:embedded
 
 # Check licences, advisories, bans and sources
 deny:
