@@ -235,7 +235,7 @@ impl RunStatus {
 }
 
 /// How an Attempt, or the Run in an entry without a Step, ended.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AttemptStatus {
     Succeeded,
@@ -262,7 +262,7 @@ pub struct RunSummary {
 }
 
 /// One entry of a Run's Timeline (ADR-0033, ADR-0045).
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TimelineEntry {
     pub seq: i32,
     /// Absent for an entry about the Run as a whole.
@@ -278,6 +278,20 @@ pub struct TimelineEntry {
     pub started_at: DateTime<Utc>,
     pub finished_at: DateTime<Utc>,
     pub duration_ms: i64,
+}
+
+/// The result of a Dry Run: the Timeline a real Run would have, not stored.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct DryRunReport {
+    /// Always `true`.
+    pub dry_run: bool,
+    /// `succeeded` or `failed`.
+    pub status: RunStatus,
+    pub input: Value,
+    /// The same entries a real Run's Timeline holds.
+    pub timeline: Vec<TimelineEntry>,
+    /// Findings that are not errors.
+    pub diagnostics: Vec<Diagnostic>,
 }
 
 /// A Run with its input and Timeline.
@@ -598,6 +612,42 @@ impl Client {
     pub async fn retry_run(&self, id: Uuid) -> Result<RunSummary, Error> {
         self.send(Method::POST, &format!("/v1/runs/{id}/retry"), None::<&()>)
             .await
+    }
+
+    /// Dry-runs a stored Version. `mocks` maps Step ids to Mocks, e.g.
+    /// `{ "fetch": { "output": { "status": 200 } } }`; see ADR-0046 for the format.
+    pub async fn dry_run_version(
+        &self,
+        workflow: &str,
+        number: i32,
+        input: &Value,
+        mocks: &Value,
+    ) -> Result<DryRunReport, Error> {
+        self.send(
+            Method::POST,
+            &format!("/v1/workflows/{workflow}/versions/{number}/dry-run"),
+            Some(&serde_json::json!({ "input": input, "mocks": mocks })),
+        )
+        .await
+    }
+
+    /// Dry-runs a Definition that need not be stored.
+    pub async fn dry_run_definition(
+        &self,
+        definition: &Value,
+        input: &Value,
+        mocks: &Value,
+    ) -> Result<DryRunReport, Error> {
+        self.send(
+            Method::POST,
+            "/v1/dry-run",
+            Some(&serde_json::json!({
+                "definition": definition,
+                "input": input,
+                "mocks": mocks,
+            })),
+        )
+        .await
     }
 
     fn with_query(path: &str, query: &RunQuery, status: bool) -> Result<String, Error> {

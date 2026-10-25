@@ -24,6 +24,12 @@ pub enum EngineError {
     InvalidCheckpoint { run: RunId, message: String },
     #[error("run {run} cannot be resumed: {reason}")]
     NotResumable { run: RunId, reason: NotResumable },
+    #[error("the Dry Run has no Mockable Step `{step}` (Steps: {})", .known.join(", "))]
+    UnknownMockStep { step: String, known: Vec<String> },
+    #[error("Step `{step}` cannot be Mocked: it does not call an Action that has an Output")]
+    UnmockableStep { step: String },
+    #[error("the Dry Run took more than {limit} transitions and was stopped")]
+    DryRunTooLong { limit: usize },
     #[error(transparent)]
     Store(#[from] StoreError),
     #[error(transparent)]

@@ -65,6 +65,8 @@ pub(crate) enum FailureCode {
     IterationLimitExceeded,
     /// A Subworkflow would nest deeper than `max_subworkflow_depth`.
     SubworkflowDepthExceeded,
+    /// A Dry Run reached a side-effecting Action that has neither a Mock nor an example.
+    NoMock,
     /// The Action returned an Output larger than `max_output_bytes`; it was not stored.
     OutputLimitExceeded,
 }

@@ -152,7 +152,7 @@ dead_letter: emails-dlq
 
 ## Diagnostics
 
-Validation runs in layers: JSON Schema → semantics (unique ids, scope references, Expressions compile, params match the Action, referenced Queues and Workflows exist, disabled Actions, limits) → optional Dry Run. The semantic layer reports every problem in one pass. A document that fails the schema layer has no typed form to check further, so it gets that layer's first Diagnostic only. Every finding is a Diagnostic:
+Validation runs in layers: JSON Schema → semantics (unique ids, scope references, Expressions compile, params match the Action, referenced Queues and Workflows exist, disabled Actions, limits) → optional Dry Run (ADR-0046). The semantic layer reports every problem in one pass. A document that fails the schema layer has no typed form to check further, so it gets that layer's first Diagnostic only. Every finding is a Diagnostic:
 
 ```json
 {

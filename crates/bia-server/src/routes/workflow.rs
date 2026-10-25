@@ -562,7 +562,7 @@ async fn parse(
     Ok((definition, found.diagnostics))
 }
 
-fn validator<'a>(
+pub(super) fn validator<'a>(
     state: &'a ApiState,
     target: Target,
     resources: &'a KnownResources,
@@ -570,7 +570,7 @@ fn validator<'a>(
     Validator::new(target, state.actions.as_ref(), resources)
 }
 
-async fn known_resources(
+pub(super) async fn known_resources(
     state: &ApiState,
     conn: &mut PgConnection,
 ) -> Result<KnownResources, ApiError> {
@@ -600,7 +600,7 @@ fn report(diagnostics: Vec<Diagnostic>) -> ValidationReport {
     }
 }
 
-fn version_number(number: i32) -> Result<VersionNumber, ApiError> {
+pub(super) fn version_number(number: i32) -> Result<VersionNumber, ApiError> {
     VersionNumber::new(number)
         .ok_or_else(|| ApiError::malformed_request("a Version number is a positive integer"))
 }
@@ -613,7 +613,7 @@ async fn existing_workflow(conn: &mut PgConnection, id: &WorkflowId) -> Result<W
         .ok_or_else(|| store_error(StoreError::WorkflowNotFound(id.clone())))
 }
 
-async fn existing_version(
+pub(super) async fn existing_version(
     conn: &mut PgConnection,
     workflow: &WorkflowId,
     number: VersionNumber,

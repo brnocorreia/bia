@@ -56,6 +56,10 @@ pub enum ErrorCode {
     NoManualTrigger,
     /// The Run input does not match the Active Version's `input_schema`; no Run was created.
     InvalidRunInput,
+    /// A Dry Run Mock is not in the documented format, or names a Step that cannot be Mocked.
+    InvalidMock,
+    /// The Dry Run took more transitions than the server allows and was stopped.
+    DryRunTooLong,
     /// No Run has this id.
     RunNotFound,
     /// The Run already finished, so it cannot be cancelled.
