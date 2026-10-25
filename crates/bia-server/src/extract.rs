@@ -1,6 +1,6 @@
 //! Extractors whose rejections are [`ApiError`]s, so a malformed request gets the uniform body.
 
-use axum::extract::rejection::{JsonRejection, PathRejection};
+use axum::extract::rejection::{JsonRejection, PathRejection, QueryRejection};
 use axum::extract::{FromRequest, FromRequestParts};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -17,6 +17,11 @@ pub struct Json<T>(pub T);
 #[derive(Debug, Clone, Copy, Default, FromRequestParts)]
 #[from_request(via(axum::extract::Path), rejection(ApiError))]
 pub struct Path<T>(pub T);
+
+/// `axum::extract::Query`, rejecting with `malformed_request`.
+#[derive(Debug, Clone, Copy, Default, FromRequestParts)]
+#[from_request(via(axum::extract::Query), rejection(ApiError))]
+pub struct Query<T>(pub T);
 
 impl<T: Serialize> IntoResponse for Json<T> {
     fn into_response(self) -> Response {
@@ -40,6 +45,16 @@ impl From<JsonRejection> for ApiError {
 
 impl From<PathRejection> for ApiError {
     fn from(rejection: PathRejection) -> Self {
+        ApiError::new(
+            rejection.status(),
+            ErrorCode::MalformedRequest,
+            rejection.body_text(),
+        )
+    }
+}
+
+impl From<QueryRejection> for ApiError {
+    fn from(rejection: QueryRejection) -> Self {
         ApiError::new(
             rejection.status(),
             ErrorCode::MalformedRequest,

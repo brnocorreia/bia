@@ -36,6 +36,19 @@ pub enum ErrorCode {
     /// An unrevoked admin Token exists, so bootstrapping refuses to mint another; create
     /// Tokens with it instead.
     AlreadyBootstrapped,
+    /// No Workflow has this id.
+    WorkflowNotFound,
+    /// The Workflow has no Version with this number.
+    VersionNotFound,
+    /// The Version is Published, so it cannot be replaced or published again.
+    VersionPublished,
+    /// The Version is a Draft, so it cannot be activated.
+    VersionNotPublished,
+    /// The Draft was replaced while it was being published; publish again to publish the new
+    /// content.
+    VersionChanged,
+    /// The Definition's `id` is not the Workflow's id in the path.
+    WorkflowIdMismatch,
     /// The server cannot serve requests yet: the database is unreachable or migrations are
     /// pending.
     NotReady,

@@ -344,6 +344,889 @@
           }
         ]
       }
+    },
+    "/v1/validate": {
+      "post": {
+        "tags": [
+          "workflows"
+        ],
+        "summary": "Validates the request body, a Definition that need not be stored, for the `draft`\n(default) or `publish` target. Diagnostics are the result, so a Definition with errors\nstill gets 200; a body that is not JSON gets `malformed_request`, and one that does not\nparse as a Definition comes back as a single Diagnostic.",
+        "operationId": "validate_definition",
+        "parameters": [
+          {
+            "name": "target",
+            "in": "path",
+            "description": "What to validate for. Defaults to `draft`.",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TargetName"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "A Definition (see `GET /v1/schema`).",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_request`: not JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/v1/workflows": {
+      "get": {
+        "tags": [
+          "workflows"
+        ],
+        "summary": "Every Workflow with its Active Version.",
+        "operationId": "list_workflows",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/v1/workflows/{workflow_id}": {
+      "get": {
+        "tags": [
+          "workflows"
+        ],
+        "summary": "One Workflow.",
+        "operationId": "get_workflow",
+        "parameters": [
+          {
+            "name": "workflow_id",
+            "in": "path",
+            "description": "The Workflow's id.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowInfo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`workflow_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/v1/workflows/{workflow_id}/diff": {
+      "get": {
+        "tags": [
+          "workflows"
+        ],
+        "summary": "What changed between two Versions of a Workflow, as an RFC 6902 JSON Patch over their\nDefinitions in canonical form. Works on Drafts and Published Versions alike.",
+        "operationId": "diff_versions",
+        "parameters": [
+          {
+            "name": "workflow_id",
+            "in": "path",
+            "description": "The Workflow's id.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "path",
+            "description": "The Version number to diff from.",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "to",
+            "in": "path",
+            "description": "The Version number to diff to.",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionDiff"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`workflow_not_found` or `version_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/v1/workflows/{workflow_id}/versions": {
+      "get": {
+        "tags": [
+          "workflows"
+        ],
+        "summary": "The Workflow's Versions, oldest first, without their Definitions.",
+        "operationId": "list_versions",
+        "parameters": [
+          {
+            "name": "workflow_id",
+            "in": "path",
+            "description": "The Workflow's id.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`workflow_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "workflows"
+        ],
+        "summary": "Saves the request body, a Definition, as a new Draft of the Workflow, numbered after its\nlatest Version. The Workflow is created by its first Draft. Any number of Drafts may exist\nat once. Semantic errors do not stop a Draft from being saved: they come back in\n`diagnostics`. A body that does not parse as a Definition is refused with\n`invalid_definition`, and one whose `id` is not the Workflow's with `workflow_id_mismatch`.",
+        "operationId": "create_draft",
+        "parameters": [
+          {
+            "name": "workflow_id",
+            "in": "path",
+            "description": "The Workflow's id.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "A Definition (see `GET /v1/schema`).",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedVersion"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_request`: not JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_definition` or `workflow_id_mismatch`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/v1/workflows/{workflow_id}/versions/{number}": {
+      "get": {
+        "tags": [
+          "workflows"
+        ],
+        "summary": "One Version with its Definition.",
+        "operationId": "get_version",
+        "parameters": [
+          {
+            "name": "workflow_id",
+            "in": "path",
+            "description": "The Workflow's id.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "description": "The Version's number.",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionInfo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`workflow_not_found` or `version_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "workflows"
+        ],
+        "summary": "Replaces a Draft's Definition in place, keeping its number. Refused with\n`version_published` once the Version is Published. The body is treated as in\n`create_draft`.",
+        "operationId": "replace_draft",
+        "parameters": [
+          {
+            "name": "workflow_id",
+            "in": "path",
+            "description": "The Workflow's id.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "description": "The Draft's number.",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "A Definition (see `GET /v1/schema`).",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedVersion"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_request`: not JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`workflow_not_found` or `version_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`version_published`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_definition` or `workflow_id_mismatch`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/v1/workflows/{workflow_id}/versions/{number}/activate": {
+      "post": {
+        "tags": [
+          "workflows"
+        ],
+        "summary": "Makes a Published Version the Workflow's Active Version: new Runs start on it and the\nscheduler follows its cron Triggers. Activating an older Version is a rollback; Runs\nalready started keep their Version (ADR-0009). Needs an `admin` Token.",
+        "operationId": "activate_version",
+        "parameters": [
+          {
+            "name": "workflow_id",
+            "in": "path",
+            "description": "The Workflow's id.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "description": "The Published Version's number.",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowInfo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`workflow_not_found` or `version_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`version_not_published`: the Version is a Draft.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/v1/workflows/{workflow_id}/versions/{number}/publish": {
+      "post": {
+        "tags": [
+          "workflows"
+        ],
+        "summary": "Publishes a Draft after validating it for publishing: unknown Queues and Workflows and\ndisabled or dangerous Actions are errors, and any error refuses with `invalid_definition`\nand the Diagnostics. A Published Version never changes again. Needs an `admin` Token, which\nis also what keeps Versions that use dangerous Actions in human hands.",
+        "operationId": "publish_version",
+        "parameters": [
+          {
+            "name": "workflow_id",
+            "in": "path",
+            "description": "The Workflow's id.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "description": "The Draft's number.",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedVersion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`workflow_not_found` or `version_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`version_published`, or `version_changed` when the Draft was replaced meanwhile.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_definition`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/v1/workflows/{workflow_id}/versions/{number}/validate": {
+      "post": {
+        "tags": [
+          "workflows"
+        ],
+        "summary": "Validates a stored Version's Definition for the `draft` (default) or `publish` target.\nDiagnostics are the result, not an error: the response is 200 even when they hold errors.",
+        "operationId": "validate_version",
+        "parameters": [
+          {
+            "name": "workflow_id",
+            "in": "path",
+            "description": "The Workflow's id.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "description": "The Version's number.",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "target",
+            "in": "path",
+            "description": "What to validate for. Defaults to `draft`.",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TargetName"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationReport"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`workflow_not_found` or `version_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -531,6 +1414,12 @@
           "token_not_found",
           "bootstrap_disabled",
           "already_bootstrapped",
+          "workflow_not_found",
+          "version_not_found",
+          "version_published",
+          "version_not_published",
+          "version_changed",
+          "workflow_id_mismatch",
           "not_ready",
           "internal_error"
         ]
@@ -563,6 +1452,26 @@
           }
         },
         "additionalProperties": false
+      },
+      "SavedVersion": {
+        "type": "object",
+        "description": "A Version just saved or published, with what validation found.",
+        "required": [
+          "version",
+          "diagnostics"
+        ],
+        "properties": {
+          "diagnostics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            },
+            "description": "Every Diagnostic for the Definition. A Draft may be saved with errors; publishing\nrequires none."
+          },
+          "version": {
+            "$ref": "#/components/schemas/VersionInfo"
+          }
+        }
       },
       "SchemaDocument": {
         "type": "object",
@@ -605,6 +1514,13 @@
         "enum": [
           "error",
           "warning"
+        ]
+      },
+      "StateName": {
+        "type": "string",
+        "enum": [
+          "draft",
+          "published"
         ]
       },
       "Status": {
@@ -687,6 +1603,124 @@
           }
         }
       },
+      "ValidationReport": {
+        "type": "object",
+        "required": [
+          "valid",
+          "diagnostics"
+        ],
+        "properties": {
+          "diagnostics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            }
+          },
+          "valid": {
+            "type": "boolean",
+            "description": "Whether the Definition has no error Diagnostics, so it can be published (for the\n`publish` target) or is complete enough to publish later (for `draft`)."
+          }
+        }
+      },
+      "VersionDiff": {
+        "type": "object",
+        "description": "What changed between two Versions of one Workflow.",
+        "required": [
+          "from",
+          "to",
+          "patch"
+        ],
+        "properties": {
+          "from": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "patch": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "An RFC 6902 JSON Patch that turns `from`'s Definition into `to`'s, one operation per\nchanged field; empty when the Definitions are equal."
+          },
+          "to": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "VersionInfo": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/VersionSummary"
+          },
+          {
+            "type": "object",
+            "required": [
+              "definition"
+            ],
+            "properties": {
+              "definition": {
+                "type": "object",
+                "description": "The Definition as stored, in its canonical JSON form."
+              }
+            }
+          }
+        ],
+        "description": "A Version with its Definition."
+      },
+      "VersionList": {
+        "type": "object",
+        "required": [
+          "versions"
+        ],
+        "properties": {
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VersionSummary"
+            },
+            "description": "Oldest first."
+          }
+        }
+      },
+      "VersionSummary": {
+        "type": "object",
+        "description": "A Version without its Definition, as listed.",
+        "required": [
+          "workflow_id",
+          "number",
+          "state",
+          "active",
+          "created_at"
+        ],
+        "properties": {
+          "active": {
+            "type": "boolean",
+            "description": "Whether this is the Workflow's Active Version."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "number": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "published_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "state": {
+            "$ref": "#/components/schemas/StateName"
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        }
+      },
       "WebhookBinding": {
         "type": "object",
         "description": "The webhook Trigger a `webhook` Token is bound to.",
@@ -705,6 +1739,47 @@
           }
         },
         "additionalProperties": false
+      },
+      "WorkflowInfo": {
+        "type": "object",
+        "description": "A Workflow and the Version new Runs and Schedules use.",
+        "required": [
+          "id",
+          "created_at"
+        ],
+        "properties": {
+          "active_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "The Published Version new Runs start on and whose Triggers fire. Absent until a Version\nis activated."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "example": "onboarding-email"
+          }
+        }
+      },
+      "WorkflowList": {
+        "type": "object",
+        "required": [
+          "workflows"
+        ],
+        "properties": {
+          "workflows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkflowInfo"
+            },
+            "description": "Every Workflow, ordered by id."
+          }
+        }
       }
     },
     "securitySchemes": {
