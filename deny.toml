@@ -25,6 +25,9 @@ allow = [
     "Zlib",
 ]
 confidence-threshold = 0.9
+# MPL-2.0 is file-level copyleft; this crate is unmodified and only runs inside the
+# `rust-embed` proc macro (via `shellexpand`) at compile time, so it is not in the binary.
+exceptions = [{ crate = "option-ext", allow = ["MPL-2.0"] }]
 
 [licenses.private]
 ignore = true

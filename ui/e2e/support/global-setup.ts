@@ -30,7 +30,8 @@ async function recreateDatabase(databaseUrl: string) {
 
 function binaryPath(env: E2eEnv) {
   if (env.binary) return env.binary;
-  execFileSync("cargo", ["build", "-p", "bia-cli"], {
+  const features = env.embedded ? ["--features", "ui"] : [];
+  execFileSync("cargo", ["build", "-p", "bia-cli", ...features], {
     cwd: repoRoot,
     stdio: "inherit",
     env: { ...process.env, SQLX_OFFLINE: "true" },
@@ -79,6 +80,9 @@ export default async function globalSetup() {
     throw new Error(`bootstrap failed: ${bootstrap.status} ${await bootstrap.text()}`);
   // Workers inherit this, and fixtures read it.
   process.env.BIA_E2E_ADMIN_TOKEN = ((await bootstrap.json()) as { value: string }).value;
+
+  // The binary serves the UI itself and its own `config.json`.
+  if (env.embedded) return async () => void server.kill("SIGTERM");
 
   // The bundle is served as built; only `config.json` is written, which is what a deployment does.
   writeFileSync(path.join(uiRoot, "dist/config.json"), JSON.stringify({ apiUrl: env.apiUrl }));

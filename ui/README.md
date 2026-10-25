@@ -1,6 +1,6 @@
 # bia UI
 
-A static React SPA (Vite, TypeScript, TanStack Router and Query, Tailwind, shadcn/ui) that talks to the bia HTTP API. See ADR-0013, ADR-0050 and ADR-0051.
+A static React SPA (Vite, TypeScript, TanStack Router and Query, Tailwind, shadcn/ui) that talks to the bia HTTP API. See ADR-0013, ADR-0050 and ADR-0051; `docs/deploy-ui.md` covers embedding and static deployment.
 
 Needs Node.js 22+ and pnpm (the version is pinned by `packageManager`; `corepack enable` installs it).
 
@@ -12,7 +12,7 @@ pnpm install
 pnpm dev          # http://localhost:5173
 ```
 
-The API URL comes from `config.json` at the site root, read at startup, so one build works everywhere. In development it is `public/config.json` (default `http://127.0.0.1:8080`); on a deployment, put your own `config.json` next to `index.html`. An empty `apiUrl` means "the page's own origin". The API must allow the UI's origin in `BIA_CORS_ORIGINS`.
+The API URL comes from `config.json` at the site root, read at startup, so one build works everywhere. In development it is `public/config.json` (default `http://127.0.0.1:8080`); on a deployment, put your own `config.json` next to `index.html`. The site must be served from the root of its origin. An empty `apiUrl` means "the page's own origin". The API must allow the UI's origin in `BIA_CORS_ORIGINS`.
 
 Run an API for development with `just db-up`, `bia migrate`, then `bia serve` (set `BIA_BOOTSTRAP_KEY` and `BIA_CORS_ORIGINS=http://localhost:5173`), and mint a Token with `bia token create --bootstrap`.
 
@@ -46,6 +46,8 @@ Playwright drives a real `bia serve`. The global setup (`e2e/support/global-setu
 | `BIA_E2E_UI_PORT`      | `BIA_E2E_PORT + 1000`                       | Port of the static server for the bundle.                                                             |
 | `BIA_E2E_DATABASE_URL` | `postgres://bia:bia@localhost:5432/bia_e2e` | Database to **drop and recreate**; its name must start with `bia_e2e`. Needs Postgres (`just db-up`). |
 | `BIA_E2E_BIN`          | builds `bia-cli`, uses `target/debug/bia`   | A prebuilt `bia` binary.                                                                              |
+
+To test the UI embedded in the binary (`--features ui`, ADR-0052), run `pnpm test:e2e:embedded` (or `BIA_E2E_EMBEDDED=1`): the setup builds `bia-cli` with the feature, skips the static server, and `embedded.spec.ts` runs. `BIA_E2E_BIN` must then be a binary built with the feature.
 
 Use your own port and database when several checkouts run at once, for example `BIA_E2E_PORT=18028 BIA_E2E_DATABASE_URL=postgres://bia:bia@localhost:5432/bia_e2e_28 pnpm test:e2e`.
 

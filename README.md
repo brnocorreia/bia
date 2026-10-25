@@ -48,6 +48,7 @@ steps:
 - [`GLOSSARY.md`](GLOSSARY.md): domain vocabulary
 - [`docs/architecture.md`](docs/architecture.md): how the pieces fit
 - [`docs/dsl.md`](docs/dsl.md): the definition format (draft)
+- [`docs/deploy-ui.md`](docs/deploy-ui.md): embedding the UI in the binary, or deploying it to Cloudflare Pages or S3 + CloudFront
 - [`docs/configuration.md`](docs/configuration.md): configuring `bia serve` and `bia migrate`
 - [`docs/adr/`](docs/adr/): architecture decision records
 
