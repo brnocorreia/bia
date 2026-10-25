@@ -65,3 +65,16 @@ Tests share one database, so give seeded data a `uniqueName` and do not assume t
 ## Regenerating the API types
 
 When a handler changes, run `just openapi` at the repository root, then `pnpm gen:api` here, and commit both `crates/bia-server/openapi.json` and `src/api/schema.gen.ts`. CI fails if the types are stale.
+
+## Runs and the Timeline
+
+- `/runs` lists Runs (newest first, "Load more" pages by `next_after`) filtered by Workflow, status and a creation date range; filters are URL search params. "Trigger a Run" opens a dialog with the Workflow (those with an Active Version) and a JSON input. `/runs/$runId` shows the Run, its input and Trigger metadata, the Timeline, and Cancel, Resume and Retry behind confirmations (Retry offers a link to the new Run). See ADR-0054.
+- Active Runs poll (`api/runs.ts`, `api/polling.ts`): every 2 s by default, stopping when the Run ends. In a browser, `localStorage["bia.pollIntervalMs"]` (at least 50) overrides it; the e2e tests set 100.
+- `components/timeline/timeline.tsx` exports `Timeline`, reused by the Dry Run screen. It fetches nothing.
+
+  | Prop      | Type                  | Meaning                                                                                                   |
+  | --------- | --------------------- | --------------------------------------------------------------------------------------------------------- |
+  | `entries` | `TimelineEntryInfo[]` | The API's Timeline: `RunInfo.timeline` or `DryRunReport.timeline`. Order does not matter (`seq` is used). |
+  | `dryRun`  | `boolean`, optional   | Shows a "dry run" badge and a note that the durations are virtual.                                        |
+
+  `components/timeline/model.ts` holds the pure grouping and formatting (Vitest), and `json-block.tsx` the lazy, collapsed JSON disclosure. `components/status-badge.tsx` colours a Run or Attempt status.
