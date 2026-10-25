@@ -1069,6 +1069,51 @@
         ]
       }
     },
+    "/v1/tokens/me": {
+      "get": {
+        "tags": [
+          "tokens"
+        ],
+        "summary": "The Token the request is made with, so a client can tell which controls its Scope allows.\nOpen to `admin` and `agent` Tokens, the two the UI signs in with.",
+        "operationId": "current_token",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenInfo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
     "/v1/tokens/{token_id}/revoke": {
       "post": {
         "tags": [

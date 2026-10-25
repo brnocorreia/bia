@@ -281,6 +281,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/tokens/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The Token the request is made with, so a client can tell which controls its Scope allows.
+         *     Open to `admin` and `agent` Tokens, the two the UI signs in with.
+         */
+        get: operations["current_token"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/tokens/{token_id}/revoke": {
         parameters: {
             query?: never;
@@ -1766,6 +1786,46 @@ export interface operations {
             };
             /** @description `already_bootstrapped`: an unrevoked admin Token exists. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    current_token: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenInfo"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

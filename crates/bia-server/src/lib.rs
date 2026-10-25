@@ -136,6 +136,7 @@ fn documented() -> OpenApiRouter<ApiState> {
             routes::token::create_token,
             routes::token::list_tokens
         ))
+        .routes(routes!(routes::token::current_token))
         .routes(routes!(routes::token::revoke_token))
         .routes(routes!(routes::token::bootstrap_token))
         .routes(routes!(routes::secret::list_secrets))
