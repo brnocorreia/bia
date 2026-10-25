@@ -171,7 +171,11 @@ One structured validation finding: JSON path, code, severity (error or warning),
 _Avoid_: validation error (when it may be a warning), lint
 
 **Token**:
-A credential for the API with a Scope.
+A credential for the API with a Scope, shown once when created and stored only as a hash.
+_Avoid_: API key
+
+**Bootstrap Key**:
+The secret `bia serve` is started with that mints the first admin Token, and works only while no unrevoked admin Token exists.
 
 **Scope**:
 What a Token may do: `admin` (everything), `agent` (author Drafts, dry-run, trigger, read; never publish or activate), `webhook` (start Runs from one webhook Trigger).

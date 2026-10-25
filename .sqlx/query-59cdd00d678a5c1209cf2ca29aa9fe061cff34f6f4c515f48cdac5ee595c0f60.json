@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Serialises creating the first admin Token until the transaction ends.\n-- $1: the advisory lock key\nSELECT pg_advisory_xact_lock($1)\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "pg_advisory_xact_lock",
+        "type_info": "Void",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "59cdd00d678a5c1209cf2ca29aa9fe061cff34f6f4c515f48cdac5ee595c0f60"
+}

@@ -7,6 +7,7 @@ use serde::Serialize;
 use serde_json::Value;
 use utoipa::ToSchema;
 
+use crate::auth::{Agent, AuthErrors};
 use crate::{ApiState, Json};
 
 /// The DSL's JSON Schemas and the Action catalogue.
@@ -62,14 +63,16 @@ pub(crate) struct ActionExampleEntry {
     output: Value,
 }
 
-/// The DSL JSON Schema and every Action with its param and output schemas and examples.
+/// The DSL JSON Schema and every Action with its param and output schemas and examples. Needs
+/// an `admin` or `agent` Token, since the catalogue describes this server's configuration.
 #[utoipa::path(
     get,
     path = "/v1/schema",
     tag = "schema",
-    responses((status = OK, body = SchemaDocument))
+    security(("token" = [])),
+    responses((status = OK, body = SchemaDocument), AuthErrors)
 )]
-pub(crate) async fn get_schema(State(state): State<ApiState>) -> Json<SchemaDocument> {
+pub(crate) async fn get_schema(_: Agent, State(state): State<ApiState>) -> Json<SchemaDocument> {
     Json(SchemaDocument {
         definition: definition_schema(),
         queue: queue_resource_schema(),

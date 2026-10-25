@@ -65,7 +65,7 @@
         "tags": [
           "schema"
         ],
-        "summary": "The DSL JSON Schema and every Action with its param and output schemas and examples.",
+        "summary": "The DSL JSON Schema and every Action with its param and output schemas and examples. Needs\nan `admin` or `agent` Token, since the catalogue describes this server's configuration.",
         "operationId": "get_schema",
         "responses": {
           "200": {
@@ -76,8 +76,273 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/v1/tokens": {
+      "get": {
+        "tags": [
+          "tokens"
+        ],
+        "summary": "Every Token, revoked ones included, without their values. Needs an `admin` Token.",
+        "operationId": "list_tokens",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "tokens"
+        ],
+        "summary": "Creates a Token and returns its value, once. Needs an `admin` Token.",
+        "operationId": "create_token",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedToken"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_request`, e.g. `webhook` missing or misplaced.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/v1/tokens/bootstrap": {
+      "post": {
+        "tags": [
+          "tokens"
+        ],
+        "summary": "Mints the first admin Token of a fresh install, authenticated with the server's bootstrap\nkey (`BIA_BOOTSTRAP_KEY`) instead of a Token. It refuses once an unrevoked admin Token\nexists, so the key cannot mint a second one; `bia token create --bootstrap` calls it.",
+        "operationId": "bootstrap_token",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BootstrapRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedToken"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No bootstrap key, or the wrong one; `code` is `missing_token` or `invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`bootstrap_disabled`: the server has no bootstrap key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`already_bootstrapped`: an unrevoked admin Token exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bootstrap_key": []
+          }
+        ]
+      }
+    },
+    "/v1/tokens/{token_id}/revoke": {
+      "post": {
+        "tags": [
+          "tokens"
+        ],
+        "summary": "Revokes a Token at once; revoking it again changes nothing. Needs an `admin` Token, which\nmay revoke itself. With every admin Token revoked, only bootstrapping can mint another.",
+        "operationId": "revoke_token",
+        "parameters": [
+          {
+            "name": "token_id",
+            "in": "path",
+            "description": "The Token's `id`.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenInfo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`token_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
       }
     }
   },
@@ -161,6 +426,38 @@
           }
         }
       },
+      "BootstrapRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "What the Token is for, e.g. `admin`.",
+            "example": "admin"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreatedToken": {
+        "type": "object",
+        "description": "A Token just created, with its value.",
+        "required": [
+          "token",
+          "value"
+        ],
+        "properties": {
+          "token": {
+            "$ref": "#/components/schemas/TokenInfo"
+          },
+          "value": {
+            "type": "string",
+            "description": "Send it as `Authorization: Bearer <value>`. Shown only in this response: bia keeps a\nhash of it, so a lost value cannot be recovered, only replaced.",
+            "example": "bia_6f1c…"
+          }
+        }
+      },
       "Diagnostic": {
         "type": "object",
         "description": "One validation finding about a Definition.",
@@ -228,9 +525,44 @@
           "malformed_request",
           "request_too_large",
           "invalid_definition",
+          "missing_token",
+          "invalid_token",
+          "insufficient_scope",
+          "token_not_found",
+          "bootstrap_disabled",
+          "already_bootstrapped",
           "not_ready",
           "internal_error"
         ]
+      },
+      "NewTokenRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "scope"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "What the Token is for, e.g. `claude-desktop`. Need not be unique.",
+            "example": "claude-desktop"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/ScopeName"
+          },
+          "webhook": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/WebhookBinding",
+                "description": "Required with the `webhook` Scope, and refused with any other."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
       },
       "SchemaDocument": {
         "type": "object",
@@ -258,6 +590,15 @@
           }
         }
       },
+      "ScopeName": {
+        "type": "string",
+        "description": "What a Token may do.",
+        "enum": [
+          "admin",
+          "agent",
+          "webhook"
+        ]
+      },
       "Severity": {
         "type": "string",
         "description": "Only errors block publishing.",
@@ -277,6 +618,105 @@
             "example": "ok"
           }
         }
+      },
+      "TokenInfo": {
+        "type": "object",
+        "description": "A Token, without its value.",
+        "required": [
+          "id",
+          "name",
+          "scope",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "last_used_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When the Token last authenticated a request, to the minute."
+          },
+          "name": {
+            "type": "string"
+          },
+          "revoked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Once set, the Token authenticates nothing."
+          },
+          "scope": {
+            "$ref": "#/components/schemas/ScopeName"
+          },
+          "webhook": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/WebhookBinding",
+                "description": "Present with the `webhook` Scope."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "TokenList": {
+        "type": "object",
+        "required": [
+          "tokens"
+        ],
+        "properties": {
+          "tokens": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TokenInfo"
+            },
+            "description": "Every Token, revoked ones included, oldest first."
+          }
+        }
+      },
+      "WebhookBinding": {
+        "type": "object",
+        "description": "The webhook Trigger a `webhook` Token is bound to.",
+        "required": [
+          "workflow_id",
+          "trigger_id"
+        ],
+        "properties": {
+          "trigger_id": {
+            "type": "string",
+            "example": "signup"
+          },
+          "workflow_id": {
+            "type": "string",
+            "example": "onboarding-email"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "bootstrap_key": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The key the server was started with in `BIA_BOOTSTRAP_KEY`."
+      },
+      "token": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "A Token, `bia_` and 64 hex digits. Its Scope decides which routes it may call: `admin` everything, `agent` all but publishing, activation and administration, `webhook` only its own webhook Trigger."
       }
     }
   }

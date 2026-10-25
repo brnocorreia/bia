@@ -3,8 +3,9 @@
 #![allow(clippy::unwrap_used)]
 
 use axum::routing::post;
+use bia_core::clock::ManualClock;
 use bia_core::validation::{KnownResources, Target, Validator};
-use bia_server::{ApiError, Json};
+use bia_server::{ApiConfig, ApiError, Json};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -33,8 +34,10 @@ async fn server_with_a_validating_route(pool: PgPool) -> TestServer {
         }
         Ok(Json(json!({ "valid": true })))
     }
-    let router = bia_server::router(common::state(pool)).route("/test/validate", post(validate));
-    TestServer::serve(router).await
+    let clock = ManualClock::new(common::t0());
+    let state = common::state(pool, &clock, ApiConfig::default());
+    let router = bia_server::router(state).route("/test/validate", post(validate));
+    TestServer::serve(router, clock).await
 }
 
 #[sqlx::test(migrator = "bia_store::MIGRATOR")]
