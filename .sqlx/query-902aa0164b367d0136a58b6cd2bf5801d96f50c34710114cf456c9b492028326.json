@@ -1,0 +1,114 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Creates an admin Token unless an unrevoked one exists; returns no row then.\n-- Run under lock_admins.sql, or two callers could both see none.\n-- $1: name, $2: hash, $3: now\nINSERT INTO tokens (name, hash, scope, created_at)\nSELECT $1, $2, 'admin', $3\nWHERE NOT EXISTS (SELECT 1 FROM tokens WHERE scope = 'admin' AND revoked_at IS NULL)\nRETURNING id, name, scope, workflow_id, trigger_id, created_at, last_used_at, revoked_at\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "tokens",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tokens",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "scope",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tokens",
+            "name": "scope"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "workflow_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tokens",
+            "name": "workflow_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "trigger_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tokens",
+            "name": "trigger_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tokens",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "last_used_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tokens",
+            "name": "last_used_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "revoked_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tokens",
+            "name": "revoked_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bytea",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "902aa0164b367d0136a58b6cd2bf5801d96f50c34710114cf456c9b492028326"
+}
