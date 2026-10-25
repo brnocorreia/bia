@@ -320,6 +320,7 @@ dependencies = [
  "clap",
  "figment",
  "reqwest",
+ "rmcp",
  "serde",
  "serde_json",
  "sqlx",
