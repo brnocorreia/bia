@@ -2,6 +2,7 @@ import { createFileRoute, Link, useLocation } from "@tanstack/react-router";
 import { useState } from "react";
 import { messageOf } from "@/api/request";
 import { useVersion, useVersions } from "@/api/workflows";
+import { DryRunPanel } from "@/dry-run/dry-run-panel";
 import { DefinitionEditor, type EditorSource } from "@/editor/definition-editor";
 
 interface Search {
@@ -56,7 +57,12 @@ function EditWorkflow() {
       )}
       {!error && !source && <p className="text-sm text-muted-foreground">Loading…</p>}
       {source && (
-        <DefinitionEditor workflowId={workflowId} source={source} initialNotice={notice} />
+        <DefinitionEditor
+          workflowId={workflowId}
+          source={source}
+          initialNotice={notice}
+          sidePanel={(context) => <DryRunPanel {...context} />}
+        />
       )}
     </section>
   );

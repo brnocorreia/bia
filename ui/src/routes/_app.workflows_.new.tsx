@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { DryRunPanel } from "@/dry-run/dry-run-panel";
 import { DefinitionEditor } from "@/editor/definition-editor";
 
 export const Route = createFileRoute("/_app/workflows_/new")({
@@ -25,7 +26,11 @@ function NewWorkflow() {
           The Definition&apos;s <code>id</code> names the Workflow. Saving creates its first Draft.
         </p>
       </div>
-      <DefinitionEditor workflowId={undefined} source={{ definition: STARTER }} />
+      <DefinitionEditor
+        workflowId={undefined}
+        source={{ definition: STARTER }}
+        sidePanel={(context) => <DryRunPanel {...context} />}
+      />
     </section>
   );
 }

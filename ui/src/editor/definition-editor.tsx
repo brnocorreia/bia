@@ -228,7 +228,7 @@ export function DefinitionEditor({
         </p>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
         <div className="flex min-w-0 flex-col gap-3">
           <div className="h-[28rem] overflow-hidden rounded-md border">
             <Suspense
@@ -269,7 +269,11 @@ export function DefinitionEditor({
             </div>
           )}
         </div>
-        {sidePanel && <aside aria-label="Side panel">{sidePanel(context)}</aside>}
+        {sidePanel && (
+          <aside aria-label="Side panel" className="min-w-0">
+            {sidePanel(context)}
+          </aside>
+        )}
       </div>
 
       <ConfirmDialog
