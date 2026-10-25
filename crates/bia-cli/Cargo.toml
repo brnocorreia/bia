@@ -36,6 +36,7 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
 bia-core = { workspace = true, features = ["testing"] }
 figment = { version = "0.10.19", features = ["env", "toml", "test"] }
 tempfile = "3.27.0"
+wiremock = "0.6.5"
 tokio = { version = "1.53.3", features = ["io-util", "macros", "process", "rt", "time"] }
 
 [lints]

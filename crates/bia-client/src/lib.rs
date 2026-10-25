@@ -130,6 +130,24 @@ struct TokenList {
     tokens: Vec<Token>,
 }
 
+/// A Secret, without its value: no route returns one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Secret {
+    pub name: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct SecretList {
+    secrets: Vec<Secret>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct SecretDeleted {
+    name: String,
+}
+
 /// A Workflow and the Version new Runs and Schedules use.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Workflow {
@@ -437,6 +455,32 @@ impl Client {
                 Some(&Request { name }),
             )
             .await
+    }
+
+    /// Creates the Secret or replaces its value. Needs an `admin` Token.
+    pub async fn put_secret(&self, name: &str, value: &str) -> Result<Secret, Error> {
+        #[derive(Serialize)]
+        struct Request<'a> {
+            value: &'a str,
+        }
+        self.send(
+            Method::PUT,
+            &format!("/v1/secrets/{name}"),
+            Some(&Request { value }),
+        )
+        .await
+    }
+
+    pub async fn list_secrets(&self) -> Result<Vec<Secret>, Error> {
+        let list: SecretList = self.send(Method::GET, "/v1/secrets", None::<&()>).await?;
+        Ok(list.secrets)
+    }
+
+    pub async fn delete_secret(&self, name: &str) -> Result<(), Error> {
+        let _: SecretDeleted = self
+            .send(Method::DELETE, &format!("/v1/secrets/{name}"), None::<&()>)
+            .await?;
+        Ok(())
     }
 
     pub async fn list_workflows(&self) -> Result<Vec<Workflow>, Error> {

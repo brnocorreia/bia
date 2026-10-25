@@ -4,9 +4,10 @@
 //! success and 1 when the command failed, when validation found errors, or when a Dry Run
 //! failed; usage mistakes exit 2.
 
+use std::io::Read;
 use std::path::PathBuf;
 
-use anyhow::bail;
+use anyhow::{Context, bail};
 use bia_client::{
     Client, DryRunReport, Error, Run, RunQuery, RunStatus, RunSummary, Target, Version,
     VersionState,
@@ -172,6 +173,24 @@ pub(crate) enum RunCommand {
     Resume { id: Uuid },
 }
 
+#[derive(Debug, Subcommand)]
+pub(crate) enum SecretCommand {
+    /// Creates a Secret or replaces its value. The value is read from standard input, or from
+    /// `--file`, never from an argument that `ps` would show; one trailing newline is dropped.
+    /// Needs an `admin` Token.
+    Set {
+        /// The name Definitions read as `secrets.NAME`.
+        name: String,
+        /// Read the value from this file instead of standard input.
+        #[arg(long, value_name = "FILE")]
+        file: Option<PathBuf>,
+    },
+    /// Lists Secret names with their times. Values are never shown.
+    List,
+    /// Deletes a Secret. Needs an `admin` Token.
+    Delete { name: String },
+}
+
 fn parse_status(text: &str) -> Result<RunStatus, String> {
     serde_json::from_value(Value::String(text.to_owned())).map_err(|_| {
         "expected pending, running, sleeping, waiting, succeeded, failed or cancelled".to_owned()
@@ -184,6 +203,62 @@ pub(crate) async fn workflow(ctx: &Ctx, command: WorkflowCommand) -> bool {
 
 pub(crate) async fn run(ctx: &Ctx, command: RunCommand) -> bool {
     finish(ctx, run_command(ctx, command).await)
+}
+
+pub(crate) async fn secret(ctx: &Ctx, command: SecretCommand) -> bool {
+    finish(ctx, secret_command(ctx, command).await)
+}
+
+async fn secret_command(ctx: &Ctx, command: SecretCommand) -> anyhow::Result<bool> {
+    match command {
+        SecretCommand::Set { name, file } => {
+            let mut value = match file {
+                Some(path) => std::fs::read_to_string(&path)
+                    .with_context(|| format!("cannot read {}", path.display()))?,
+                None => {
+                    let mut value = String::new();
+                    std::io::stdin()
+                        .read_to_string(&mut value)
+                        .context("cannot read the value from standard input")?;
+                    value
+                }
+            };
+            if value.ends_with('\n') {
+                value.pop();
+                if value.ends_with('\r') {
+                    value.pop();
+                }
+            }
+            if value.is_empty() {
+                bail!("the value is empty; pipe it in or pass --file");
+            }
+            let secret = ctx.client.put_secret(&name, &value).await?;
+            emit(ctx, &secret, || format!("set secret {}\n", secret.name))?;
+        }
+        SecretCommand::List => {
+            let secrets = ctx.client.list_secrets().await?;
+            emit(ctx, &json!({ "secrets": secrets }), || {
+                let rows: Vec<_> = secrets
+                    .iter()
+                    .map(|s| {
+                        vec![
+                            s.name.clone(),
+                            render::time(s.created_at),
+                            render::time(s.updated_at),
+                        ]
+                    })
+                    .collect();
+                render::table(&["SECRET", "CREATED", "UPDATED"], &rows)
+            })?;
+        }
+        SecretCommand::Delete { name } => {
+            ctx.client.delete_secret(&name).await?;
+            emit(ctx, &json!({ "deleted": name }), || {
+                format!("deleted secret {name}\n")
+            })?;
+        }
+    }
+    Ok(true)
 }
 
 /// Prints a failure and turns the outcome into the process's success.

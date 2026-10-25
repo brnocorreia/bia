@@ -68,6 +68,10 @@ pub enum ErrorCode {
     RunNotFinished,
     /// The Run cannot be resumed: it is not `failed`, or it failed before any Step ran.
     RunNotResumable,
+    /// No Secret has this name.
+    SecretNotFound,
+    /// The server has no `BIA_MASTER_KEY`, so it cannot store Secrets.
+    MasterKeyMissing,
     /// The server cannot serve requests yet: the database is unreachable or migrations are
     /// pending.
     NotReady,

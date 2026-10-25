@@ -16,6 +16,7 @@ A file key `section.name` is the variable `BIA_SECTION_NAME`. Durations are a wh
 | `database_url` | `BIA_DATABASE_URL` (or `DATABASE_URL`) | none, required | The Postgres URL, `postgres://user:password@host:port/database`. |
 | `cors_origins` | `BIA_CORS_ORIGINS` | none | Browser origins allowed to call the API, for a UI hosted elsewhere, written as the browser sends them (`https://bia.example.com`, `http://localhost:5173`): a TOML array, or comma-separated in the variable. `*` allows any origin. A preflight from any other origin fails. Callers that are not browsers are unaffected. |
 | `bootstrap_key` | `BIA_BOOTSTRAP_KEY` | none | A secret of at least 32 characters that lets `bia token create --bootstrap` mint the first admin Token. It works only while no unrevoked admin Token exists; leave it unset to turn bootstrapping off. See [Tokens](#tokens). |
+| `master_key` | `BIA_MASTER_KEY` | none | The key Secrets are encrypted under: exactly 64 hex digits, e.g. from `openssl rand -hex 32`. Without it the server cannot store or read Secrets; it refuses to start when Secrets already exist. Back it up: losing it loses every Secret, and changing it makes the stored ones unreadable. See [Secrets](#secrets). |
 | `url` | `BIA_URL` | `http://127.0.0.1:8080` | Where the API commands (`bia workflow`, `bia run`, `bia token`) find the server. The global `--url` flag overrides it. `bia serve` ignores it. |
 | `token` | `BIA_TOKEN` | none | The Token the API commands send. There is no flag, so it never appears in a process list. Keep a config file that holds it readable only by you. `bia serve` ignores it. |
 | `api.bind` | `BIA_API_BIND` | `127.0.0.1:8080` | The address and port the `api` Role listens on. It defaults to loopback; set `0.0.0.0:8080` to accept connections from other hosts, such as in a container. |
@@ -56,6 +57,22 @@ export BIA_TOKEN="$(bia token create --bootstrap --name admin)"
 ```
 
 Once an unrevoked admin Token exists, bootstrapping refuses (`already_bootstrapped`), so the key cannot mint another; create more Tokens with the admin Token instead, e.g. `bia token create --name claude-desktop --scope agent`. If every admin Token is revoked, bootstrapping works again, which is how to regain access; unset `BIA_BOOTSTRAP_KEY` to turn it off. `bia token create` talks to the API at `BIA_URL` (default `http://127.0.0.1:8080`) and reads credentials only from `BIA_TOKEN` (or `token` in the config file) and `BIA_BOOTSTRAP_KEY`, never from arguments. Token values and the bootstrap key are never logged.
+
+## Secrets
+
+Credentials a Step needs, such as an API token, are Secrets: set once, referenced in a Step's `params` as `{{ secrets.NAME }}`, resolved by the Worker just before the Action runs (ADR-0017, ADR-0049). Start the server with a master key, then set Secrets with an admin Token:
+
+```sh
+export BIA_MASTER_KEY="$(openssl rand -hex 32)"
+bia serve &
+printf '%s' "$UPTIME_API_TOKEN" | bia secret set API_TOKEN   # or: bia secret set API_TOKEN --file token.txt
+bia secret list
+bia secret delete API_TOKEN
+```
+
+The value is read from standard input or `--file` (one trailing newline is dropped), never from an argument, which `ps` would show. Setting a name again replaces its value. No API response, command output or MCP tool returns a value; `agent` Tokens may list names, and only `admin` Tokens may set or delete. A Step that reads a Secret that does not exist fails with `unknown_secret`, naming it.
+
+The Timeline shows a Step's `params` as written, so `Bearer {{ secrets.API_TOKEN }}` stays a Template there, and the interpreter replaces any resolved value with `***` in the Output and the error of the Attempt, which covers an Action that echoes its input. Masking matches the exact value, so an Action that encodes or splits it before echoing it is not covered. Dry Runs never read Secrets: `secrets.NAME` is a `<secret NAME>` placeholder there.
 
 ## Example
 

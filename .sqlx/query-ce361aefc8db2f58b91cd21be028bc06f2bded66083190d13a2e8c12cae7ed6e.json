@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- $1: name\nSELECT nonce, ciphertext FROM secrets WHERE name = $1\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "nonce",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "secrets",
+            "name": "nonce"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "ciphertext",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "secrets",
+            "name": "ciphertext"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "ce361aefc8db2f58b91cd21be028bc06f2bded66083190d13a2e8c12cae7ed6e"
+}

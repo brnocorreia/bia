@@ -159,6 +159,44 @@ async fn invalid_configuration_fails_at_startup_with_a_clear_message() {
     );
 }
 
+#[tokio::test]
+async fn a_malformed_master_key_is_refused_without_echoing_it() {
+    let refused = finished(
+        bia()
+            .args(["serve", "--role", "worker"])
+            .env("BIA_DATABASE_URL", "postgres://bia:bia@localhost:5432/bia")
+            .env("BIA_MASTER_KEY", "not-hex-but-secret"),
+    )
+    .await;
+
+    assert!(!refused.status.success());
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(stderr.contains("`master_key`"), "{stderr}");
+    assert!(!stderr.contains("not-hex-but-secret"), "{stderr}");
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn serve_refuses_to_start_when_secrets_exist_but_there_is_no_master_key(pool: PgPool) {
+    sqlx::query(
+        "INSERT INTO secrets (name, ciphertext, nonce, created_at, updated_at) \
+         VALUES ('API_TOKEN', '\\x00', decode(repeat('00', 24), 'hex'), now(), now())",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let refused = finished(
+        bia()
+            .args(["serve", "--role", "worker"])
+            .env("BIA_DATABASE_URL", database_url(&pool)),
+    )
+    .await;
+
+    assert!(!refused.status.success());
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(stderr.contains("BIA_MASTER_KEY"), "{stderr}");
+}
+
 #[sqlx::test(migrator = "bia_store::MIGRATOR")]
 async fn bia_serve_as_a_scheduler_leads_and_stops_on_sigterm(pool: PgPool) {
     let mut scheduler = bia()

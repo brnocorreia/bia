@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- $1: name\nDELETE FROM secrets WHERE name = $1\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d60d92a489a5aadf0dd5ff9e512131029e9569d0b9d9b517e802c5415c7ae004"
+}

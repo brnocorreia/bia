@@ -430,6 +430,40 @@ async fn a_bad_argument_is_a_tool_error_that_names_it(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn list_secrets_returns_names_and_no_tool_reads_or_writes_one(pool: PgPool) {
+    use bia_store::secret::{MasterKey, PgSecretRepository, SecretName, SecretRepository};
+
+    let f = fixture(pool.clone()).await;
+    let name = SecretName::new("API_TOKEN").unwrap();
+    let sealed = MasterKey::parse(&"cd".repeat(32))
+        .unwrap()
+        .seal(&name, "s3cr3t-value")
+        .unwrap();
+    let mut conn = pool.acquire().await.unwrap();
+    PgSecretRepository
+        .put(&mut conn, &name, &sealed, common::t0())
+        .await
+        .unwrap();
+
+    let listed = ok(&f.mcp, "list_secrets", json!({})).await;
+
+    assert_eq!(listed, f.api("/v1/secrets").await);
+    assert_eq!(listed["secrets"][0]["name"], "API_TOKEN");
+    assert!(!listed.to_string().contains("s3cr3t-value"));
+    let names: Vec<String> = f
+        .mcp
+        .list_all_tools()
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|tool| tool.name.into_owned())
+        .collect();
+    for forbidden in ["get_secret", "put_secret", "set_secret", "delete_secret"] {
+        assert!(!names.iter().any(|name| name == forbidden), "{forbidden}");
+    }
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
 async fn an_agent_token_has_no_tool_to_publish_or_activate(pool: PgPool) {
     let f = fixture(pool).await;
     let names: Vec<String> = f

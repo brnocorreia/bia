@@ -16,5 +16,5 @@ pub use interpreter::{
 };
 pub use retention::{Retention, RetentionConfig};
 pub use scheduler::{CATCH_UP_LIMIT, Chore, MISSED_AFTER, QUEUE_LIMIT, Scheduler, SchedulerConfig};
-pub use secrets::{NoSecrets, SecretResolver};
+pub use secrets::{InternalSecrets, NoSecrets, SecretResolver};
 pub use worker::{Worker, WorkerConfig};

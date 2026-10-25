@@ -789,6 +789,54 @@ async fn secrets_reach_the_action_but_never_the_timeline(pool: PgPool) {
     assert!(!run.checkpoint.state.to_string().contains("s3cr3t"));
 }
 
+fn call_with_secret() -> Value {
+    json!({
+        "schema_version": 1,
+        "id": "call-api",
+        "steps": [{
+            "id": "call",
+            "action": "test.api",
+            "params": { "token": "{{ secrets.API_TOKEN }}" },
+        }],
+    })
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn an_output_that_echoes_a_secret_is_masked_before_it_is_stored(pool: PgPool) {
+    let echo = json!({ "sent": { "authorization": "Bearer s3cr3t" }, "list": ["s3cr3t"] });
+    let api = Arc::new(FakeAction::new("test.api").returning(echo));
+    let secrets = Secrets(BTreeMap::from([("API_TOKEN".into(), "s3cr3t".into())]));
+    let h = Harness::new(pool, &ManualClock::new(t0()), vec![api]).with_secrets(secrets);
+    let run = h.start(call_with_secret(), json!({})).await;
+
+    h.drive().await;
+
+    let timeline = h.timeline(run).await;
+    assert_eq!(
+        timeline[0].output,
+        Some(json!({ "sent": { "authorization": "Bearer ***" }, "list": ["***"] }))
+    );
+    let run = h.run(run).await;
+    assert!(!run.checkpoint.state.to_string().contains("s3cr3t"));
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn an_error_that_echoes_a_secret_is_masked_before_it_is_stored(pool: PgPool) {
+    let error = ActionError::fatal("rejected token s3cr3t")
+        .with_details(json!({ "request": { "token": "s3cr3t" } }));
+    let api = Arc::new(FakeAction::new("test.api").failing(error));
+    let secrets = Secrets(BTreeMap::from([("API_TOKEN".into(), "s3cr3t".into())]));
+    let h = Harness::new(pool, &ManualClock::new(t0()), vec![api]).with_secrets(secrets);
+    let run = h.start(call_with_secret(), json!({})).await;
+
+    h.drive().await;
+
+    let error = h.timeline(run).await[0].error.clone().unwrap();
+    assert!(!error.to_string().contains("s3cr3t"), "{error}");
+    assert_eq!(error["message"], "rejected token ***");
+    assert_eq!(error["details"]["request"]["token"], "***");
+}
+
 #[sqlx::test(migrator = "bia_store::MIGRATOR")]
 async fn an_unknown_action_fails_the_step_with_a_code(pool: PgPool) {
     let h = Harness::new(pool, &ManualClock::new(t0()), vec![]);
