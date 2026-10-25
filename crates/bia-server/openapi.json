@@ -60,6 +60,564 @@
         }
       }
     },
+    "/v1/runs": {
+      "get": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Runs newest first, filtered by Workflow, status and creation time, paged with `after`\nand `limit`.",
+        "operationId": "list_runs",
+        "parameters": [
+          {
+            "name": "workflow_id",
+            "in": "path",
+            "description": "Only Runs of this Workflow.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "status",
+            "in": "path",
+            "description": "Only Runs in this status.",
+            "required": true,
+            "schema": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/RunStatusName"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          {
+            "name": "created_from",
+            "in": "path",
+            "description": "Only Runs created at or after this time (RFC 3339).",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "created_to",
+            "in": "path",
+            "description": "Only Runs created before this time (RFC 3339).",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "after",
+            "in": "path",
+            "description": "Return the page after this Run id (a previous page's `next_after`).",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "path",
+            "description": "Page size, 1 to 200. Defaults to 50.",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_request`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/v1/runs/failures": {
+      "get": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "The failure view for agents: `failed` Runs newest first, each with the Timeline entry that\nfailed it, so a cause can be read without fetching every Run. Filters and paging as in\n`list_runs`.",
+        "operationId": "list_failures",
+        "parameters": [
+          {
+            "name": "workflow_id",
+            "in": "path",
+            "description": "Only failures of this Workflow.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "created_from",
+            "in": "path",
+            "description": "Only Runs created at or after this time (RFC 3339).",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "created_to",
+            "in": "path",
+            "description": "Only Runs created before this time (RFC 3339).",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "after",
+            "in": "path",
+            "description": "Return the page after this Run id (a previous page's `next_after`).",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "path",
+            "description": "Page size, 1 to 200. Defaults to 50.",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FailureList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_request`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/v1/runs/{run_id}": {
+      "get": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "A Run with its input and full Timeline.",
+        "operationId": "get_run",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "description": "The Run's id.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunInfo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`run_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/v1/runs/{run_id}/cancel": {
+      "post": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Asks for the Run to stop. The response is 202: a Worker cancels the Attempt in flight and\nthe Run becomes `cancelled` a moment later (a sleeping Run at once), which `get_run` shows.\nA Run that already finished is refused with `run_finished`.",
+        "operationId": "cancel_run",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "description": "The Run's id.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`run_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`run_finished`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/v1/runs/{run_id}/resume": {
+      "post": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Resumes a `failed` Run from the Step that failed, on its own Version even if another is\nactive now. Steps that succeeded do not run again; the failed Step gets a fresh retry\nbudget and its Attempt numbers carry on. A Run that is not `failed`, or failed before any\nStep ran (e.g. invalid input), is refused with `run_not_resumable`.",
+        "operationId": "resume_run",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "description": "The Run's id.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`run_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`run_not_resumable`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/v1/runs/{run_id}/retry": {
+      "post": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Starts a new Run with the input and Version of a finished Run. The new Run's `trigger` is\nthe original's plus `retry_of`, the original's id. Re-running on a newer Version means\ntriggering the Workflow instead. A Run that has not finished is refused with\n`run_not_finished`.",
+        "operationId": "retry_run",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "description": "The Run's id.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`run_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`run_not_finished`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
     "/v1/schema": {
       "get": {
         "tags": [
@@ -603,6 +1161,113 @@
           },
           "404": {
             "description": "`workflow_not_found` or `version_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/v1/workflows/{workflow_id}/runs": {
+      "post": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Starts a Run of the Workflow's Active Version from a manual Trigger. The input is checked\nagainst the Version's `input_schema` first: input that does not match is refused with\n`invalid_run_input`, and no Run is created. The Run is `pending` in the response and a\nWorker picks it up. A Workflow with no Active Version is refused with `no_active_version`,\nand one whose Active Version has no manual Trigger (or not the named one) with\n`no_manual_trigger`.",
+        "operationId": "trigger_run",
+        "parameters": [
+          {
+            "name": "workflow_id",
+            "in": "path",
+            "description": "The Workflow's id.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The input; send `{}` for none.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TriggerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_request`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`workflow_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`no_active_version` or `no_manual_trigger`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_run_input`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1309,6 +1974,15 @@
           }
         }
       },
+      "AttemptStatusName": {
+        "type": "string",
+        "enum": [
+          "succeeded",
+          "failed",
+          "skipped",
+          "cancelled"
+        ]
+      },
       "BootstrapRequest": {
         "type": "object",
         "required": [
@@ -1420,9 +2094,63 @@
           "version_not_published",
           "version_changed",
           "workflow_id_mismatch",
+          "no_active_version",
+          "no_manual_trigger",
+          "invalid_run_input",
+          "run_not_found",
+          "run_finished",
+          "run_not_finished",
+          "run_not_resumable",
           "not_ready",
           "internal_error"
         ]
+      },
+      "FailedRun": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/RunSummary"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "failure": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/TimelineEntryInfo",
+                    "description": "The last failed Timeline entry."
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "description": "A failed Run and the entry that failed it."
+      },
+      "FailureList": {
+        "type": "object",
+        "required": [
+          "runs"
+        ],
+        "properties": {
+          "next_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Pass as `after` to get the next page. Absent on the last page."
+          },
+          "runs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FailedRun"
+            },
+            "description": "Failed Runs, newest first."
+          }
+        }
       },
       "NewTokenRequest": {
         "type": "object",
@@ -1452,6 +2180,131 @@
           }
         },
         "additionalProperties": false
+      },
+      "RunInfo": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/RunSummary"
+          },
+          {
+            "type": "object",
+            "required": [
+              "input",
+              "timeline"
+            ],
+            "properties": {
+              "input": {},
+              "timeline": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/TimelineEntryInfo"
+                },
+                "description": "Every entry so far, oldest first: one per Attempt, with its inputs, Output or error and\nduration."
+              }
+            }
+          }
+        ],
+        "description": "A Run with its input and its Timeline."
+      },
+      "RunList": {
+        "type": "object",
+        "required": [
+          "runs"
+        ],
+        "properties": {
+          "next_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Pass as `after` to get the next page. Absent on the last page."
+          },
+          "runs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunSummary"
+            },
+            "description": "Newest first."
+          }
+        }
+      },
+      "RunStatusName": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "running",
+          "sleeping",
+          "waiting",
+          "succeeded",
+          "failed",
+          "cancelled"
+        ]
+      },
+      "RunSummary": {
+        "type": "object",
+        "description": "A Run without its input and Timeline, as listed.",
+        "required": [
+          "id",
+          "workflow_id",
+          "version",
+          "status",
+          "trigger",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "cancel_requested_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When cancellation was requested. A Run with this set that has not finished is still\nbeing stopped."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finished_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Absent until the Run is `succeeded`, `failed` or `cancelled`."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "retry_of": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The Run this one is a retry of. Absent unless the Run was started by `retry_run`."
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunStatusName"
+          },
+          "trigger": {
+            "description": "What started the Run: `{ \"type\": \"manual\", \"id\": <Trigger id> }`, `{ \"type\": \"cron\", ... }`\nand so on. A retried Run carries its original's `trigger` plus `retry_of`."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The Version the Run is pinned to for its whole life, even if another becomes active."
+          },
+          "workflow_id": {
+            "type": "string"
+          }
+        }
       },
       "SavedVersion": {
         "type": "object",
@@ -1535,6 +2388,74 @@
           }
         }
       },
+      "TimelineEntryInfo": {
+        "type": "object",
+        "description": "One entry of a Run's Timeline: an Attempt of a Step, or, without `step_id`, something that\nhappened to the Run as a whole, such as input rejected before any Step ran.",
+        "required": [
+          "seq",
+          "status",
+          "started_at",
+          "finished_at",
+          "duration_ms"
+        ],
+        "properties": {
+          "action": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "http.request"
+          },
+          "attempt": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Counts up across the Attempts of a Step, from 1, also across a resume. Absent without\n`step_id`."
+          },
+          "duration_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "error": {
+            "description": "`{ \"class\": \"retryable\" | \"fatal\", \"message\", \"details\"?, \"code\"? }`. `code` is a stable\nidentifier when bia itself raised the error, e.g. `invalid_input` or `timeout`."
+          },
+          "finished_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "input": {
+            "description": "The Params with their Templates resolved, except that any Template reading `secrets`\nis shown as written; for an entry about the Run, the Run input."
+          },
+          "iteration_path": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Which iteration of the enclosing loops, empty outside loops. Absent without `step_id`."
+          },
+          "output": {},
+          "seq": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Position in the Timeline, starting at 1. Entries are ordered by it."
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AttemptStatusName"
+          },
+          "step_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "TokenInfo": {
         "type": "object",
         "description": "A Token, without its value.",
@@ -1602,6 +2523,22 @@
             "description": "Every Token, revoked ones included, oldest first."
           }
         }
+      },
+      "TriggerRequest": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "description": "The Run input. Defaults to `{}`. Checked against the Active Version's `input_schema`."
+          },
+          "trigger_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The manual Trigger to start from. Defaults to the first manual Trigger of the Active\nVersion."
+          }
+        },
+        "additionalProperties": false
       },
       "ValidationReport": {
         "type": "object",

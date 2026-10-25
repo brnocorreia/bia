@@ -204,6 +204,127 @@ pub struct VersionDiff {
     pub patch: Vec<Value>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RunStatus {
+    Pending,
+    Running,
+    Sleeping,
+    Waiting,
+    Succeeded,
+    Failed,
+    Cancelled,
+}
+
+impl RunStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Running => "running",
+            Self::Sleeping => "sleeping",
+            Self::Waiting => "waiting",
+            Self::Succeeded => "succeeded",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+        }
+    }
+
+    pub fn is_finished(self) -> bool {
+        matches!(self, Self::Succeeded | Self::Failed | Self::Cancelled)
+    }
+}
+
+/// How an Attempt, or the Run in an entry without a Step, ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AttemptStatus {
+    Succeeded,
+    Failed,
+    Skipped,
+    Cancelled,
+}
+
+/// A Run without its input and Timeline.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct RunSummary {
+    pub id: Uuid,
+    pub workflow_id: String,
+    /// The Version the Run is pinned to.
+    pub version: i32,
+    pub status: RunStatus,
+    pub trigger: Value,
+    /// The Run this one retries, if `retry_run` started it.
+    pub retry_of: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub finished_at: Option<DateTime<Utc>>,
+    pub cancel_requested_at: Option<DateTime<Utc>>,
+}
+
+/// One entry of a Run's Timeline (ADR-0033, ADR-0045).
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct TimelineEntry {
+    pub seq: i32,
+    /// Absent for an entry about the Run as a whole.
+    pub step_id: Option<String>,
+    pub iteration_path: Option<String>,
+    pub attempt: Option<i32>,
+    pub action: Option<String>,
+    pub status: AttemptStatus,
+    pub input: Option<Value>,
+    pub output: Option<Value>,
+    /// `{ "class", "message", "details"?, "code"? }`.
+    pub error: Option<Value>,
+    pub started_at: DateTime<Utc>,
+    pub finished_at: DateTime<Utc>,
+    pub duration_ms: i64,
+}
+
+/// A Run with its input and Timeline.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct Run {
+    #[serde(flatten)]
+    pub summary: RunSummary,
+    pub input: Value,
+    pub timeline: Vec<TimelineEntry>,
+}
+
+/// One page of Runs, newest first.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct RunPage {
+    pub runs: Vec<RunSummary>,
+    /// Pass as [`RunQuery::after`] for the next page; absent on the last.
+    pub next_after: Option<Uuid>,
+}
+
+/// A failed Run and the entry that failed it.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct FailedRun {
+    #[serde(flatten)]
+    pub summary: RunSummary,
+    pub failure: Option<TimelineEntry>,
+}
+
+/// One page of failed Runs, newest first.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct FailurePage {
+    pub runs: Vec<FailedRun>,
+    pub next_after: Option<Uuid>,
+}
+
+/// Filters and paging of `list_runs` and `list_failures` (which ignores `status`).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct RunQuery {
+    pub workflow_id: Option<String>,
+    pub status: Option<RunStatus>,
+    /// Only Runs created at or after this time.
+    pub created_from: Option<DateTime<Utc>>,
+    /// Only Runs created before this time.
+    pub created_to: Option<DateTime<Utc>>,
+    pub after: Option<Uuid>,
+    pub limit: Option<u32>,
+}
+
 #[derive(Debug, Deserialize)]
 struct WorkflowList {
     workflows: Vec<Workflow>,
@@ -423,6 +544,89 @@ impl Client {
             None::<&()>,
         )
         .await
+    }
+
+    /// Starts a Run of the Workflow's Active Version from a manual Trigger. `trigger_id`
+    /// picks one when the Version has several.
+    pub async fn trigger_run(
+        &self,
+        workflow: &str,
+        input: &Value,
+        trigger_id: Option<&str>,
+    ) -> Result<RunSummary, Error> {
+        let mut body = serde_json::json!({ "input": input });
+        if let Some(trigger_id) = trigger_id {
+            body["trigger_id"] = trigger_id.into();
+        }
+        self.send(
+            Method::POST,
+            &format!("/v1/workflows/{workflow}/runs"),
+            Some(&body),
+        )
+        .await
+    }
+
+    pub async fn list_runs(&self, query: &RunQuery) -> Result<RunPage, Error> {
+        let path = Self::with_query("/v1/runs", query, true)?;
+        self.send(Method::GET, &path, None::<&()>).await
+    }
+
+    /// Failed Runs, each with the entry that failed it.
+    pub async fn list_failures(&self, query: &RunQuery) -> Result<FailurePage, Error> {
+        let path = Self::with_query("/v1/runs/failures", query, false)?;
+        self.send(Method::GET, &path, None::<&()>).await
+    }
+
+    pub async fn get_run(&self, id: Uuid) -> Result<Run, Error> {
+        self.send(Method::GET, &format!("/v1/runs/{id}"), None::<&()>)
+            .await
+    }
+
+    /// Requests cancellation; the Run ends `cancelled` a moment later.
+    pub async fn cancel_run(&self, id: Uuid) -> Result<RunSummary, Error> {
+        self.send(Method::POST, &format!("/v1/runs/{id}/cancel"), None::<&()>)
+            .await
+    }
+
+    /// Resumes a failed Run from the Step that failed, on its own Version.
+    pub async fn resume_run(&self, id: Uuid) -> Result<RunSummary, Error> {
+        self.send(Method::POST, &format!("/v1/runs/{id}/resume"), None::<&()>)
+            .await
+    }
+
+    /// Starts a new Run with a finished Run's input and Version.
+    pub async fn retry_run(&self, id: Uuid) -> Result<RunSummary, Error> {
+        self.send(Method::POST, &format!("/v1/runs/{id}/retry"), None::<&()>)
+            .await
+    }
+
+    fn with_query(path: &str, query: &RunQuery, status: bool) -> Result<String, Error> {
+        let mut pairs: Vec<(&str, String)> = Vec::new();
+        if let Some(workflow) = &query.workflow_id {
+            pairs.push(("workflow_id", workflow.clone()));
+        }
+        if let Some(run_status) = query.status.filter(|_| status) {
+            pairs.push(("status", run_status.as_str().to_owned()));
+        }
+        if let Some(from) = query.created_from {
+            pairs.push(("created_from", from.to_rfc3339()));
+        }
+        if let Some(to) = query.created_to {
+            pairs.push(("created_to", to.to_rfc3339()));
+        }
+        if let Some(after) = query.after {
+            pairs.push(("after", after.to_string()));
+        }
+        if let Some(limit) = query.limit {
+            pairs.push(("limit", limit.to_string()));
+        }
+        // Only for its query encoding: `send` joins the path onto the real base.
+        let url = Url::parse_with_params(&format!("http://localhost{path}"), pairs)
+            .map_err(|_| Error::BaseUrl(path.to_owned()))?;
+        Ok(match url.query() {
+            Some(query) => format!("{}?{query}", url.path()),
+            None => url.path().to_owned(),
+        })
     }
 
     async fn send<T: DeserializeOwned>(

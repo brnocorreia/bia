@@ -21,6 +21,13 @@ pub trait TimelineRepository {
         conn: &mut PgConnection,
         run: RunId,
     ) -> impl Future<Output = Result<Vec<TimelineEntry>, StoreError>> + Send;
+
+    /// The last `failed` entry of each of `runs` that has one, in no particular order.
+    fn last_failures(
+        &self,
+        conn: &mut PgConnection,
+        runs: &[RunId],
+    ) -> impl Future<Output = Result<Vec<TimelineEntry>, StoreError>> + Send;
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -69,6 +76,20 @@ impl TimelineRepository for PgTimelineRepository {
         run: RunId,
     ) -> Result<Vec<TimelineEntry>, StoreError> {
         sqlx::query_file_as!(TimelineRow, "src/timeline/queries/list.sql", run.as_uuid())
+            .fetch_all(&mut *conn)
+            .await?
+            .into_iter()
+            .map(TimelineEntry::try_from)
+            .collect()
+    }
+
+    async fn last_failures(
+        &self,
+        conn: &mut PgConnection,
+        runs: &[RunId],
+    ) -> Result<Vec<TimelineEntry>, StoreError> {
+        let ids: Vec<_> = runs.iter().map(|run| run.as_uuid()).collect();
+        sqlx::query_file_as!(TimelineRow, "src/timeline/queries/last_failures.sql", &ids)
             .fetch_all(&mut *conn)
             .await?
             .into_iter()

@@ -147,6 +147,13 @@ fn documented() -> OpenApiRouter<ApiState> {
         .routes(routes!(routes::workflow::activate_version))
         .routes(routes!(routes::workflow::diff_versions))
         .routes(routes!(routes::workflow::validate_definition))
+        .routes(routes!(routes::run::trigger_run))
+        .routes(routes!(routes::run::list_runs))
+        .routes(routes!(routes::run::list_failures))
+        .routes(routes!(routes::run::get_run))
+        .routes(routes!(routes::run::cancel_run))
+        .routes(routes!(routes::run::resume_run))
+        .routes(routes!(routes::run::retry_run))
 }
 
 /// The OpenAPI document of every route [`router`] serves.

@@ -526,7 +526,9 @@ pub(crate) async fn diff_versions(
     }))
 }
 
-async fn acquire(state: &ApiState) -> Result<sqlx::pool::PoolConnection<sqlx::Postgres>, ApiError> {
+pub(super) async fn acquire(
+    state: &ApiState,
+) -> Result<sqlx::pool::PoolConnection<sqlx::Postgres>, ApiError> {
     state
         .pool
         .acquire()
@@ -678,7 +680,7 @@ impl From<Workflow> for WorkflowInfo {
     }
 }
 
-fn store_error(error: StoreError) -> ApiError {
+pub(super) fn store_error(error: StoreError) -> ApiError {
     let (status, code) = match &error {
         StoreError::WorkflowNotFound(_) => (StatusCode::NOT_FOUND, ErrorCode::WorkflowNotFound),
         StoreError::VersionNotFound { .. } => (StatusCode::NOT_FOUND, ErrorCode::VersionNotFound),

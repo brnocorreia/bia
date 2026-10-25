@@ -35,6 +35,17 @@ pub trait RunRepository {
         at: DateTime<Utc>,
     ) -> impl Future<Output = Result<(), StoreError>> + Send;
 
+    /// Puts a `failed` Run back to `running` with `checkpoint` and clears `finished_at`.
+    /// Returns `None`, changing nothing, when the Run is not `failed` (or does not exist).
+    fn resume(
+        &self,
+        conn: &mut PgConnection,
+        id: RunId,
+        checkpoint: &Checkpoint,
+        at: DateTime<Utc>,
+    ) -> impl Future<Output = Result<Option<Run>, StoreError>> + Send;
+
+    /// Runs newest first, by creation time.
     fn list(
         &self,
         conn: &mut PgConnection,
@@ -129,6 +140,27 @@ impl RunRepository for PgRunRepository {
         Ok(())
     }
 
+    async fn resume(
+        &self,
+        conn: &mut PgConnection,
+        id: RunId,
+        checkpoint: &Checkpoint,
+        at: DateTime<Utc>,
+    ) -> Result<Option<Run>, StoreError> {
+        sqlx::query_file_as!(
+            RunRow,
+            "src/run/queries/resume.sql",
+            id.as_uuid(),
+            Json(&checkpoint.cursor) as _,
+            checkpoint.state,
+            at,
+        )
+        .fetch_optional(&mut *conn)
+        .await?
+        .map(Run::try_from)
+        .transpose()
+    }
+
     async fn list(
         &self,
         conn: &mut PgConnection,
@@ -141,6 +173,8 @@ impl RunRepository for PgRunRepository {
             filter.status.map(RunStatus::as_str),
             filter.after.map(RunId::as_uuid),
             i64::from(filter.limit),
+            filter.created_from,
+            filter.created_to,
         )
         .fetch_all(&mut *conn)
         .await?

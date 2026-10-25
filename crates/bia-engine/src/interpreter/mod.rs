@@ -35,7 +35,7 @@ use serde_json::{Value, json};
 use sqlx::{Acquire, PgConnection, PgPool};
 use tracing::Instrument;
 
-use crate::{EngineError, NoSecrets, SecretResolver};
+use crate::{EngineError, NoSecrets, NotResumable, SecretResolver};
 
 mod checkpoint;
 mod failure;
@@ -429,7 +429,7 @@ impl Interpreter {
         state
             .outputs
             .insert(started.step.id.as_str().to_owned(), output);
-        state.attempts = 0;
+        state.finish_step();
         let at = entry.finished_at;
         let next = started.cursor.enter(definition, arm);
         self.at(next, state, Some(entry), at)
@@ -510,7 +510,7 @@ impl Interpreter {
                 state
                     .outputs
                     .insert(started.step.id.as_str().to_owned(), Value::Null);
-                state.attempts = 0;
+                state.finish_step();
                 return self.at(None, state, Some(entry), now);
             }
             Control::Sleep(duration) => {
@@ -538,7 +538,7 @@ impl Interpreter {
         // Fall asleep: the Cursor stays on this Step, and the next Job only becomes claimable
         // when it is time to wake, so no Worker holds the Run meanwhile.
         state.sleep = Some(sleep);
-        state.attempts = 0;
+        state.finish_step();
         Transition {
             status: RunStatus::Sleeping,
             checkpoint: checkpoint(Some(&started.cursor), &state),
@@ -586,7 +586,7 @@ impl Interpreter {
         mut state: RunState,
         entry: NewTimelineEntry,
     ) -> Transition {
-        state.attempts = 0;
+        state.finish_step();
         state.sleep = None;
         let at = entry.finished_at;
         self.at(cursor.after(definition), state, Some(entry), at)
@@ -608,7 +608,9 @@ impl Interpreter {
         state.attempts = started.attempt;
         let policy = started.step.retry.as_ref();
         let max_attempts = policy.map_or(1, |policy| policy.max_attempts);
-        let (status, next_job_at) = if failure.is_retryable() && started.attempt < max_attempts {
+        // A resume gives the Step a fresh budget while Attempt numbers keep counting up.
+        let used = started.attempt - state.attempts_before_resume;
+        let (status, next_job_at) = if failure.is_retryable() && used < max_attempts {
             let delay = policy.map_or(TimeDelta::zero(), |p| retry_delay(p, started.attempt));
             (RunStatus::Running, Some(finished_at + delay))
         } else {
@@ -892,6 +894,42 @@ pub async fn cancel_run(
     }
     tx.commit().await?;
     Ok(true)
+}
+
+/// Puts a `failed` Run back to work on the Step it failed at, on its own Version, and enqueues
+/// the Job that continues it (ADR-0045). Steps that succeeded do not run again.
+pub async fn resume_run(
+    conn: &mut PgConnection,
+    run: RunId,
+    at: DateTime<Utc>,
+) -> Result<Run, EngineError> {
+    let mut tx = conn.begin().await?;
+    let current = PgRunRepository
+        .get(&mut tx, run)
+        .await?
+        .ok_or(EngineError::RunNotFound(run))?;
+    let not_resumable = |reason| EngineError::NotResumable { run, reason };
+    if current.status != RunStatus::Failed {
+        return Err(not_resumable(NotResumable::NotFailed(current.status)));
+    }
+    if current.checkpoint.cursor.is_empty() {
+        return Err(not_resumable(NotResumable::NoStep));
+    }
+    let mut state = RunState::decode(run, &current.checkpoint.state)?;
+    state.attempts_before_resume = state.attempts;
+    let checkpoint = Checkpoint {
+        cursor: current.checkpoint.cursor,
+        state: serde_json::to_value(&state).unwrap_or_else(|_| json!({})),
+    };
+    let resumed = PgRunRepository
+        .resume(&mut tx, run, &checkpoint, at)
+        .await?
+        .ok_or_else(|| not_resumable(NotResumable::NotFailed(RunStatus::Running)))?;
+    PgJobRepository
+        .enqueue(&mut tx, &NewJob::advance_run(run, at))
+        .await?;
+    tx.commit().await?;
+    Ok(resumed)
 }
 
 /// Creates a `pending` Run of a Published Version at `at`, with the Job that starts it. Both
