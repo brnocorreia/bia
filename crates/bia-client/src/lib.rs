@@ -130,6 +130,90 @@ struct TokenList {
     tokens: Vec<Token>,
 }
 
+/// A Workflow and the Version new Runs and Schedules use.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct Workflow {
+    pub id: String,
+    pub active_version: Option<i32>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VersionState {
+    Draft,
+    Published,
+}
+
+/// A Version without its Definition.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct VersionSummary {
+    pub workflow_id: String,
+    pub number: i32,
+    pub state: VersionState,
+    /// Whether this is the Workflow's Active Version.
+    pub active: bool,
+    pub published_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// A Version with its Definition.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct Version {
+    #[serde(flatten)]
+    pub summary: VersionSummary,
+    pub definition: Value,
+}
+
+/// A Version just saved or published, with what validation found.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct SavedVersion {
+    pub version: Version,
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+/// What validation found; `valid` means no error Diagnostics.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct ValidationReport {
+    pub valid: bool,
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+/// What a Definition is validated for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Target {
+    Draft,
+    Publish,
+}
+
+impl Target {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Draft => "draft",
+            Self::Publish => "publish",
+        }
+    }
+}
+
+/// `GET /v1/workflows/{id}/diff`: an RFC 6902 JSON Patch from one Version's Definition to
+/// the other's.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct VersionDiff {
+    pub from: i32,
+    pub to: i32,
+    pub patch: Vec<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkflowList {
+    workflows: Vec<Workflow>,
+}
+
+#[derive(Debug, Deserialize)]
+struct VersionList {
+    versions: Vec<VersionSummary>,
+}
+
 #[derive(Clone)]
 pub struct Client {
     http: reqwest::Client,
@@ -218,6 +302,127 @@ impl Client {
                 Some(&Request { name }),
             )
             .await
+    }
+
+    pub async fn list_workflows(&self) -> Result<Vec<Workflow>, Error> {
+        let list: WorkflowList = self.send(Method::GET, "/v1/workflows", None::<&()>).await?;
+        Ok(list.workflows)
+    }
+
+    pub async fn get_workflow(&self, id: &str) -> Result<Workflow, Error> {
+        self.send(Method::GET, &format!("/v1/workflows/{id}"), None::<&()>)
+            .await
+    }
+
+    pub async fn list_versions(&self, workflow: &str) -> Result<Vec<VersionSummary>, Error> {
+        let list: VersionList = self
+            .send(
+                Method::GET,
+                &format!("/v1/workflows/{workflow}/versions"),
+                None::<&()>,
+            )
+            .await?;
+        Ok(list.versions)
+    }
+
+    pub async fn get_version(&self, workflow: &str, number: i32) -> Result<Version, Error> {
+        self.send(
+            Method::GET,
+            &format!("/v1/workflows/{workflow}/versions/{number}"),
+            None::<&()>,
+        )
+        .await
+    }
+
+    /// Saves `definition`, a Definition as JSON, as a new Draft of `workflow`, creating the
+    /// Workflow if it is new.
+    pub async fn create_draft(
+        &self,
+        workflow: &str,
+        definition: &Value,
+    ) -> Result<SavedVersion, Error> {
+        self.send(
+            Method::POST,
+            &format!("/v1/workflows/{workflow}/versions"),
+            Some(definition),
+        )
+        .await
+    }
+
+    pub async fn replace_draft(
+        &self,
+        workflow: &str,
+        number: i32,
+        definition: &Value,
+    ) -> Result<SavedVersion, Error> {
+        self.send(
+            Method::PUT,
+            &format!("/v1/workflows/{workflow}/versions/{number}"),
+            Some(definition),
+        )
+        .await
+    }
+
+    pub async fn validate_version(
+        &self,
+        workflow: &str,
+        number: i32,
+        target: Target,
+    ) -> Result<ValidationReport, Error> {
+        let path = format!(
+            "/v1/workflows/{workflow}/versions/{number}/validate?target={}",
+            target.as_str()
+        );
+        self.send(Method::POST, &path, None::<&()>).await
+    }
+
+    /// Validates a Definition that need not be stored.
+    pub async fn validate_definition(
+        &self,
+        definition: &Value,
+        target: Target,
+    ) -> Result<ValidationReport, Error> {
+        let path = format!("/v1/validate?target={}", target.as_str());
+        self.send(Method::POST, &path, Some(definition)).await
+    }
+
+    /// Needs an `admin` Token.
+    pub async fn publish_version(
+        &self,
+        workflow: &str,
+        number: i32,
+    ) -> Result<SavedVersion, Error> {
+        self.send(
+            Method::POST,
+            &format!("/v1/workflows/{workflow}/versions/{number}/publish"),
+            None::<&()>,
+        )
+        .await
+    }
+
+    /// Makes a Published Version the Active Version; an older one is a rollback. Needs an
+    /// `admin` Token.
+    pub async fn activate_version(&self, workflow: &str, number: i32) -> Result<Workflow, Error> {
+        self.send(
+            Method::POST,
+            &format!("/v1/workflows/{workflow}/versions/{number}/activate"),
+            None::<&()>,
+        )
+        .await
+    }
+
+    pub async fn diff_versions(
+        &self,
+        workflow: &str,
+        from: i32,
+        to: i32,
+    ) -> Result<VersionDiff, Error> {
+        self.send(
+            Method::GET,
+            &format!("/v1/workflows/{workflow}/diff?from={from}&to={to}"),
+            None::<&()>,
+        )
+        .await
     }
 
     async fn send<T: DeserializeOwned>(

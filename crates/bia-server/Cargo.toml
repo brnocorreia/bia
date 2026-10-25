@@ -27,6 +27,7 @@ tracing = "0.1.44"
 utoipa = { version = "6.0.0", features = ["chrono", "uuid"] }
 utoipa-axum = "0.3.0"
 uuid = { version = "1.28.0", features = ["serde"] }
+json-patch = "4.2.0"
 
 [dev-dependencies]
 bia-client.workspace = true

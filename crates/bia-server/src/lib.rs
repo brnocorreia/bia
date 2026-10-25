@@ -28,12 +28,14 @@ pub mod auth;
 mod cors;
 mod error;
 mod extract;
+mod resources;
 mod routes;
 
 pub use auth::BootstrapKey;
 pub use cors::{CorsOrigins, InvalidOrigin};
 pub use error::{ApiError, ErrorBody, ErrorCode};
-pub use extract::{Json, Path};
+pub use extract::{Json, Path, Query};
+pub use resources::{QueueDirectory, QueueNames};
 
 /// What every handler shares.
 #[derive(Clone)]
@@ -41,6 +43,7 @@ pub struct ApiState {
     pool: PgPool,
     actions: Arc<dyn ActionRegistry>,
     clock: Arc<dyn Clock>,
+    queues: Arc<dyn QueueDirectory>,
     config: Arc<ApiConfig>,
 }
 
@@ -57,8 +60,15 @@ impl ApiState {
             pool,
             actions,
             clock,
+            queues: Arc::new(QueueNames::default()),
             config: Arc::default(),
         }
+    }
+
+    /// Where validation looks up the Queues a Definition names.
+    pub fn with_queues(mut self, queues: Arc<dyn QueueDirectory>) -> Self {
+        self.queues = queues;
+        self
     }
 
     pub fn with_config(mut self, config: ApiConfig) -> Self {
@@ -122,6 +132,21 @@ fn documented() -> OpenApiRouter<ApiState> {
         ))
         .routes(routes!(routes::token::revoke_token))
         .routes(routes!(routes::token::bootstrap_token))
+        .routes(routes!(routes::workflow::list_workflows))
+        .routes(routes!(routes::workflow::get_workflow))
+        .routes(routes!(
+            routes::workflow::list_versions,
+            routes::workflow::create_draft
+        ))
+        .routes(routes!(
+            routes::workflow::get_version,
+            routes::workflow::replace_draft
+        ))
+        .routes(routes!(routes::workflow::validate_version))
+        .routes(routes!(routes::workflow::publish_version))
+        .routes(routes!(routes::workflow::activate_version))
+        .routes(routes!(routes::workflow::diff_versions))
+        .routes(routes!(routes::workflow::validate_definition))
 }
 
 /// The OpenAPI document of every route [`router`] serves.
