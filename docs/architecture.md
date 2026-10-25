@@ -61,6 +61,8 @@ Every route but the probes, `/openapi.json` and bootstrapping needs a Token whos
 3. In one transaction, the Worker writes the Attempt to the Timeline, updates the Checkpoint and Cursor, completes the Job and enqueues the next Job (or a delayed Job for `sleep`/retry backoff, or nothing while waiting for an Event). Each Job makes one transition: starting the Run (checking its input against the `input_schema`) or one Attempt of one Step (ADR-0032). The Timeline entry shape is ADR-0033.
 4. Run statuses: `pending → running → (sleeping | waiting) → running → succeeded | failed | cancelled`.
 
+A failed Run can be resumed from the Step that failed, or retried as a new Run on the same Version and input, linked to the original (ADR-0045).
+
 Cancellation sets a flag on the Run that Postgres announces to Workers, which also re-read it on every Lease heartbeat. The Worker running the Run's Attempt fires its cancellation token, the in-flight Action stops cooperatively, and the Run ends `cancelled` without a later Step running; a sleeping Run's wake-up is brought forward so it ends at once (ADR-0036).
 
 ## Interfaces for agents

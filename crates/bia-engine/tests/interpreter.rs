@@ -14,7 +14,8 @@ use bia_core::action::{
 use bia_core::clock::{Clock, ManualClock};
 use bia_core::dsl::{ActionName, Definition};
 use bia_engine::{
-    Advanced, EngineError, Interpreter, InterpreterConfig, RunLimits, SecretResolver, start_run,
+    Advanced, EngineError, Interpreter, InterpreterConfig, NotResumable, RunLimits, SecretResolver,
+    resume_run, start_run,
 };
 use bia_store::StoreError;
 use bia_store::job::{Claimed, JobRepository, PgJobRepository};
@@ -406,6 +407,79 @@ async fn a_run_fails_once_a_retryable_step_runs_out_of_attempts(pool: PgPool) {
         "a failed Run keeps its Cursor on the failed Step"
     );
     assert_eq!(h.jobs_left(run).await, 0);
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn a_resumed_step_gets_a_fresh_retry_budget_and_numbers_its_attempts_on(pool: PgPool) {
+    let failing =
+        Arc::new(FakeAction::new("test.down").failing(ActionError::retryable("connection reset")));
+    let h = Harness::new(pool, &ManualClock::new(t0()), vec![failing.clone()]);
+    let run = h
+        .start(
+            json!({
+                "schema_version": 1,
+                "id": "deliver",
+                "steps": [{
+                    "id": "send",
+                    "action": "test.down",
+                    "retry": { "max_attempts": 2, "backoff": "fixed", "initial": "5s" },
+                }],
+            }),
+            json!({}),
+        )
+        .await;
+    h.drive().await;
+    h.clock.advance(TimeDelta::seconds(5));
+    h.drive().await;
+    assert_eq!(h.run(run).await.status, RunStatus::Failed);
+
+    let mut conn = h.pool.acquire().await.unwrap();
+    let resumed = resume_run(&mut conn, run, h.clock.now()).await.unwrap();
+    assert_eq!(resumed.status, RunStatus::Running);
+    assert_eq!(resumed.finished_at, None);
+    h.drive().await;
+    h.clock.advance(TimeDelta::seconds(5));
+    h.drive().await;
+
+    assert_eq!(
+        failing.calls().len(),
+        4,
+        "two more Attempts after the resume"
+    );
+    let attempts: Vec<i32> = h.timeline(run).await.iter().map(attempt).collect();
+    assert_eq!(attempts, [1, 2, 3, 4]);
+    assert_eq!(h.run(run).await.status, RunStatus::Failed);
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn only_a_failed_run_with_a_step_resumes(pool: PgPool) {
+    let echo = Arc::new(FakeAction::new("test.echo"));
+    let h = Harness::new(pool, &ManualClock::new(t0()), vec![echo]);
+    let rejected = h
+        .start(
+            json!({
+                "schema_version": 1,
+                "id": "signup",
+                "input_schema": { "type": "object", "required": ["email"] },
+                "steps": [{ "id": "greet", "action": "test.echo" }],
+            }),
+            json!({}),
+        )
+        .await;
+    h.drive().await;
+    let mut conn = h.pool.acquire().await.unwrap();
+
+    let error = resume_run(&mut conn, rejected, h.clock.now())
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        EngineError::NotResumable {
+            reason: NotResumable::NoStep,
+            ..
+        }
+    ));
+    assert_eq!(h.run(rejected).await.status, RunStatus::Failed);
 }
 
 #[sqlx::test(migrator = "bia_store::MIGRATOR")]

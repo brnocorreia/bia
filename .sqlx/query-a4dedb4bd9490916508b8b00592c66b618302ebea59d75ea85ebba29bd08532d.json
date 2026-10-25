@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "-- Runs newest first. Every filter is optional.\n-- $1: workflow id, $2: status, $3: list only Runs after this run id, $4: limit\nSELECT id, workflow_id, version, status, input, trigger,\n       cursor AS \"cursor: Json<Vec<Value>>\", state, created_at, updated_at, finished_at,\n       cancel_requested_at\nFROM runs\nWHERE ($1::text IS NULL OR workflow_id = $1)\n  AND ($2::text IS NULL OR status = $2)\n  AND ($3::uuid IS NULL OR (created_at, id) < (SELECT created_at, id FROM runs WHERE id = $3))\nORDER BY created_at DESC, id DESC\nLIMIT $4\n",
+  "query": "-- Runs newest first. Every filter is optional.\n-- $1: workflow id, $2: status, $3: list only Runs after this run id, $4: limit,\n-- $5: created at or after, $6: created before\nSELECT id, workflow_id, version, status, input, trigger,\n       cursor AS \"cursor: Json<Vec<Value>>\", state, created_at, updated_at, finished_at,\n       cancel_requested_at\nFROM runs\nWHERE ($1::text IS NULL OR workflow_id = $1)\n  AND ($2::text IS NULL OR status = $2)\n  AND ($3::uuid IS NULL OR (created_at, id) < (SELECT created_at, id FROM runs WHERE id = $3))\n  AND ($5::timestamptz IS NULL OR created_at >= $5)\n  AND ($6::timestamptz IS NULL OR created_at < $6)\nORDER BY created_at DESC, id DESC\nLIMIT $4\n",
   "describe": {
     "columns": [
       {
@@ -141,7 +141,9 @@
         "Text",
         "Text",
         "Uuid",
-        "Int8"
+        "Int8",
+        "Timestamptz",
+        "Timestamptz"
       ]
     },
     "nullable": [
@@ -159,5 +161,5 @@
       true
     ]
   },
-  "hash": "2579d0c18158fa4a2df4d7d932a7b861499d0d3f6b06e1da66b147c594d329bb"
+  "hash": "a4dedb4bd9490916508b8b00592c66b618302ebea59d75ea85ebba29bd08532d"
 }

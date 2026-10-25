@@ -93,11 +93,15 @@ pub struct NewRun {
     pub checkpoint: Checkpoint,
 }
 
-/// Which Runs a listing returns.
+/// Which Runs a listing returns, newest first.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RunFilter {
     pub workflow_id: Option<WorkflowId>,
     pub status: Option<RunStatus>,
+    /// Only Runs created at or after this time.
+    pub created_from: Option<DateTime<Utc>>,
+    /// Only Runs created before this time.
+    pub created_to: Option<DateTime<Utc>>,
     pub after: Option<RunId>,
     pub limit: u32,
 }
@@ -107,6 +111,8 @@ impl Default for RunFilter {
         Self {
             workflow_id: None,
             status: None,
+            created_from: None,
+            created_to: None,
             after: None,
             limit: 50,
         }

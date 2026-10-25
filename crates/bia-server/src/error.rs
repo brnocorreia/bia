@@ -49,6 +49,21 @@ pub enum ErrorCode {
     VersionChanged,
     /// The Definition's `id` is not the Workflow's id in the path.
     WorkflowIdMismatch,
+    /// The Workflow has no Active Version, so no Run can start on it.
+    NoActiveVersion,
+    /// The Workflow's Active Version has no manual Trigger (with the id the request named, if
+    /// it named one).
+    NoManualTrigger,
+    /// The Run input does not match the Active Version's `input_schema`; no Run was created.
+    InvalidRunInput,
+    /// No Run has this id.
+    RunNotFound,
+    /// The Run already finished, so it cannot be cancelled.
+    RunFinished,
+    /// The Run has not finished, so it cannot be retried.
+    RunNotFinished,
+    /// The Run cannot be resumed: it is not `failed`, or it failed before any Step ran.
+    RunNotResumable,
     /// The server cannot serve requests yet: the database is unreachable or migrations are
     /// pending.
     NotReady,

@@ -140,6 +140,10 @@ pub(crate) struct RunState {
     /// Attempts the Step at the Cursor has finished so far; the next one is `attempts + 1`.
     #[serde(default)]
     pub(crate) attempts: u32,
+    /// Attempts the Step had finished when the Run was last resumed; they do not count against
+    /// its retry policy.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub(crate) attempts_before_resume: u32,
     /// Steps the Run has taken up so far, the one at the Cursor included once it started;
     /// what `max_steps_per_run` counts.
     #[serde(default)]
@@ -183,7 +187,18 @@ impl Sleep {
     }
 }
 
+fn is_zero(n: &u32) -> bool {
+    *n == 0
+}
+
 impl RunState {
+    /// The Step at the Cursor is done: its Attempts, and the resume that gave it a fresh retry
+    /// budget, are forgotten.
+    pub(crate) fn finish_step(&mut self) {
+        self.attempts = 0;
+        self.attempts_before_resume = 0;
+    }
+
     pub(crate) fn decode(run: RunId, state: &Value) -> Result<Self, EngineError> {
         Self::deserialize(state).map_err(|error| invalid(run, error))
     }

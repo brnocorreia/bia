@@ -1,0 +1,163 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Puts a failed Run back to work from the Checkpoint given; changes nothing for any other Run.\n-- $1: run id, $2: Cursor, $3: state, $4: resume time\nUPDATE runs\nSET status = 'running', cursor = $2, state = $3, updated_at = $4, finished_at = NULL\nWHERE id = $1 AND status = 'failed'\nRETURNING id, workflow_id, version, status, input, trigger,\n          cursor AS \"cursor: Json<Vec<Value>>\", state, created_at, updated_at, finished_at,\n          cancel_requested_at\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "workflow_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "workflow_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "input",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "input"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "trigger",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "trigger"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "cursor: Json<Vec<Value>>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "cursor"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "state",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "updated_at"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "finished_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "finished_at"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "cancel_requested_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "cancel_requested_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Jsonb",
+        "Jsonb",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "f17684ee2b7340421f4d996447dff69d3b6b570312460aa81d02255df95dabda"
+}

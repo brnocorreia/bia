@@ -87,6 +87,10 @@ What a cron Trigger does with firings missed while bia was down: `none`, `latest
 One execution of a specific Version, started by a Trigger, pinned to that Version for its whole life.
 _Avoid_: execution, instance, job
 
+**Resume**:
+Putting a failed Run back to work from the Step that failed, on its own Version; Steps that succeeded do not run again. Starting a new Run from a finished one is a **Retry**, which keeps its Version and input and links back to the original.
+_Avoid_: restart, replay, re-run
+
 **Attempt**:
 One try at executing a Step. A Step with a retry policy can have several Attempts that share an Idempotency Key.
 

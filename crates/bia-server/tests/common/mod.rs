@@ -49,6 +49,17 @@ impl TestServer {
         Self::start_with(pool, ApiConfig::default()).await
     }
 
+    /// [`start`](Self::start) with the Actions of `registry` instead of [`registry()`].
+    pub async fn start_with_registry(pool: PgPool, registry: Arc<InMemoryRegistry>) -> Self {
+        let clock = ManualClock::new(t0());
+        let config = ApiConfig {
+            bootstrap_key: Some(BootstrapKey::new(BOOTSTRAP_KEY).unwrap()),
+            ..ApiConfig::default()
+        };
+        let state = ApiState::new(pool, registry, Arc::new(clock.clone())).with_config(config);
+        Self::bootstrapped(bia_server::router(state), clock).await
+    }
+
     /// [`start`](Self::start) with `config`, whose bootstrap key is always [`BOOTSTRAP_KEY`].
     pub async fn start_with(pool: PgPool, config: ApiConfig) -> Self {
         let clock = ManualClock::new(t0());
@@ -193,4 +204,50 @@ pub fn catalogue_names() -> Vec<String> {
         .into_iter()
         .map(|entry| entry.descriptor.name.as_str().to_owned())
         .collect()
+}
+
+/// A Worker running Jobs from the database on `clock`, stopped when dropped.
+pub struct Workers {
+    shutdown: CancellationToken,
+    handle: JoinHandle<()>,
+}
+
+impl Drop for Workers {
+    fn drop(&mut self) {
+        self.shutdown.cancel();
+        self.handle.abort();
+    }
+}
+
+/// Starts a Worker over `registry`. Engine time only moves when a test moves `clock`.
+pub fn spawn_worker(
+    pool: &PgPool,
+    clock: &ManualClock,
+    registry: Arc<InMemoryRegistry>,
+) -> Workers {
+    let interpreter = bia_engine::Interpreter::new(pool.clone(), registry, Arc::new(clock.clone()));
+    let worker = bia_engine::Worker::new(
+        "test-worker",
+        interpreter,
+        bia_engine::WorkerConfig::default(),
+    );
+    let shutdown = CancellationToken::new();
+    let token = shutdown.clone();
+    let handle = tokio::spawn(async move { worker.run(token).await.unwrap() });
+    Workers { shutdown, handle }
+}
+
+/// Waits for other tasks to get somewhere, which only a test moving the Clock can hurry.
+pub async fn eventually<F, Fut>(what: &str, mut check: F)
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = bool>,
+{
+    let waited = tokio::time::timeout(std::time::Duration::from_secs(20), async {
+        while !check().await {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+    assert!(waited.is_ok(), "timed out waiting for {what}");
 }
