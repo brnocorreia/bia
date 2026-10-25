@@ -44,6 +44,7 @@ steps:
 
 ## Documentation
 
+- [`docs/quickstart.md`](docs/quickstart.md): run bia locally and walk the agent scenario with an MCP client
 - [`GLOSSARY.md`](GLOSSARY.md): domain vocabulary
 - [`docs/architecture.md`](docs/architecture.md): how the pieces fit
 - [`docs/dsl.md`](docs/dsl.md): the definition format (draft)
