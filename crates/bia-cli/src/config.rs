@@ -10,6 +10,7 @@ use std::str::FromStr;
 use anyhow::{Context, anyhow, bail};
 use bia_core::dsl::Duration;
 use bia_engine::{InterpreterConfig, RetentionConfig, RunLimits, SchedulerConfig, WorkerConfig};
+use bia_server::{ApiConfig, BootstrapKey, CorsOrigins};
 use chrono::TimeDelta;
 use figment::Figment;
 use figment::providers::{Env, Format, Toml};
@@ -29,8 +30,10 @@ const SECTIONS: [&str; 7] = [
     "limits",
 ];
 /// Every key the environment may set, as key paths.
-const KEYS: [&str; 17] = [
+const KEYS: [&str; 19] = [
     "database_url",
+    "cors_origins",
+    "bootstrap_key",
     "api.bind",
     "worker.id",
     "worker.concurrency",
@@ -49,11 +52,15 @@ const KEYS: [&str; 17] = [
     "limits.max_output_bytes",
 ];
 
-// No `Debug`: the database URL usually carries a password.
+// No `Debug`: the database URL usually carries a password, and `bootstrap_key` is a credential.
 #[derive(Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct Config {
     database_url: Option<String>,
+    /// Browser origins allowed to call the API.
+    cors_origins: Origins,
+    /// Lets `bia token create --bootstrap` mint the first admin Token.
+    bootstrap_key: Option<String>,
     pub(crate) api: Api,
     pub(crate) worker: Worker,
     pub(crate) scheduler: Scheduler,
@@ -120,6 +127,27 @@ struct Limits {
     max_output_bytes: NonZeroU64,
 }
 
+/// A TOML array, or one comma-separated string, which is how a variable carries a list.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(from = "OneOrMany")]
+struct Origins(Vec<String>);
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum OneOrMany {
+    One(String),
+    Many(Vec<String>),
+}
+
+impl From<OneOrMany> for Origins {
+    fn from(origins: OneOrMany) -> Self {
+        match origins {
+            OneOrMany::One(list) => Self(list.split(',').map(str::to_owned).collect()),
+            OneOrMany::Many(origins) => Self(origins),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum LogFormat {
@@ -152,7 +180,7 @@ fn delta(duration: Duration) -> TimeDelta {
 impl Default for Api {
     fn default() -> Self {
         Self {
-            // Loopback until Tokens guard the API; expose it deliberately.
+            // Loopback, so exposing the API to other hosts is a deliberate choice.
             bind: SocketAddr::from((Ipv4Addr::LOCALHOST, 8080)),
         }
     }
@@ -269,7 +297,24 @@ impl Config {
                 self.log.filter
             )
         })?;
+        self.api_config()?;
         Ok(())
+    }
+
+    pub(crate) fn api_config(&self) -> anyhow::Result<ApiConfig> {
+        let cors_origins = CorsOrigins::parse(&self.cors_origins.0)
+            .context("invalid configuration: `cors_origins`")?;
+        // The message never echoes the key.
+        let bootstrap_key = self
+            .bootstrap_key
+            .as_deref()
+            .map(BootstrapKey::new)
+            .transpose()
+            .context("invalid configuration: `bootstrap_key`")?;
+        Ok(ApiConfig {
+            cors_origins,
+            bootstrap_key,
+        })
     }
 
     pub(crate) fn database_url(&self) -> anyhow::Result<&str> {
@@ -375,6 +420,7 @@ mod tests {
     use std::path::Path;
 
     use bia_engine::RunLimits;
+    use bia_server::CorsOrigins;
     use chrono::TimeDelta;
     use figment::Jail;
 
@@ -482,6 +528,57 @@ mod tests {
 
             assert!(error.contains("worker.concurrency"), "{error}");
             assert!(error.contains("BIA_WORKER_CONCURRENCY"), "{error}");
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn cors_origins_come_as_a_toml_array_or_a_comma_separated_variable() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.set_env("BIA_DATABASE_URL", URL);
+            jail.create_file(
+                "bia.toml",
+                r#"cors_origins = ["https://ui.example.com", "http://localhost:5173"]"#,
+            )?;
+            let from_file = load(jail, Some("bia.toml")).unwrap().api_config().unwrap();
+            assert!(matches!(from_file.cors_origins, CorsOrigins::List(list) if list.len() == 2));
+
+            jail.set_env(
+                "BIA_CORS_ORIGINS",
+                "https://ui.example.com, https://b.example.com",
+            );
+            let from_env = load(jail, Some("bia.toml")).unwrap().api_config().unwrap();
+            assert!(matches!(from_env.cors_origins, CorsOrigins::List(list) if list.len() == 2));
+
+            jail.set_env("BIA_CORS_ORIGINS", "ui.example.com");
+            let error = error(jail, None);
+            assert!(error.contains("cors_origins"), "{error}");
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn a_short_bootstrap_key_is_refused_without_echoing_it() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.set_env("BIA_DATABASE_URL", URL);
+            jail.set_env("BIA_BOOTSTRAP_KEY", "hunter2");
+
+            let error = error(jail, None);
+
+            assert!(error.contains("bootstrap_key"), "{error}");
+            assert!(!error.contains("hunter2"), "{error}");
+
+            jail.set_env("BIA_BOOTSTRAP_KEY", "k".repeat(32));
+            assert!(
+                load(jail, None)
+                    .unwrap()
+                    .api_config()
+                    .unwrap()
+                    .bootstrap_key
+                    .is_some()
+            );
             Ok(())
         });
     }

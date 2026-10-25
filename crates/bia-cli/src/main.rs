@@ -1,11 +1,12 @@
 //! The `bia` binary. `serve` and `migrate` touch Postgres directly; every other subcommand
-//! will be a client of the HTTP API (ADR-0005, ADR-0007).
+//! is a client of the HTTP API (ADR-0005, ADR-0007).
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::Context;
+use anyhow::{Context, bail};
+use bia_client::{NewToken, Scope, WebhookBinding};
 use bia_core::action::CancellationToken;
 use bia_engine::{Interpreter, Retention, Scheduler, Worker};
 use bia_server::ApiState;
@@ -39,6 +40,55 @@ enum Command {
     },
     /// Applies the database migrations this release needs.
     Migrate,
+    /// Manages API Tokens.
+    Token {
+        #[command(subcommand)]
+        command: TokenCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum TokenCommand {
+    /// Creates a Token and prints its value, which is shown only this once. Needs an admin
+    /// Token in BIA_TOKEN, or `--bootstrap` on a fresh install.
+    Create {
+        /// What the Token is for, e.g. `claude-desktop`.
+        #[arg(long)]
+        name: String,
+        #[arg(
+            long,
+            value_enum,
+            default_value = "agent",
+            conflicts_with = "bootstrap"
+        )]
+        scope: ScopeArg,
+        /// The Workflow a `webhook` Token may start Runs of.
+        #[arg(long, required_if_eq("scope", "webhook"))]
+        workflow: Option<String>,
+        /// The webhook Trigger a `webhook` Token may start Runs from.
+        #[arg(long, required_if_eq("scope", "webhook"))]
+        trigger: Option<String>,
+        /// Mints the first admin Token with the server's bootstrap key, read from
+        /// BIA_BOOTSTRAP_KEY. The server refuses once an unrevoked admin Token exists.
+        #[arg(long)]
+        bootstrap: bool,
+        #[command(flatten)]
+        api: ApiArgs,
+    },
+}
+
+#[derive(Debug, clap::Args)]
+struct ApiArgs {
+    /// Where the API is served.
+    #[arg(long, env = "BIA_URL", default_value = "http://127.0.0.1:8080")]
+    url: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum ScopeArg {
+    Admin,
+    Agent,
+    Webhook,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -52,12 +102,63 @@ enum Role {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
-    let config = Config::load(cli.config.as_deref())?;
-    init_logging(&config);
+    let server = |cli: &Cli| -> anyhow::Result<Config> {
+        let config = Config::load(cli.config.as_deref())?;
+        init_logging(&config);
+        Ok(config)
+    };
     match cli.command {
-        Command::Serve { role } => serve(&config, &roles(&role)).await,
-        Command::Migrate => migrate(&config).await,
+        Command::Serve { ref role } => serve(&server(&cli)?, &roles(role)).await,
+        Command::Migrate => migrate(&server(&cli)?).await,
+        Command::Token { command } => token(command).await,
     }
+}
+
+async fn token(command: TokenCommand) -> anyhow::Result<()> {
+    let TokenCommand::Create {
+        name,
+        scope,
+        workflow,
+        trigger,
+        bootstrap,
+        api,
+    } = command;
+    let client = bia_client::Client::new(&api.url)?;
+    // Credentials come from the environment only, never argv, which other users can read.
+    let created = if bootstrap {
+        let Ok(key) = std::env::var("BIA_BOOTSTRAP_KEY") else {
+            bail!("set BIA_BOOTSTRAP_KEY to the key the server was started with");
+        };
+        client.bootstrap_token(&key, &name).await?
+    } else {
+        let Ok(token) = std::env::var("BIA_TOKEN") else {
+            bail!("set BIA_TOKEN to an admin Token, or pass --bootstrap on a fresh install");
+        };
+        let (scope, webhook) = match (scope, workflow, trigger) {
+            (ScopeArg::Admin, ..) => (Scope::Admin, None),
+            (ScopeArg::Agent, ..) => (Scope::Agent, None),
+            (ScopeArg::Webhook, Some(workflow_id), Some(trigger_id)) => (
+                Scope::Webhook,
+                Some(WebhookBinding {
+                    workflow_id,
+                    trigger_id,
+                }),
+            ),
+            (ScopeArg::Webhook, ..) => bail!("a `webhook` Token needs --workflow and --trigger"),
+        };
+        let new = NewToken {
+            name,
+            scope,
+            webhook,
+        };
+        client.with_token(token).create_token(&new).await?
+    };
+    eprintln!(
+        "created {:?} Token `{}` ({}); its value is shown only now",
+        created.token.scope, created.token.name, created.token.id
+    );
+    println!("{}", created.value);
+    Ok(())
 }
 
 fn roles(given: &[Role]) -> BTreeSet<Role> {
@@ -114,7 +215,9 @@ async fn serve(config: &Config, roles: &BTreeSet<Role>) -> anyhow::Result<()> {
             .await
             .with_context(|| format!("cannot listen on {bind}"))?;
         tracing::info!(address = %listener.local_addr()?, "api listening");
-        let router = bia_server::router(ApiState::new(pool.clone(), actions.clone()));
+        let state = ApiState::new(pool.clone(), actions.clone(), Arc::new(SystemClock))
+            .with_config(config.api_config()?);
+        let router = bia_server::router(state);
         bia_server::serve(listener, router, shutdown.clone())
             .await
             .context("the api failed")?;

@@ -1,6 +1,6 @@
 //! The `bia` binary migrates an empty database, runs a Run to completion as a Worker, leads as a
-//! scheduler, serves the API, stops on SIGTERM, and refuses to start with invalid
-//! configuration.
+//! scheduler, serves the API, bootstraps its first admin Token, stops on SIGTERM, and refuses
+//! to start with invalid configuration.
 
 #![cfg(unix)]
 #![allow(clippy::unwrap_used)]
@@ -201,13 +201,19 @@ async fn bia_serve_as_a_scheduler_leads_and_stops_on_sigterm(pool: PgPool) {
     assert!(logs.contains("scheduler stopped"), "{logs}");
 }
 
+const BOOTSTRAP_KEY: &str = "cli-test-bootstrap-key-0123456789abcdef";
+
 #[sqlx::test(migrator = "bia_store::MIGRATOR")]
-async fn bia_serve_as_the_api_serves_the_schema_and_stops_on_sigterm(pool: PgPool) {
+async fn bia_serve_as_the_api_bootstraps_a_token_serves_the_schema_and_stops_on_sigterm(
+    pool: PgPool,
+) {
     let mut api = bia()
         .args(["serve", "--role", "api"])
         .env("BIA_DATABASE_URL", database_url(&pool))
         .env("BIA_LOG_FORMAT", "json")
+        .env("BIA_LOG_FILTER", "debug")
         .env("BIA_API_BIND", "127.0.0.1:0")
+        .env("BIA_BOOTSTRAP_KEY", BOOTSTRAP_KEY)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -228,8 +234,29 @@ async fn bia_serve_as_the_api_serves_the_schema_and_stops_on_sigterm(pool: PgPoo
     .await;
     let address = listening.unwrap_or_else(|_| panic!("the api did not listen; logs:\n{logs}"));
 
-    let client = bia_client::Client::new(&format!("http://{address}")).unwrap();
+    let url = format!("http://{address}");
+    let token_create = |name: &str| {
+        let mut command = bia();
+        command
+            .args(["token", "create", "--bootstrap", "--name", name])
+            .env("BIA_URL", &url)
+            .env("BIA_BOOTSTRAP_KEY", BOOTSTRAP_KEY);
+        command
+    };
+    let bootstrapped = finished(&mut token_create("admin")).await;
+    assert!(bootstrapped.status.success(), "{bootstrapped:?}");
+    let token = String::from_utf8(bootstrapped.stdout).unwrap();
+    let token = token.trim();
+    assert!(token.starts_with("bia_"), "{token}");
+    let refused = finished(&mut token_create("second")).await;
+    assert!(!refused.status.success(), "{refused:?}");
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(stderr.contains("already_bootstrapped"), "{stderr}");
+
+    let client = bia_client::Client::new(&url).unwrap();
     assert_eq!(client.ready().await.unwrap().status, "ready");
+    assert!(client.schema().await.is_err(), "the schema needs a Token");
+    let client = client.with_token(token);
     let schema = client.schema().await.unwrap();
     assert!(
         schema
@@ -254,4 +281,16 @@ async fn bia_serve_as_the_api_serves_the_schema_and_stops_on_sigterm(pool: PgPoo
         .unwrap();
     assert!(stopped.success(), "{stopped:?}");
     assert!(logs.contains("api stopped"), "{logs}");
+    assert!(
+        logs.contains("bootstrapped the first admin token"),
+        "{logs}"
+    );
+    assert!(
+        !logs.contains(token),
+        "the Token's value is logged:\n{logs}"
+    );
+    assert!(
+        !logs.contains(BOOTSTRAP_KEY),
+        "the bootstrap key is logged:\n{logs}"
+    );
 }
