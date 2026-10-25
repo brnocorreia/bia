@@ -1,5 +1,5 @@
 //! `GET /health` answers whenever the process serves; `GET /ready` only once the database is
-//! reachable and migrated.
+//! reachable and migrated. Neither needs a Token, since orchestrators call them.
 
 #![allow(clippy::unwrap_used)]
 
@@ -35,7 +35,7 @@ fn unreachable_pool() -> PgPool {
 
 #[sqlx::test(migrator = "bia_store::MIGRATOR")]
 async fn a_migrated_database_is_ready(pool: PgPool) {
-    let server = TestServer::start(pool).await;
+    let server = TestServer::without_tokens(pool).await;
 
     assert_eq!(server.client.health().await.unwrap().status, "ok");
     assert_eq!(server.client.ready().await.unwrap().status, "ready");
@@ -43,7 +43,7 @@ async fn a_migrated_database_is_ready(pool: PgPool) {
 
 #[sqlx::test(migrations = false)]
 async fn a_database_with_pending_migrations_is_not_ready(pool: PgPool) {
-    let server = TestServer::start(pool.clone()).await;
+    let server = TestServer::without_tokens(pool.clone()).await;
 
     let message = not_ready(server.client.ready().await.unwrap_err());
     assert!(message.contains("bia migrate"), "{message}");
@@ -54,7 +54,7 @@ async fn a_database_with_pending_migrations_is_not_ready(pool: PgPool) {
 
 #[tokio::test]
 async fn an_unreachable_database_is_not_ready_but_the_process_is_healthy() {
-    let server = TestServer::start(unreachable_pool()).await;
+    let server = TestServer::without_tokens(unreachable_pool()).await;
 
     let message = not_ready(server.client.ready().await.unwrap_err());
     assert!(message.contains("unreachable"), "{message}");

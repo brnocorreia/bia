@@ -1,7 +1,7 @@
 //! Extractors whose rejections are [`ApiError`]s, so a malformed request gets the uniform body.
 
-use axum::extract::FromRequest;
-use axum::extract::rejection::JsonRejection;
+use axum::extract::rejection::{JsonRejection, PathRejection};
+use axum::extract::{FromRequest, FromRequestParts};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
@@ -12,6 +12,11 @@ use crate::{ApiError, ErrorCode};
 #[derive(Debug, Clone, Copy, Default, FromRequest)]
 #[from_request(via(axum::Json), rejection(ApiError))]
 pub struct Json<T>(pub T);
+
+/// `axum::extract::Path`, rejecting with `malformed_request`.
+#[derive(Debug, Clone, Copy, Default, FromRequestParts)]
+#[from_request(via(axum::extract::Path), rejection(ApiError))]
+pub struct Path<T>(pub T);
 
 impl<T: Serialize> IntoResponse for Json<T> {
     fn into_response(self) -> Response {
@@ -30,5 +35,15 @@ impl From<JsonRejection> for ApiError {
         // axum's text names the problem and where, e.g. "missing field `id` at line 1". It can
         // quote a value from the body, so a route that takes Secret values must not use this.
         ApiError::new(status, code, rejection.body_text())
+    }
+}
+
+impl From<PathRejection> for ApiError {
+    fn from(rejection: PathRejection) -> Self {
+        ApiError::new(
+            rejection.status(),
+            ErrorCode::MalformedRequest,
+            rejection.body_text(),
+        )
     }
 }

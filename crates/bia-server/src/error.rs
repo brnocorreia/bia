@@ -1,6 +1,6 @@
 //! The error body every endpoint fails with.
 
-use axum::http::StatusCode;
+use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use bia_core::validation::Diagnostic;
 use serde::{Deserialize, Serialize};
@@ -23,6 +23,19 @@ pub enum ErrorCode {
     RequestTooLarge,
     /// The Definition has error Diagnostics; they are listed in `diagnostics`.
     InvalidDefinition,
+    /// The route needs a Token and the request carries none.
+    MissingToken,
+    /// The `Authorization` header is not `Bearer <token>`, or the Token is unknown or revoked.
+    InvalidToken,
+    /// The Token's Scope does not allow this route.
+    InsufficientScope,
+    /// No Token has this id.
+    TokenNotFound,
+    /// Bootstrapping is off because the server has no bootstrap key configured.
+    BootstrapDisabled,
+    /// An unrevoked admin Token exists, so bootstrapping refuses to mint another; create
+    /// Tokens with it instead.
+    AlreadyBootstrapped,
     /// The server cannot serve requests yet: the database is unreachable or migrations are
     /// pending.
     NotReady,
@@ -151,6 +164,12 @@ impl ApiError {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        (self.status, axum::Json(self.body)).into_response()
+        let mut response = (self.status, axum::Json(self.body)).into_response();
+        if self.status == StatusCode::UNAUTHORIZED {
+            response
+                .headers_mut()
+                .insert(header::WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));
+        }
+        response
     }
 }
