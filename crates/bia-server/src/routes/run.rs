@@ -182,6 +182,7 @@ fn empty_input() -> Value {
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ListQuery {
     /// Only Runs of this Workflow.
@@ -200,6 +201,7 @@ pub(crate) struct ListQuery {
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct FailuresQuery {
     /// Only failures of this Workflow.

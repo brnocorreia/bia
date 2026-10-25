@@ -145,81 +145,59 @@
         "parameters": [
           {
             "name": "workflow_id",
-            "in": "path",
+            "in": "query",
             "description": "Only Runs of this Workflow.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "status",
-            "in": "path",
+            "in": "query",
             "description": "Only Runs in this status.",
-            "required": true,
+            "required": false,
             "schema": {
-              "oneOf": [
-                {
-                  "$ref": "#/components/schemas/RunStatusName"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "$ref": "#/components/schemas/RunStatusName"
             }
           },
           {
             "name": "created_from",
-            "in": "path",
+            "in": "query",
             "description": "Only Runs created at or after this time (RFC 3339).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ],
+              "type": "string",
               "format": "date-time"
             }
           },
           {
             "name": "created_to",
-            "in": "path",
+            "in": "query",
             "description": "Only Runs created before this time (RFC 3339).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ],
+              "type": "string",
               "format": "date-time"
             }
           },
           {
             "name": "after",
-            "in": "path",
+            "in": "query",
             "description": "Return the page after this Run id (a previous page's `next_after`).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ],
+              "type": "string",
               "format": "uuid"
             }
           },
           {
             "name": "limit",
-            "in": "path",
+            "in": "query",
             "description": "Page size, 1 to 200. Defaults to 50.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": "integer",
               "format": "int32",
               "minimum": 0
             }
@@ -283,65 +261,50 @@
         "parameters": [
           {
             "name": "workflow_id",
-            "in": "path",
+            "in": "query",
             "description": "Only failures of this Workflow.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "created_from",
-            "in": "path",
+            "in": "query",
             "description": "Only Runs created at or after this time (RFC 3339).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ],
+              "type": "string",
               "format": "date-time"
             }
           },
           {
             "name": "created_to",
-            "in": "path",
+            "in": "query",
             "description": "Only Runs created before this time (RFC 3339).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ],
+              "type": "string",
               "format": "date-time"
             }
           },
           {
             "name": "after",
-            "in": "path",
+            "in": "query",
             "description": "Return the page after this Run id (a previous page's `next_after`).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ],
+              "type": "string",
               "format": "uuid"
             }
           },
           {
             "name": "limit",
-            "in": "path",
+            "in": "query",
             "description": "Page size, 1 to 200. Defaults to 50.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": "integer",
               "format": "int32",
               "minimum": 0
             }
@@ -1183,9 +1146,9 @@
         "parameters": [
           {
             "name": "target",
-            "in": "path",
+            "in": "query",
             "description": "What to validate for. Defaults to `draft`.",
-            "required": true,
+            "required": false,
             "schema": {
               "$ref": "#/components/schemas/TargetName"
             }
@@ -1380,7 +1343,7 @@
           },
           {
             "name": "from",
-            "in": "path",
+            "in": "query",
             "description": "The Version number to diff from.",
             "required": true,
             "schema": {
@@ -1390,7 +1353,7 @@
           },
           {
             "name": "to",
-            "in": "path",
+            "in": "query",
             "description": "The Version number to diff to.",
             "required": true,
             "schema": {
@@ -2214,9 +2177,9 @@
           },
           {
             "name": "target",
-            "in": "path",
+            "in": "query",
             "description": "What to validate for. Defaults to `draft`.",
-            "required": true,
+            "required": false,
             "schema": {
               "$ref": "#/components/schemas/TargetName"
             }
@@ -2936,6 +2899,14 @@
             "example": "ok"
           }
         }
+      },
+      "TargetName": {
+        "type": "string",
+        "description": "What a Definition is validated for.",
+        "enum": [
+          "draft",
+          "publish"
+        ]
       },
       "TimelineEntryInfo": {
         "type": "object",

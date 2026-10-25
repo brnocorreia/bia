@@ -31,6 +31,18 @@ test:
 openapi:
     BIA_UPDATE_OPENAPI=1 cargo test -p bia-server --test openapi the_committed_openapi_document_is_up_to_date
 
+# Regenerate the UI's API types from the committed OpenAPI document
+ui-types:
+    cd ui && pnpm gen:api
+
+# UI checks except end-to-end: install, typecheck, lint, Vitest, build, types up to date
+ui-check:
+    cd ui && pnpm install --frozen-lockfile && pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm check:api
+
+# UI end-to-end tests against a real `bia serve` (needs Postgres; see ui/README.md)
+ui-e2e:
+    cd ui && pnpm test:e2e
+
 # Check licences, advisories, bans and sources
 deny:
     cargo deny --all-features --locked check

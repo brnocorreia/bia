@@ -95,7 +95,7 @@ impl fmt::Debug for ApiState {
                        error body: a stable `code`, a `message`, and `diagnostics` when a \
                        Definition was at fault."
     ),
-    components(schemas(ErrorBody)),
+    components(schemas(ErrorBody, routes::workflow::TargetName)),
     modifiers(&SecuritySchemes)
 )]
 struct ApiDoc;
