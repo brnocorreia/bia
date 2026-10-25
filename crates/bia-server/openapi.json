@@ -60,6 +60,81 @@
         }
       }
     },
+    "/v1/dry-run": {
+      "post": {
+        "tags": [
+          "dry-run"
+        ],
+        "summary": "[`dry_run_version`] for a Definition in the request body, which need not be stored.",
+        "operationId": "dry_run_definition",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DefinitionDryRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DryRunReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_request`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_definition`, `invalid_mock` or `dry_run_too_long`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
     "/v1/runs": {
       "get": {
         "tags": [
@@ -1712,6 +1787,113 @@
         ]
       }
     },
+    "/v1/workflows/{workflow_id}/versions/{number}/dry-run": {
+      "post": {
+        "tags": [
+          "dry-run"
+        ],
+        "summary": "Dry-runs a stored Version, a Draft or a Published one: pure Actions run for real, side\neffects return Mocks, and waits resolve instantly. Nothing is stored and nothing outside\nthe server is touched. The Definition must have no error Diagnostics (`invalid_definition`\notherwise); a Mock that names a missing or unMockable Step, or is not in the documented\nformat, is refused with `invalid_mock`.",
+        "operationId": "dry_run_version",
+        "parameters": [
+          {
+            "name": "workflow_id",
+            "in": "path",
+            "description": "The Workflow's id.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "description": "The Version's number.",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The input and Mocks; send `{}` for none.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DryRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DryRunReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_request`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`workflow_not_found` or `version_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_definition`, `invalid_mock` or `dry_run_too_long`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
     "/v1/workflows/{workflow_id}/versions/{number}/publish": {
       "post": {
         "tags": [
@@ -2015,6 +2197,33 @@
           }
         }
       },
+      "DefinitionDryRunRequest": {
+        "type": "object",
+        "description": "What a Dry Run of a Definition that need not be stored takes.",
+        "required": [
+          "definition"
+        ],
+        "properties": {
+          "definition": {
+            "type": "object",
+            "description": "A Definition (see `GET /v1/schema`). Its Workflow need not exist."
+          },
+          "input": {
+            "description": "The Run input. Defaults to `{}`."
+          },
+          "mocks": {
+            "type": "object",
+            "description": "Mocks by Step id. See [`MockSchema`].",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/MockSchema"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
       "Diagnostic": {
         "type": "object",
         "description": "One validation finding about a Definition.",
@@ -2048,6 +2257,62 @@
             "description": "A likely fix, such as the nearest known name."
           }
         }
+      },
+      "DryRunReport": {
+        "type": "object",
+        "description": "A Dry Run's result.",
+        "required": [
+          "dry_run",
+          "status",
+          "input",
+          "timeline",
+          "diagnostics"
+        ],
+        "properties": {
+          "diagnostics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            },
+            "description": "Validation findings that are not errors, such as problems only publishing needs solved."
+          },
+          "dry_run": {
+            "type": "boolean",
+            "description": "Always `true`; marks the Timeline as not a real Run's."
+          },
+          "input": {},
+          "status": {
+            "$ref": "#/components/schemas/RunStatusName",
+            "description": "How the Run ended: `succeeded` or `failed`."
+          },
+          "timeline": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TimelineEntryInfo"
+            },
+            "description": "The entries a real Run's Timeline would hold, in the same shape and order. Waits take\nno real time, but their entries show the time they would have taken."
+          }
+        }
+      },
+      "DryRunRequest": {
+        "type": "object",
+        "description": "What a Dry Run of a stored Version takes.",
+        "properties": {
+          "input": {
+            "description": "The Run input. Defaults to `{}`. Checked against the Definition's `input_schema`, as a\nreal Run's is."
+          },
+          "mocks": {
+            "type": "object",
+            "description": "Mocks by Step id. See [`MockSchema`].",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/MockSchema"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
       },
       "ErrorBody": {
         "type": "object",
@@ -2097,6 +2362,8 @@
           "no_active_version",
           "no_manual_trigger",
           "invalid_run_input",
+          "invalid_mock",
+          "dry_run_too_long",
           "run_not_found",
           "run_finished",
           "run_not_finished",
@@ -2149,6 +2416,26 @@
               "$ref": "#/components/schemas/FailedRun"
             },
             "description": "Failed Runs, newest first."
+          }
+        }
+      },
+      "MockSchema": {
+        "type": "object",
+        "description": "What a Step returns in a Dry Run instead of calling its Action. Give exactly one of\n`output`, `error` or `attempts`.\n\nWithout a Mock, a `pure` Action runs for real and a `side_effecting` one returns the\nOutput of its first example, or, having no example, fails with the `no_mock` code. A Mock\nalso applies to a `pure` Action, which lets a Dry Run force it to fail. Only Steps that\ncall an Action can be Mocked: not `flow.*` Steps or Blocks.",
+        "properties": {
+          "attempts": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {},
+            "description": "One `{ \"output\" }` or `{ \"error\" }` per Attempt: the first Attempt gets the first, and\nthe last repeats for the Attempts after it. Use it to fail twice and then succeed."
+          },
+          "error": {
+            "description": "The error every Attempt fails with: `{ \"class\": \"retryable\" | \"fatal\", \"message\",\n\"details\"? }`. A `retryable` error follows the Step's retry policy exactly as a real one\ndoes."
+          },
+          "output": {
+            "description": "The Output every Attempt returns. Any JSON value, `null` included."
           }
         }
       },

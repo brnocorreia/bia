@@ -38,10 +38,12 @@ use tracing::Instrument;
 use crate::{EngineError, NoSecrets, NotResumable, SecretResolver};
 
 mod checkpoint;
+mod dry_run;
 mod failure;
 mod limits;
 
 use checkpoint::{Cursor, ELSE, RunState, Sleep, THEN, checkpoint};
+pub use dry_run::{DryRun, DryRunResult, MAX_TRANSITIONS, Mock, MockOutcome, Mocks};
 use failure::{Failure, FailureCode};
 pub use limits::{Limit, LimitExceeded, RunLimits};
 
@@ -83,6 +85,8 @@ pub struct Interpreter {
     clock: Arc<dyn Clock>,
     secrets: Arc<dyn SecretResolver>,
     config: InterpreterConfig,
+    /// Set only on the Interpreter a Dry Run builds for itself.
+    mocks: Option<Mocks>,
 }
 
 impl fmt::Debug for Interpreter {
@@ -157,6 +161,7 @@ impl Interpreter {
             clock,
             secrets: Arc::new(NoSecrets),
             config: InterpreterConfig::default(),
+            mocks: None,
         }
     }
 
@@ -782,9 +787,13 @@ impl Interpreter {
             action = %action.descriptor().name,
             "attempt started"
         );
+        let outcome = match self.mocked(step, action.descriptor(), attempt) {
+            Some(outcome) => outcome,
+            None => self.call(&*action, call, timeout, cancel).await,
+        };
         Attempted {
             input: recorded,
-            outcome: self.call(&*action, call, timeout, cancel).await,
+            outcome,
         }
     }
 

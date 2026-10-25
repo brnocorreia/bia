@@ -109,11 +109,11 @@ The ordered, human- and agent-readable record of a Run: each Step's Attempts, in
 _Avoid_: history, log, trace
 
 **Dry Run**:
-An unpersisted Run of a Version where pure Actions execute for real and side-effecting Actions return Mocks.
+An unpersisted Run of a Version or Definition where pure Actions execute for real, side-effecting Actions return Mocks, and waits resolve instantly. Its result is a Timeline marked `dry_run` (ADR-0046).
 _Avoid_: simulation, test run
 
 **Mock**:
-A stand-in Output for a Step during a Dry Run, supplied by the caller or derived from the Action's examples.
+A stand-in result for a Step during a Dry Run, an Output or an error, supplied by the caller per Step id or, for an Output, derived from the Action's first example.
 
 ### Events and humans
 

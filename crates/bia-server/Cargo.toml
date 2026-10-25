@@ -35,6 +35,7 @@ bia-core = { workspace = true, features = ["testing"] }
 reqwest = { version = "0.13.5", default-features = false, features = ["json"] }
 schemars = "1.2.3"
 tokio = { version = "1.53.3", features = ["macros", "rt", "net", "time"] }
+wiremock = "0.6.5"
 
 [lints]
 workspace = true

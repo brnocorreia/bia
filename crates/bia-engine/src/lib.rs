@@ -11,8 +11,8 @@ mod worker;
 
 pub use error::{EngineError, NotResumable};
 pub use interpreter::{
-    Advanced, Interpreter, InterpreterConfig, Limit, LimitExceeded, RunLimits, cancel_run,
-    resume_run, start_run,
+    Advanced, DryRun, DryRunResult, Interpreter, InterpreterConfig, Limit, LimitExceeded, Mock,
+    MockOutcome, Mocks, RunLimits, cancel_run, resume_run, start_run,
 };
 pub use retention::{Retention, RetentionConfig};
 pub use scheduler::{CATCH_UP_LIMIT, Chore, MISSED_AFTER, QUEUE_LIMIT, Scheduler, SchedulerConfig};

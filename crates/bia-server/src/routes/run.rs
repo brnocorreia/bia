@@ -652,7 +652,7 @@ fn summary(run: Run) -> RunSummary {
     }
 }
 
-fn entry(entry: TimelineEntry) -> TimelineEntryInfo {
+pub(super) fn entry(entry: TimelineEntry) -> TimelineEntryInfo {
     let duration_ms = entry.duration().num_milliseconds();
     let (step_id, iteration_path, attempt, action) = match entry.step {
         Some(step) => (

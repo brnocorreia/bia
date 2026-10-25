@@ -1,3 +1,4 @@
+pub(crate) mod dry_run;
 pub(crate) mod probe;
 pub(crate) mod run;
 pub(crate) mod schema;

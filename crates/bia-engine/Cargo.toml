@@ -18,6 +18,7 @@ sqlx.workspace = true
 thiserror = "2.0.21"
 tokio = { version = "1.53.3", features = ["macros", "rt"] }
 tracing = "0.1.44"
+uuid = "1.28.0"
 
 [lints]
 workspace = true
