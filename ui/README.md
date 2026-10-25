@@ -78,3 +78,21 @@ When a handler changes, run `just openapi` at the repository root, then `pnpm ge
   | `dryRun`  | `boolean`, optional   | Shows a "dry run" badge and a note that the durations are virtual.                                        |
 
   `components/timeline/model.ts` holds the pure grouping and formatting (Vitest), and `json-block.tsx` the lazy, collapsed JSON disclosure. `components/status-badge.tsx` colours a Run or Attempt status.
+
+## Definition editor
+
+`src/editor/` holds the Monaco-based Definition editor (ADR-0055); `routes/_app.workflows_.new.tsx` and `routes/_app.workflows_.$workflowId_.edit.tsx` mount it.
+
+- Monaco, `monaco-yaml` and their workers are bundled (`editor/environment.ts`, `editor/yaml.worker.ts`), with no CDN loader, so the editor works under the embedded UI's CSP unchanged. `monaco-editor` is pinned to 0.54: `monaco-yaml` 5.5 imports paths that 0.57's export map no longer has.
+- Completion and hover come from `GET /v1/schema` (`definition`). Client-side validation is off: the only underlines are the server's Diagnostics from `POST /v1/validate`, run 500 ms after typing stops and mapped to ranges by `editor/path-range.ts` (JSON and YAML).
+- The text is JSON or YAML; switching converts through the parsed value (`editor/convert.ts`). The server stores JSON only, so YAML comments are lost, and the editor says so. The editor keeps no YAML source anywhere.
+- Saving: `Save as new Draft` (`POST .../versions`, which also creates a Workflow) and, when the loaded Version is a Draft, `Replace Draft vN` (`PUT .../versions/{n}`). A Draft with errors saves; its Diagnostics are shown. Publishing stays on the Version screens.
+- Leaving with unsaved changes asks first (router blocker and `beforeunload`).
+
+### Adding a panel beside the editor (Dry Run, BIA-33)
+
+`DefinitionEditor` (`editor/definition-editor.tsx`) takes an optional `sidePanel` render prop and renders it in an `<aside>` next to the editor. It is called with an `EditorContext`: `workflowId`, `definition` (the current text, parsed; `undefined` while it does not parse), `dirty` and the latest server `diagnostics`. A panel reads these and adds no logic to the editor: pass `sidePanel={(context) => <DryRunPanel {...context} />}` from the edit route.
+
+### Editor end-to-end tests
+
+Monaco turns typed newlines into auto-indented lines, so `e2e/editor.spec.ts` pastes text (a synthetic `paste` event) to set the editor's content.
