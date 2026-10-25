@@ -62,6 +62,7 @@ export default async function globalSetup() {
     DATABASE_URL: env.databaseUrl,
     BIA_API_BIND: `127.0.0.1:${env.apiPort}`,
     BIA_BOOTSTRAP_KEY: env.bootstrapKey,
+    BIA_MASTER_KEY: env.masterKey,
     BIA_CORS_ORIGINS: env.uiUrl,
   };
   execFileSync(bia, ["migrate"], { env: serverEnv, stdio: "inherit" });
