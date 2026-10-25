@@ -40,9 +40,8 @@ deny = [
     { crate = "bia-engine", wrappers = ["bia-server", "bia-cli"] },
     { crate = "bia-actions", wrappers = ["bia-cli"] },
     { crate = "bia-server", wrappers = ["bia-cli"] },
-    # Add "bia-server" here once it takes bia-client as a dev-dependency for
-    # HTTP API tests.
-    { crate = "bia-client", wrappers = ["bia-cli"] },
+    # bia-server only as a dev-dependency, for HTTP API tests.
+    { crate = "bia-client", wrappers = ["bia-server", "bia-cli"] },
 ]
 
 [sources]

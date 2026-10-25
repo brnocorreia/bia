@@ -16,7 +16,7 @@
 //! The table layout is ADR-0030.
 
 use sqlx::PgPool;
-use sqlx::migrate::Migrator;
+use sqlx::migrate::{Migrate, MigrateError, Migrator};
 
 pub mod chore;
 mod clock;
@@ -37,3 +37,29 @@ pub async fn migrate(pool: &PgPool) -> Result<(), StoreError> {
     MIGRATOR.run(pool).await?;
     Ok(())
 }
+
+/// The versions of this build's migrations that the database has not applied successfully,
+/// in order; empty once `bia migrate` has run. Reads only, so it never creates the migrations
+/// table the way [`migrate`] does.
+pub async fn pending_migrations(pool: &PgPool) -> Result<Vec<i64>, StoreError> {
+    let mut conn = pool.acquire().await?;
+    let (applied, dirty) = match conn.list_applied_migrations(&MIGRATOR.table_name).await {
+        Ok(applied) => (applied, conn.dirty_version(&MIGRATOR.table_name).await?),
+        Err(MigrateError::Execute(sqlx::Error::Database(error)))
+            if error.code().as_deref() == Some(UNDEFINED_TABLE) =>
+        {
+            (Vec::new(), None)
+        }
+        Err(error) => return Err(error.into()),
+    };
+    Ok(MIGRATOR
+        .iter()
+        .filter(|migration| migration.migration_type.is_up_migration())
+        .map(|migration| migration.version)
+        .filter(|version| {
+            Some(*version) == dirty || !applied.iter().any(|applied| applied.version == *version)
+        })
+        .collect())
+}
+
+const UNDEFINED_TABLE: &str = "42P01";

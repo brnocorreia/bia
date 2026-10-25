@@ -1,7 +1,7 @@
 //! The flow Actions that change the Run itself: `flow.sleep`, `flow.sleep_until`, `flow.fail`
 //! and `flow.succeed`.
 //!
-//! They sit in the Action Registry like any Action, so validation, `GET /schema` and Dry Run
+//! They sit in the Action Registry like any Action, so validation, `GET /v1/schema` and Dry Run
 //! know their Params, but the interpreter executes them (it sets Run status and schedules
 //! Jobs), so [`Flow::execute`] is never called by a Worker. The interpreter reads their
 //! Params with [`Control::from_params`].

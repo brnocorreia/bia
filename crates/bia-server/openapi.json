@@ -1,0 +1,283 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "bia",
+    "description": "Workflows as data, run from Postgres. Every endpoint fails with the same error body: a stable `code`, a `message`, and `diagnostics` when a Definition was at fault.",
+    "license": {
+      "name": "MIT OR Apache-2.0",
+      "identifier": "MIT OR Apache-2.0"
+    },
+    "version": "0.0.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "probes"
+        ],
+        "summary": "Answers while the process serves HTTP, whatever the state of the database.",
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ready": {
+      "get": {
+        "tags": [
+          "probes"
+        ],
+        "summary": "Answers once the database is reachable and every migration this build needs is applied.",
+        "operationId": "ready",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not ready; `code` is `not_ready`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/schema": {
+      "get": {
+        "tags": [
+          "schema"
+        ],
+        "summary": "The DSL JSON Schema and every Action with its param and output schemas and examples.",
+        "operationId": "get_schema",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchemaDocument"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ActionEffect": {
+        "type": "string",
+        "description": "Whether an Action can change anything outside the Run. A Dry Run executes `pure` Actions\nand gives `side_effecting` ones a Mock.",
+        "enum": [
+          "pure",
+          "side_effecting"
+        ]
+      },
+      "ActionEntry": {
+        "type": "object",
+        "description": "An Action a Step can name in `action`.",
+        "required": [
+          "name",
+          "category",
+          "description",
+          "effect",
+          "dangerous",
+          "enabled",
+          "param_schema",
+          "output_schema",
+          "examples"
+        ],
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "dangerous": {
+            "type": "boolean",
+            "description": "Disabled unless enabled in server config, and only publishable with an `admin` Token."
+          },
+          "description": {
+            "type": "string"
+          },
+          "effect": {
+            "$ref": "#/components/schemas/ActionEffect"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "A Version that uses a disabled Action cannot be published."
+          },
+          "examples": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActionExampleEntry"
+            },
+            "description": "Example calls, also the source of Mocks in a Dry Run."
+          },
+          "name": {
+            "type": "string",
+            "description": "`category.operation`, e.g. `http.request`."
+          },
+          "output_schema": {
+            "type": "object",
+            "description": "The JSON Schema of the Step's Output, read by later Steps as `steps.<id>.output`."
+          },
+          "param_schema": {
+            "type": "object",
+            "description": "The JSON Schema a Step's `params` must satisfy once its Templates are resolved."
+          }
+        }
+      },
+      "ActionExampleEntry": {
+        "type": "object",
+        "required": [
+          "description",
+          "params",
+          "output"
+        ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "output": {},
+          "params": {
+            "type": "object"
+          }
+        }
+      },
+      "Diagnostic": {
+        "type": "object",
+        "description": "One validation finding about a Definition.",
+        "required": [
+          "path",
+          "code",
+          "severity",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "A stable snake_case phrase naming the problem, listed in `docs/dsl.md`."
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable explanation. Its wording may change; match on `code`."
+          },
+          "path": {
+            "type": "string",
+            "description": "JSON Pointer to the offending value, e.g. `/steps/0/params/url`."
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity"
+          },
+          "suggestion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A likely fix, such as the nearest known name."
+          }
+        }
+      },
+      "ErrorBody": {
+        "type": "object",
+        "description": "The body of every error response.",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ErrorCode"
+          },
+          "diagnostics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            },
+            "description": "The Diagnostics behind the error, in document order. Absent when none apply."
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable explanation. Its wording may change; match on `code`."
+          }
+        }
+      },
+      "ErrorCode": {
+        "type": "string",
+        "description": "A stable identifier for what went wrong with a request. Agents match on it, so codes may be\nadded, but renaming or removing one needs an ADR (ADR-0042).",
+        "enum": [
+          "route_not_found",
+          "method_not_allowed",
+          "malformed_request",
+          "request_too_large",
+          "invalid_definition",
+          "not_ready",
+          "internal_error"
+        ]
+      },
+      "SchemaDocument": {
+        "type": "object",
+        "description": "The DSL's JSON Schemas and the Action catalogue.",
+        "required": [
+          "definition",
+          "queue",
+          "actions"
+        ],
+        "properties": {
+          "actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActionEntry"
+            },
+            "description": "Every Action this server knows, disabled ones included, ordered by name."
+          },
+          "definition": {
+            "type": "object",
+            "description": "The JSON Schema (draft 2020-12) a Definition must satisfy. Passing it is the first\nlayer of validation; Diagnostics report the rest."
+          },
+          "queue": {
+            "type": "object",
+            "description": "The JSON Schema of a `kind: queue` resource file."
+          }
+        }
+      },
+      "Severity": {
+        "type": "string",
+        "description": "Only errors block publishing.",
+        "enum": [
+          "error",
+          "warning"
+        ]
+      },
+      "Status": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "ok"
+          }
+        }
+      }
+    }
+  }
+}

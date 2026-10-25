@@ -41,7 +41,8 @@ Engine, scheduler and store read time from an injected `Clock` (ADR-0022), and w
 
 ## Processes
 
-- `bia serve --role all` (dev) or any mix of `api`, `worker` and `scheduler` replicas (ADR-0005), e.g. `--role api,worker`. Roles not built yet start and do nothing.
+- `bia serve --role all` (dev) or any mix of `api`, `worker` and `scheduler` replicas (ADR-0005), e.g. `--role api,worker`.
+- The `api` Role serves the HTTP API on `api.bind`, with `GET /health` for liveness and `GET /ready` for readiness (database reachable, migrations applied).
 - `bia migrate` applies migrations.
 - Both read their configuration from a TOML file under `BIA_*` environment variables (ADR-0037, [`configuration.md`](configuration.md)).
 - A Worker runs claimed Jobs as concurrent tasks, heartbeats their Leases, and on SIGTERM stops claiming, waits a grace period, then releases the Leases of what did not finish (ADR-0036).
@@ -60,7 +61,8 @@ Cancellation sets a flag on the Run that Postgres announces to Workers, which al
 
 ## Interfaces for agents
 
-- `GET /schema`: DSL JSON Schema plus the Action catalogue (name, description, param schema, output schema, examples).
+- `GET /v1/schema`: DSL JSON Schema plus the Action catalogue (name, description, param schema, output schema, examples).
+- `GET /openapi.json`: the OpenAPI document of every endpoint, also committed as `crates/bia-server/openapi.json` (`just openapi` rewrites it, and a test fails when it drifts). Every failure has one error body: a stable `code`, a `message`, and the Diagnostics when a Definition was at fault. Routes, codes and the error body follow ADR-0042.
 - MCP tools mirror the API: `list_actions`, `get_schema`, `validate_workflow`, `create_draft`, `dry_run`, `diff_versions`, `trigger_run`, `get_run`, `list_runs`, `list_failures`, `retry_run`, `cancel_run`, `send_event`, `list_queues`. Publishing and activation are admin-only (ADR-0008).
 
 ## UI

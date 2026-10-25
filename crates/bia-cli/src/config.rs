@@ -2,6 +2,7 @@
 //! environment. Naming and precedence are ADR-0037; the keys are listed in
 //! `docs/configuration.md`, which must follow any change to them.
 
+use std::net::{Ipv4Addr, SocketAddr};
 use std::num::{NonZeroU32, NonZeroU64, NonZeroUsize};
 use std::path::Path;
 use std::str::FromStr;
@@ -18,10 +19,19 @@ use sqlx::postgres::PgConnectOptions;
 use tracing_subscriber::EnvFilter;
 
 const ENV_PREFIX: &str = "BIA_";
-const SECTIONS: [&str; 6] = ["worker", "scheduler", "run", "dead_letter", "log", "limits"];
+const SECTIONS: [&str; 7] = [
+    "api",
+    "worker",
+    "scheduler",
+    "run",
+    "dead_letter",
+    "log",
+    "limits",
+];
 /// Every key the environment may set, as key paths.
-const KEYS: [&str; 16] = [
+const KEYS: [&str; 17] = [
     "database_url",
+    "api.bind",
     "worker.id",
     "worker.concurrency",
     "worker.lease",
@@ -44,12 +54,20 @@ const KEYS: [&str; 16] = [
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct Config {
     database_url: Option<String>,
+    pub(crate) api: Api,
     pub(crate) worker: Worker,
     pub(crate) scheduler: Scheduler,
     run: Run,
     dead_letter: DeadLetter,
     pub(crate) log: Log,
     limits: Limits,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct Api {
+    /// The address the `api` Role listens on.
+    pub(crate) bind: SocketAddr,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -129,6 +147,15 @@ fn days(days: NonZeroU32) -> TimeDelta {
 
 fn delta(duration: Duration) -> TimeDelta {
     TimeDelta::from_std(duration.to_std()).unwrap_or(TimeDelta::MAX)
+}
+
+impl Default for Api {
+    fn default() -> Self {
+        Self {
+            // Loopback until Tokens guard the API; expose it deliberately.
+            bind: SocketAddr::from((Ipv4Addr::LOCALHOST, 8080)),
+        }
+    }
 }
 
 impl Default for Worker {
@@ -554,6 +581,29 @@ mod tests {
             let error = error(jail, Some("bia.toml"));
             assert!(error.contains("limits.max_iterations"), "{error}");
             assert!(error.contains("BIA_LIMITS_MAX_ITERATIONS"), "{error}");
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn the_api_binds_to_loopback_unless_told_otherwise() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.set_env("BIA_DATABASE_URL", URL);
+            assert_eq!(
+                load(jail, None).unwrap().api.bind.to_string(),
+                "127.0.0.1:8080"
+            );
+
+            jail.set_env("BIA_API_BIND", "0.0.0.0:9000");
+            assert_eq!(
+                load(jail, None).unwrap().api.bind.to_string(),
+                "0.0.0.0:9000"
+            );
+
+            jail.set_env("BIA_API_BIND", "localhost");
+            let error = error(jail, None);
+            assert!(error.contains("`api.bind` in BIA_API_BIND"), "{error}");
             Ok(())
         });
     }

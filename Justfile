@@ -27,6 +27,10 @@ clippy:
 test:
     cargo test --workspace --all-features --locked
 
+# Rewrite the committed OpenAPI document from the handlers
+openapi:
+    BIA_UPDATE_OPENAPI=1 cargo test -p bia-server --test openapi the_committed_openapi_document_is_up_to_date
+
 # Check licences, advisories, bans and sources
 deny:
     cargo deny --all-features --locked check
