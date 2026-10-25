@@ -1,0 +1,499 @@
+---
+source: crates/bia-server/tests/mcp.rs
+expression: tools
+---
+[
+  {
+    "name": "get_schema",
+    "description": "Returns the JSON Schema a Workflow Definition must satisfy, the JSON Schema of a Queue resource, and the catalogue of Actions (see `list_actions`). Call it before writing a Definition. Maps to `GET /v1/schema`.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "list_actions",
+    "description": "Lists every Action a Step can call: name, description, parameter schema, output schema, examples, whether it is `pure` or `side_effecting`, and whether it is dangerous or disabled. Use it to pick Actions and to shape their `params`. Returns `{ actions }`, the `actions` of `GET /v1/schema`.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "list_workflows",
+    "description": "Lists every Workflow with its Active Version, if any. Maps to `GET /v1/workflows`.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "get_workflow",
+    "description": "Shows one Workflow and which Version is Active. Fails with `workflow_not_found` when it does not exist. Maps to `GET /v1/workflows/{workflow_id}`.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "workflow_id": {
+          "description": "The Workflow's id.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workflow_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "list_versions",
+    "description": "Lists a Workflow's Versions, oldest first: number, Draft or Published, whether it is the Active Version. Maps to `GET /v1/workflows/{workflow_id}/versions`.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "workflow_id": {
+          "description": "The Workflow's id.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workflow_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "get_version",
+    "description": "Shows one Version of a Workflow with its Definition as stored. Use it to read the Definition you are about to change. Maps to `GET /v1/workflows/{workflow_id}/versions/{number}`.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "number": {
+          "description": "The Version number.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "workflow_id": {
+          "description": "The Workflow's id.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workflow_id",
+        "number"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "validate_workflow",
+    "description": "Checks a Definition without saving it and returns `{ valid, diagnostics }`. Every Diagnostic has a `path` into the Definition, a stable `code`, a `message` and usually a `suggestion`: fix the errors, then validate again. Give either `definition` (a Definition that need not be stored) or `workflow_id` and `number` (a stored Version). `target` is `draft` (default: is it complete enough to publish later?) or `publish` (is it ready to publish now?). Maps to `POST /v1/validate` or `POST /v1/workflows/{workflow_id}/versions/{number}/validate`.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "definition": {
+          "description": "A Workflow Definition as JSON; its shape is `definition` in `get_schema`.",
+          "type": "object"
+        },
+        "number": {
+          "description": "The Version number.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "target": {
+          "default": "draft",
+          "enum": [
+            "draft",
+            "publish"
+          ],
+          "type": "string"
+        },
+        "workflow_id": {
+          "description": "The Workflow's id.",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "create_draft",
+    "description": "Saves a Definition as a new Draft Version of the Workflow named by its `id`, creating the Workflow if it is new. Semantic errors do not stop the save: they come back as `diagnostics`, so fix them and call `replace_draft`. A Draft starts no Runs. Publishing and activating it need an admin and are not available here: tell the human which Version to publish. Maps to `POST /v1/workflows/{workflow_id}/versions`.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "definition": {
+          "description": "A Workflow Definition as JSON; its shape is `definition` in `get_schema`.",
+          "type": "object"
+        },
+        "workflow_id": {
+          "description": "The Workflow's id.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workflow_id",
+        "definition"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "replace_draft",
+    "description": "Replaces the Definition of a Draft Version. A Published Version is frozen and fails with `version_published`: create a new Draft instead. Semantic errors come back as `diagnostics`. Maps to `PUT /v1/workflows/{workflow_id}/versions/{number}`.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "definition": {
+          "description": "A Workflow Definition as JSON; its shape is `definition` in `get_schema`.",
+          "type": "object"
+        },
+        "number": {
+          "description": "The Version number.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "workflow_id": {
+          "description": "The Workflow's id.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workflow_id",
+        "number",
+        "definition"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "dry_run",
+    "description": "Runs a Definition in memory, nothing saved, no Run created, and returns the Timeline it would produce plus `status` (`succeeded` or `failed`). Waits finish at once. Actions that are `pure` run for real; `side_effecting` ones return their first example's Output unless you Mock them in `mocks`, a map from Step id to exactly one of `{ output }`, `{ error: { class: retryable|fatal, message } }` or `{ attempts: [...] }` (the Nth Attempt gets the Nth outcome, the last repeats). A Step with neither a Mock nor an example fails with `no_mock`. Give either `definition` or `workflow_id` and `number`. Maps to `POST /v1/dry-run` or `POST /v1/workflows/{workflow_id}/versions/{number}/dry-run`.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "definition": {
+          "description": "A Workflow Definition as JSON; its shape is `definition` in `get_schema`.",
+          "type": "object"
+        },
+        "input": {
+          "description": "The Run input. Defaults to `{}`."
+        },
+        "mocks": {
+          "description": "Mocks by Step id.",
+          "type": "object"
+        },
+        "number": {
+          "description": "The Version number.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "workflow_id": {
+          "description": "The Workflow's id.",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "diff_versions",
+    "description": "Shows what changed between two Versions of a Workflow as a JSON Patch from `from` to `to`. Maps to `GET /v1/workflows/{workflow_id}/diff?from=&to=`.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "description": "The Version number to diff from.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "to": {
+          "description": "The Version number to diff to.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "workflow_id": {
+          "description": "The Workflow's id.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workflow_id",
+        "from",
+        "to"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "trigger_run",
+    "description": "Starts a Run of the Workflow's Active Version from a manual Trigger and returns it as `pending`; follow it with `get_run`. Fails with `no_active_version` while no Version is active (an admin activates one), and with `invalid_run_input` when `input` does not match the Version's `input_schema`. This has real effects: use `dry_run` to try a Definition. Maps to `POST /v1/workflows/{workflow_id}/runs`.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "input": {
+          "description": "The Run input. Defaults to `{}`."
+        },
+        "trigger_id": {
+          "description": "The manual Trigger to start from. Defaults to the first one.",
+          "type": "string"
+        },
+        "workflow_id": {
+          "description": "The Workflow's id.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workflow_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "get_run",
+    "description": "Shows a Run: its status, input, output, error and Timeline (one entry per Attempt of each Step, with the Output or error). Poll it until the status is `succeeded`, `failed` or `cancelled`; `pending`, `running`, `sleeping` and `waiting` are not final. Maps to `GET /v1/runs/{run_id}`.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "run_id": {
+          "description": "The Run's id.",
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "list_runs",
+    "description": "Lists Runs, newest first, optionally of one Workflow or status or created within a time range. A page ends with `next_after`: pass it as `after` for the next page. Maps to `GET /v1/runs`.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "description": "A previous page's `next_after`.",
+          "format": "uuid",
+          "type": "string"
+        },
+        "created_from": {
+          "description": "Only Runs created at or after this time (RFC 3339).",
+          "format": "date-time",
+          "type": "string"
+        },
+        "created_to": {
+          "description": "Only Runs created before this time (RFC 3339).",
+          "format": "date-time",
+          "type": "string"
+        },
+        "limit": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "running",
+            "sleeping",
+            "waiting",
+            "succeeded",
+            "failed",
+            "cancelled"
+          ],
+          "type": "string"
+        },
+        "workflow_id": {
+          "description": "Only Runs of this Workflow.",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "list_failures",
+    "description": "Lists failed Runs, newest first, with the Step that failed and why: the place to start when something is broken. Paged like `list_runs`. Maps to `GET /v1/runs/failures`.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "description": "A previous page's `next_after`.",
+          "format": "uuid",
+          "type": "string"
+        },
+        "created_from": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "created_to": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "limit": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "workflow_id": {
+          "description": "Only failures of this Workflow.",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "retry_run",
+    "description": "Starts a new Run on the same Version and input as a finished one, linked to the original. Use it to run again from the start; use `resume_run` to continue a failed Run from the Step that failed. Maps to `POST /v1/runs/{run_id}/retry`.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "run_id": {
+          "description": "The Run's id.",
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "resume_run",
+    "description": "Continues a failed Run from the Step that failed, keeping the Steps that already succeeded. Fix the cause first (for instance a Secret or an upstream service). Maps to `POST /v1/runs/{run_id}/resume`.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "run_id": {
+          "description": "The Run's id.",
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "cancel_run",
+    "description": "Cancels a Run that is not finished: the Step in flight stops and no later Step runs. Returns at once; the Run ends `cancelled` shortly after. Maps to `POST /v1/runs/{run_id}/cancel`.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "run_id": {
+          "description": "The Run's id.",
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    }
+  }
+]

@@ -28,11 +28,16 @@ utoipa = { version = "6.0.0", features = ["chrono", "uuid"] }
 utoipa-axum = "0.3.0"
 uuid = { version = "1.28.0", features = ["serde"] }
 json-patch = "4.2.0"
+percent-encoding = "2.3.2"
+tower = { version = "0.5.3", features = ["util"] }
+rmcp = { version = "3.7.0", default-features = false, features = ["server", "transport-streamable-http-server"] }
 
 [dev-dependencies]
+insta = { version = "1.49.0", features = ["json"] }
 bia-client.workspace = true
 bia-core = { workspace = true, features = ["testing"] }
 reqwest = { version = "0.13.5", default-features = false, features = ["json"] }
+rmcp = { version = "3.7.0", default-features = false, features = ["client", "transport-streamable-http-client-reqwest"] }
 schemars = "1.2.3"
 tokio = { version = "1.53.3", features = ["macros", "rt", "net", "time"] }
 wiremock = "0.6.5"

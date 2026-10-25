@@ -28,6 +28,7 @@ pub mod auth;
 mod cors;
 mod error;
 mod extract;
+mod mcp;
 mod resources;
 mod routes;
 
@@ -163,10 +164,19 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
     documented().split_for_parts().1
 }
 
-/// The whole API. Unknown routes and methods answer with the uniform error body too.
-/// Browsers may call it from the configured CORS origins only.
+/// The whole API, and the MCP server at `/mcp` whose tools call it. Unknown routes and methods
+/// answer with the uniform error body too. Browsers may call it from the configured CORS
+/// origins only.
 pub fn router(state: ApiState) -> Router {
     let cors = state.config.cors_origins.layer();
+    let api = api(state.clone());
+    api.clone()
+        .merge(mcp::router(&state, api))
+        // Outermost, so a preflight is answered before routing or authentication.
+        .layer(cors)
+}
+
+fn api(state: ApiState) -> Router {
     let (router, openapi) = documented().split_for_parts();
     let document = openapi
         .to_pretty_json()
@@ -179,8 +189,6 @@ pub fn router(state: ApiState) -> Router {
         .fallback(|| async { ApiError::route_not_found().into_response() })
         .method_not_allowed_fallback(|| async { ApiError::method_not_allowed().into_response() })
         .with_state(state)
-        // Outermost, so a preflight is answered before routing or authentication.
-        .layer(cors)
 }
 
 /// Serves `router` on `listener` until `shutdown` fires, then lets in-flight requests finish.
