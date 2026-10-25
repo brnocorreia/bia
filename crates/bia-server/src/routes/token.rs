@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::auth::{self, Admin, AuthErrors, TokenValue};
+use crate::auth::{self, Admin, Agent, AuthErrors, TokenValue};
 use crate::{ApiError, ApiState, ErrorBody, ErrorCode, Json, Path};
 
 const MAX_NAME_LEN: usize = 128;
@@ -214,6 +214,19 @@ pub(crate) async fn revoke_token(
         })?;
     tracing::info!(token_id = %token.id, "token revoked");
     Ok(Json(token.into()))
+}
+
+/// The Token the request is made with, so a client can tell which controls its Scope allows.
+/// Open to `admin` and `agent` Tokens, the two the UI signs in with.
+#[utoipa::path(
+    get,
+    path = "/v1/tokens/me",
+    tag = "tokens",
+    security(("token" = [])),
+    responses((status = OK, body = TokenInfo), AuthErrors)
+)]
+pub(crate) async fn current_token(Agent(token): Agent) -> Json<TokenInfo> {
+    Json(token.into())
 }
 
 /// Mints the first admin Token of a fresh install, authenticated with the server's bootstrap

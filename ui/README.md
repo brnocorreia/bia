@@ -21,6 +21,9 @@ Run an API for development with `just db-up`, `bia migrate`, then `bia serve` (s
 - `src/routes/`: one file per screen. A screen is `_app.<name>.tsx`; setting `staticData: { nav: { label, order } }` adds it to the navigation, so a new screen edits no shared file. `login.tsx` is the only route outside the signed-in shell.
 - `src/api/client.ts`: the one API client, typed by `schema.gen.ts`. It sends the session Token and signs the user out on 401. Use `getApi()`, with TanStack Query.
 - `src/auth/`: the Token session (`sessionStorage`) and the login check.
+- `src/auth/scope.ts`: `useCurrentToken()` and `useIsAdmin()` read the signed-in Token's Scope from `GET /v1/tokens/me` (ADR-0053). `components/admin-only.tsx` has `AdminOnly` (render or fall back) and `RequireAdmin` (a whole admin-only screen). Disable, rather than hide, controls a Scope cannot use; the server still enforces it.
+- `src/api/request.ts`: `unwrap(result)` turns an `openapi-fetch` result into data or an `ApiError` (with the error body and its Diagnostics), and `messageOf(error)` words it for users. `src/api/workflows.ts` holds the Workflow and Version queries and mutations.
+- Shared components in `src/components/`: `ConfirmDialog` (modal confirmation with an inline error), `DiagnosticsList`, `DefinitionViewer` (read-only YAML/JSON toggle), `VersionDiff`.
 - `src/components/ui/`: shadcn/ui components, added by hand to `components.json`'s conventions.
 - `src/routeTree.gen.ts` is generated and git-ignored; every script regenerates it.
 

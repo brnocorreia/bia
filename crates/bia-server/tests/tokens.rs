@@ -400,3 +400,27 @@ async fn every_route_but_the_probes_and_bootstrapping_needs_a_token(pool: PgPool
         ["get /health", "get /ready", "post /v1/tokens/bootstrap"]
     );
 }
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn a_token_can_ask_which_token_it_is(pool: PgPool) {
+    let server = TestServer::start(pool).await;
+    let agent = server.created_token(Scope::Agent).await;
+    let http = reqwest::Client::new();
+    let me = |token: &str| {
+        http.get(server.url("/v1/tokens/me"))
+            .bearer_auth(token)
+            .send()
+    };
+
+    let as_agent: Value = me(&agent.value).await.unwrap().json().await.unwrap();
+    assert_eq!(as_agent["scope"], "agent");
+    assert_eq!(as_agent["id"], agent.token.id.to_string());
+    assert!(as_agent.get("value").is_none());
+    let as_admin: Value = me(&server.admin_token).await.unwrap().json().await.unwrap();
+    assert_eq!(as_admin["scope"], "admin");
+
+    let webhook = server.webhook_token("onboarding-email", "signup").await;
+    assert_eq!(me(&webhook).await.unwrap().status(), StatusCode::FORBIDDEN);
+    let anonymous = http.get(server.url("/v1/tokens/me")).send().await.unwrap();
+    assert_eq!(anonymous.status(), StatusCode::UNAUTHORIZED);
+}
