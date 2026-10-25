@@ -3,6 +3,7 @@
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
+use std::process::ExitCode;
 use std::sync::Arc;
 
 use anyhow::{Context, bail};
@@ -16,8 +17,11 @@ use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use tokio::net::TcpListener;
 
+mod api;
+mod client_config;
 mod config;
 
+use client_config::ClientConfig;
 use config::{Config, LogFormat};
 
 #[derive(Debug, Parser)]
@@ -26,6 +30,13 @@ struct Cli {
     /// A TOML config file. Environment variables override what it sets.
     #[arg(long, global = true, env = "BIA_CONFIG")]
     config: Option<PathBuf>,
+    /// Where the API is served, for the commands that call it. Defaults to `BIA_URL`, the
+    /// config file's `url`, then http://127.0.0.1:8080.
+    #[arg(long, global = true, value_name = "URL")]
+    url: Option<String>,
+    /// Prints JSON instead of text, errors included.
+    #[arg(long, global = true)]
+    json: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -40,6 +51,16 @@ enum Command {
     },
     /// Applies the database migrations this release needs.
     Migrate,
+    /// Saves, checks, dry-runs, publishes and activates Workflows.
+    Workflow {
+        #[command(subcommand)]
+        command: api::WorkflowCommand,
+    },
+    /// Starts, shows, lists, cancels and retries Runs.
+    Run {
+        #[command(subcommand)]
+        command: api::RunCommand,
+    },
     /// Manages API Tokens.
     Token {
         #[command(subcommand)]
@@ -72,16 +93,7 @@ enum TokenCommand {
         /// BIA_BOOTSTRAP_KEY. The server refuses once an unrevoked admin Token exists.
         #[arg(long)]
         bootstrap: bool,
-        #[command(flatten)]
-        api: ApiArgs,
     },
-}
-
-#[derive(Debug, clap::Args)]
-struct ApiArgs {
-    /// Where the API is served.
-    #[arg(long, env = "BIA_URL", default_value = "http://127.0.0.1:8080")]
-    url: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -100,58 +112,94 @@ enum Role {
 }
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> anyhow::Result<ExitCode> {
     let cli = Cli::parse();
     let server = |cli: &Cli| -> anyhow::Result<Config> {
         let config = Config::load(cli.config.as_deref())?;
         init_logging(&config);
         Ok(config)
     };
-    match cli.command {
-        Command::Serve { ref role } => serve(&server(&cli)?, &roles(role)).await,
-        Command::Migrate => migrate(&server(&cli)?).await,
-        Command::Token { command } => token(command).await,
-    }
+    let success = match cli.command {
+        Command::Serve { ref role } => {
+            serve(&server(&cli)?, &roles(role)).await?;
+            true
+        }
+        Command::Migrate => {
+            migrate(&server(&cli)?).await?;
+            true
+        }
+        Command::Token { ref command } => {
+            token(&cli, command).await?;
+            true
+        }
+        Command::Workflow { command } => {
+            api::workflow(&api_context(&cli.config, &cli.url, cli.json)?, command).await
+        }
+        Command::Run { command } => {
+            api::run(&api_context(&cli.config, &cli.url, cli.json)?, command).await
+        }
+    };
+    Ok(if success {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    })
+}
+fn api_context(
+    file: &Option<PathBuf>,
+    url: &Option<String>,
+    json: bool,
+) -> anyhow::Result<api::Ctx> {
+    let config = ClientConfig::load(file.as_deref())?;
+    Ok(api::Ctx {
+        client: config.client(url.as_deref())?,
+        url: config.url(url.as_deref()).to_owned(),
+        json,
+    })
 }
 
-async fn token(command: TokenCommand) -> anyhow::Result<()> {
+async fn token(cli: &Cli, command: &TokenCommand) -> anyhow::Result<()> {
     let TokenCommand::Create {
         name,
         scope,
         workflow,
         trigger,
         bootstrap,
-        api,
     } = command;
-    let client = bia_client::Client::new(&api.url)?;
-    // Credentials come from the environment only, never argv, which other users can read.
-    let created = if bootstrap {
+    let config = ClientConfig::load(cli.config.as_deref())?;
+    let client = config.client(cli.url.as_deref())?;
+    // Credentials come from the environment or the config file only, never argv, which other
+    // users can read.
+    let created = if *bootstrap {
         let Ok(key) = std::env::var("BIA_BOOTSTRAP_KEY") else {
             bail!("set BIA_BOOTSTRAP_KEY to the key the server was started with");
         };
-        client.bootstrap_token(&key, &name).await?
+        client.bootstrap_token(&key, name).await?
     } else {
-        let Ok(token) = std::env::var("BIA_TOKEN") else {
-            bail!("set BIA_TOKEN to an admin Token, or pass --bootstrap on a fresh install");
-        };
+        if config.token().is_none() {
+            bail!(
+                "set BIA_TOKEN (or `token` in the config file) to an admin Token, or pass \
+                 --bootstrap on a fresh install"
+            );
+        }
         let (scope, webhook) = match (scope, workflow, trigger) {
             (ScopeArg::Admin, ..) => (Scope::Admin, None),
             (ScopeArg::Agent, ..) => (Scope::Agent, None),
             (ScopeArg::Webhook, Some(workflow_id), Some(trigger_id)) => (
                 Scope::Webhook,
                 Some(WebhookBinding {
-                    workflow_id,
-                    trigger_id,
+                    workflow_id: workflow_id.clone(),
+                    trigger_id: trigger_id.clone(),
                 }),
             ),
             (ScopeArg::Webhook, ..) => bail!("a `webhook` Token needs --workflow and --trigger"),
         };
         let new = NewToken {
-            name,
+            name: name.clone(),
             scope,
             webhook,
         };
-        client.with_token(token).create_token(&new).await?
+        client.create_token(&new).await?
     };
     eprintln!(
         "created {:?} Token `{}` ({}); its value is shown only now",

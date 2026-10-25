@@ -29,7 +29,7 @@ pub enum Error {
 }
 
 /// The body of every API error response.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ErrorBody {
     /// A stable snake_case code, e.g. `route_not_found` or `invalid_definition`.
     pub code: String,
@@ -38,20 +38,20 @@ pub struct ErrorBody {
     pub diagnostics: Vec<Diagnostic>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Status {
     pub status: String,
 }
 
 /// `GET /v1/schema`.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SchemaDocument {
     pub definition: Value,
     pub queue: Value,
     pub actions: Vec<ActionEntry>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ActionEntry {
     pub name: String,
     pub category: String,
@@ -65,7 +65,7 @@ pub struct ActionEntry {
     pub examples: Vec<ActionExample>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ActionExample {
     pub description: String,
     pub params: Value,
@@ -99,7 +99,7 @@ pub struct NewToken {
 }
 
 /// A Token, without its value.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Token {
     pub id: Uuid,
     pub name: String,
@@ -125,20 +125,20 @@ impl fmt::Debug for CreatedToken {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct TokenList {
     tokens: Vec<Token>,
 }
 
 /// A Workflow and the Version new Runs and Schedules use.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Workflow {
     pub id: String,
     pub active_version: Option<i32>,
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum VersionState {
     Draft,
@@ -146,7 +146,7 @@ pub enum VersionState {
 }
 
 /// A Version without its Definition.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VersionSummary {
     pub workflow_id: String,
     pub number: i32,
@@ -158,7 +158,7 @@ pub struct VersionSummary {
 }
 
 /// A Version with its Definition.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Version {
     #[serde(flatten)]
     pub summary: VersionSummary,
@@ -166,14 +166,14 @@ pub struct Version {
 }
 
 /// A Version just saved or published, with what validation found.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SavedVersion {
     pub version: Version,
     pub diagnostics: Vec<Diagnostic>,
 }
 
 /// What validation found; `valid` means no error Diagnostics.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ValidationReport {
     pub valid: bool,
     pub diagnostics: Vec<Diagnostic>,
@@ -197,7 +197,7 @@ impl Target {
 
 /// `GET /v1/workflows/{id}/diff`: an RFC 6902 JSON Patch from one Version's Definition to
 /// the other's.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VersionDiff {
     pub from: i32,
     pub to: i32,
@@ -245,7 +245,7 @@ pub enum AttemptStatus {
 }
 
 /// A Run without its input and Timeline.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RunSummary {
     pub id: Uuid,
     pub workflow_id: String,
@@ -281,7 +281,7 @@ pub struct TimelineEntry {
 }
 
 /// The result of a Dry Run: the Timeline a real Run would have, not stored.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DryRunReport {
     /// Always `true`.
     pub dry_run: bool,
@@ -295,7 +295,7 @@ pub struct DryRunReport {
 }
 
 /// A Run with its input and Timeline.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Run {
     #[serde(flatten)]
     pub summary: RunSummary,
@@ -304,7 +304,7 @@ pub struct Run {
 }
 
 /// One page of Runs, newest first.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RunPage {
     pub runs: Vec<RunSummary>,
     /// Pass as [`RunQuery::after`] for the next page; absent on the last.
@@ -312,7 +312,7 @@ pub struct RunPage {
 }
 
 /// A failed Run and the entry that failed it.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FailedRun {
     #[serde(flatten)]
     pub summary: RunSummary,
@@ -320,7 +320,7 @@ pub struct FailedRun {
 }
 
 /// One page of failed Runs, newest first.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FailurePage {
     pub runs: Vec<FailedRun>,
     pub next_after: Option<Uuid>,
@@ -339,12 +339,12 @@ pub struct RunQuery {
     pub limit: Option<u32>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct WorkflowList {
     workflows: Vec<Workflow>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct VersionList {
     versions: Vec<VersionSummary>,
 }
