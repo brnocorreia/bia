@@ -16,6 +16,8 @@ A file key `section.name` is the variable `BIA_SECTION_NAME`. Durations are a wh
 | `database_url` | `BIA_DATABASE_URL` (or `DATABASE_URL`) | none, required | The Postgres URL, `postgres://user:password@host:port/database`. |
 | `cors_origins` | `BIA_CORS_ORIGINS` | none | Browser origins allowed to call the API, for a UI hosted elsewhere, written as the browser sends them (`https://bia.example.com`, `http://localhost:5173`): a TOML array, or comma-separated in the variable. `*` allows any origin. A preflight from any other origin fails. Callers that are not browsers are unaffected. |
 | `bootstrap_key` | `BIA_BOOTSTRAP_KEY` | none | A secret of at least 32 characters that lets `bia token create --bootstrap` mint the first admin Token. It works only while no unrevoked admin Token exists; leave it unset to turn bootstrapping off. See [Tokens](#tokens). |
+| `url` | `BIA_URL` | `http://127.0.0.1:8080` | Where the API commands (`bia workflow`, `bia run`, `bia token`) find the server. The global `--url` flag overrides it. `bia serve` ignores it. |
+| `token` | `BIA_TOKEN` | none | The Token the API commands send. There is no flag, so it never appears in a process list. Keep a config file that holds it readable only by you. `bia serve` ignores it. |
 | `api.bind` | `BIA_API_BIND` | `127.0.0.1:8080` | The address and port the `api` Role listens on. It defaults to loopback; set `0.0.0.0:8080` to accept connections from other hosts, such as in a container. |
 | `worker.id` | `BIA_WORKER_ID` | `<HOSTNAME>-<pid>` | The name a Worker records on the Leases it holds, for diagnosis. It need not be unique. |
 | `worker.concurrency` | `BIA_WORKER_CONCURRENCY` | `16` | How many Jobs a Worker runs at once, at least 1. The connection pool holds up to twice as many connections, plus one. |
@@ -53,7 +55,7 @@ bia serve &
 export BIA_TOKEN="$(bia token create --bootstrap --name admin)"
 ```
 
-Once an unrevoked admin Token exists, bootstrapping refuses (`already_bootstrapped`), so the key cannot mint another; create more Tokens with the admin Token instead, e.g. `bia token create --name claude-desktop --scope agent`. If every admin Token is revoked, bootstrapping works again, which is how to regain access; unset `BIA_BOOTSTRAP_KEY` to turn it off. `bia token create` talks to the API at `BIA_URL` (default `http://127.0.0.1:8080`) and reads credentials only from `BIA_TOKEN` and `BIA_BOOTSTRAP_KEY`, never from arguments. Token values and the bootstrap key are never logged.
+Once an unrevoked admin Token exists, bootstrapping refuses (`already_bootstrapped`), so the key cannot mint another; create more Tokens with the admin Token instead, e.g. `bia token create --name claude-desktop --scope agent`. If every admin Token is revoked, bootstrapping works again, which is how to regain access; unset `BIA_BOOTSTRAP_KEY` to turn it off. `bia token create` talks to the API at `BIA_URL` (default `http://127.0.0.1:8080`) and reads credentials only from `BIA_TOKEN` (or `token` in the config file) and `BIA_BOOTSTRAP_KEY`, never from arguments. Token values and the bootstrap key are never logged.
 
 ## Example
 
@@ -79,6 +81,26 @@ format = "json"
 ```sh
 bia migrate --config bia.toml
 BIA_WORKER_CONCURRENCY=8 bia serve --config bia.toml --role worker
+```
+
+## Command line
+
+The API commands need the server's `url` and a `token` (see [Tokens](#tokens)), from the config file or the environment. `--json` on any command prints JSON instead of text, errors included. Exit status is 0 on success and 1 on failure, on error Diagnostics and on a failed Dry Run (ADR-0047).
+
+```sh
+export BIA_URL=http://127.0.0.1:8080 BIA_TOKEN=...
+bia workflow apply -f workflows/            # Drafts from JSON/YAML files and directories
+bia workflow apply -f workflows/ --activate # also publish and activate (admin Token)
+bia workflow validate -f price.yaml         # or: validate price 3 --target publish
+bia workflow dry-run -f price.yaml --input input.json --mocks mocks.yaml
+bia workflow publish price 3
+bia workflow activate price 3
+bia workflow diff price 2 3
+bia run trigger price --input input.json
+bia run get <id>
+bia run list --workflow price --status failed
+bia run cancel <id>
+bia run retry <id>
 ```
 
 ## Signals

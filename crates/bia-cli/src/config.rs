@@ -61,6 +61,11 @@ pub(crate) struct Config {
     cors_origins: Origins,
     /// Lets `bia token create --bootstrap` mint the first admin Token.
     bootstrap_key: Option<String>,
+    /// Read by the API commands (`ClientConfig`), which share this file.
+    #[allow(dead_code)]
+    url: Option<String>,
+    #[allow(dead_code)]
+    token: Option<String>,
     pub(crate) api: Api,
     pub(crate) worker: Worker,
     pub(crate) scheduler: Scheduler,
