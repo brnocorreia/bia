@@ -509,7 +509,8 @@ fn message_info(message: Message, now: DateTime<Utc>) -> MessageInfo {
         published_at: message.published_at,
         visible_at: message.visible_at,
         deliveries: message.deliveries,
-        in_flight: message.claimed_by.is_some() && message.visible_at.is_some_and(|at| at > now),
+        in_flight: message.run_id.is_some()
+            || (message.claimed_by.is_some() && message.visible_at.is_some_and(|at| at > now)),
         last_error: message.last_error,
         dead_lettered_at: message.dead_lettered_at,
         dead_lettered_from: message.dead_lettered_from.map(|queue| queue.to_string()),

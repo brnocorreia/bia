@@ -9,10 +9,11 @@ use sqlx::{Acquire, PgConnection};
 use super::row::{MessageRow, QueueRow, queue_name};
 use super::{
     Delivery, Message, MessageCounts, MessageFilter, MessageId, MessageLease, Nacked, Queue,
-    QueueSettings,
+    QueueSettings, Settlement,
 };
 use crate::StoreError;
 use crate::job::Backoff;
+use crate::run::RunId;
 
 /// Queues and the lifecycle of their Messages (ADR-0059). Every method takes a connection, so
 /// a publish can commit with the Checkpoint of the Step that publishes (ADR-0010), and takes
@@ -102,6 +103,27 @@ pub trait QueueRepository {
         backoff: &Backoff,
         now: DateTime<Utc>,
     ) -> impl Future<Output = Result<Nacked, StoreError>> + Send;
+
+    /// Hands claimed Messages to `run`, which holds them until [`settle`](Self::settle): no
+    /// consumer receives them meanwhile, their visibility timeout no longer runs, and the
+    /// Leases of their claim can no longer ack, retry or extend them. Call it in the
+    /// transaction that claimed them and created the Run.
+    fn hold(
+        &self,
+        conn: &mut PgConnection,
+        messages: &[MessageId],
+        run: RunId,
+    ) -> impl Future<Output = Result<(), StoreError>> + Send;
+
+    /// Applies `settlement` to every Message `run` holds, and returns how many there were.
+    /// Call it in the transaction that finishes the Run.
+    fn settle(
+        &self,
+        conn: &mut PgConnection,
+        run: RunId,
+        settlement: &Settlement,
+        now: DateTime<Utc>,
+    ) -> impl Future<Output = Result<u64, StoreError>> + Send;
 
     fn list_messages(
         &self,
@@ -381,6 +403,69 @@ impl QueueRepository for PgQueueRepository {
         };
         tx.commit().await?;
         Ok(nacked)
+    }
+
+    async fn hold(
+        &self,
+        conn: &mut PgConnection,
+        messages: &[MessageId],
+        run: RunId,
+    ) -> Result<(), StoreError> {
+        let ids: Vec<i64> = messages.iter().map(|id| id.get()).collect();
+        sqlx::query_file!("src/queue/queries/hold.sql", &ids, run.as_uuid())
+            .execute(&mut *conn)
+            .await?;
+        Ok(())
+    }
+
+    async fn settle(
+        &self,
+        conn: &mut PgConnection,
+        run: RunId,
+        settlement: &Settlement,
+        now: DateTime<Utc>,
+    ) -> Result<u64, StoreError> {
+        let (error, backoff) = match settlement {
+            Settlement::Ack => {
+                let acked = sqlx::query_file!("src/queue/queries/ack_held.sql", run.as_uuid())
+                    .execute(&mut *conn)
+                    .await?
+                    .rows_affected();
+                return Ok(acked);
+            }
+            Settlement::Retry { error, backoff } => (error, Some(backoff)),
+            Settlement::DeadLetter { error } => (error, None),
+        };
+        let mut tx = conn.begin().await?;
+        let held = sqlx::query_file!("src/queue/queries/lock_held.sql", run.as_uuid())
+            .fetch_all(&mut *tx)
+            .await?;
+        let mut exhausted = Vec::new();
+        let (mut retried, mut visible_at) = (Vec::new(), Vec::new());
+        for message in &held {
+            match backoff {
+                Some(backoff) if message.deliveries <= message.max_retries => {
+                    retried.push(message.id);
+                    visible_at.push(now + backoff.delay(message.deliveries));
+                }
+                _ => exhausted.push(message.id),
+            }
+        }
+        if !exhausted.is_empty() {
+            dead_letter(&mut tx, &exhausted, now, Some(error)).await?;
+        }
+        if !retried.is_empty() {
+            sqlx::query_file!(
+                "src/queue/queries/retry_held.sql",
+                &retried,
+                &visible_at,
+                error,
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+        tx.commit().await?;
+        Ok(held.len() as u64)
     }
 
     async fn list_messages(

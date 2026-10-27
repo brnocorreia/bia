@@ -1,0 +1,83 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Queue Triggers of Active Versions whose Queue has a Message to claim at $1, with the batch\n-- size each dispatches: its own, or else its Queue's.\n-- $1: now\nSELECT t.workflow_id, t.trigger_id, t.version, t.queue, t.batch_size,\n       coalesce(t.batch_size, q.batch_size) AS \"effective_batch_size!\"\nFROM queue_triggers t\nJOIN workflows w ON w.id = t.workflow_id AND w.active_version = t.version\nJOIN queues q ON q.name = t.queue\nWHERE EXISTS (\n    SELECT 1\n    FROM messages m\n    WHERE m.queue = t.queue AND m.visible_at <= $1 AND m.run_id IS NULL\n)\nORDER BY t.workflow_id, t.trigger_id\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "workflow_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "queue_triggers",
+            "name": "workflow_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "trigger_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "queue_triggers",
+            "name": "trigger_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "queue_triggers",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "queue",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "queue_triggers",
+            "name": "queue"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "batch_size",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "queue_triggers",
+            "name": "batch_size"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "effective_batch_size!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "056650fdf04a0e37d42d192d326b56c15956ea1e6426b3e01026ab594b0e11d2"
+}

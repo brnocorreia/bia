@@ -1,0 +1,57 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- How many Messages each Queue holds, by state. `ready`, `in_flight` and `delayed` split the\n-- Messages that are not dead letters, so the four counts add up to the Queue's depth. A\n-- Message whose delivery's visibility timeout ran out is ready: the next claim takes it. One a\n-- Run holds stays in flight until the Run finishes.\n-- $1: now, $2: only this Queue, or NULL for every Queue\nSELECT queue AS \"queue!\",\n       count(*) FILTER (WHERE dead_lettered_at IS NULL AND run_id IS NULL\n                          AND visible_at <= $1) AS \"ready!\",\n       count(*) FILTER (WHERE dead_lettered_at IS NULL\n                          AND (run_id IS NOT NULL\n                               OR (visible_at > $1 AND claimed_by IS NOT NULL))) AS \"in_flight!\",\n       count(*) FILTER (WHERE dead_lettered_at IS NULL AND visible_at > $1\n                          AND claimed_by IS NULL) AS \"delayed!\",\n       count(*) FILTER (WHERE dead_lettered_at IS NOT NULL) AS \"dead_lettered!\"\nFROM messages\nWHERE $2::text IS NULL OR queue = $2\nGROUP BY queue\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "queue!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "queue"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "ready!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "in_flight!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "delayed!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "dead_lettered!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "d9f51344660be1e5f0a0c9b138ded9fb5216d773fa9d5564d48b3ef2f3596f8c"
+}

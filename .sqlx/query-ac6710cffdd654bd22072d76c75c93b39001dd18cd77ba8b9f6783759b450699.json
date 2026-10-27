@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- $1: workflow id\nDELETE FROM queue_triggers\nWHERE workflow_id = $1\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ac6710cffdd654bd22072d76c75c93b39001dd18cd77ba8b9f6783759b450699"
+}

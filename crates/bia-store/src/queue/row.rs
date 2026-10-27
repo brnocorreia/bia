@@ -1,9 +1,11 @@
 use bia_core::dsl::QueueName;
 use chrono::{DateTime, TimeDelta, Utc};
 use serde_json::Value;
+use uuid::Uuid;
 
 use super::{Message, MessageId, Queue, QueueSettings};
 use crate::StoreError;
+use crate::run::RunId;
 
 #[derive(Debug)]
 pub(crate) struct QueueRow {
@@ -48,6 +50,7 @@ pub(crate) struct MessageRow {
     pub(crate) last_error: Option<String>,
     pub(crate) dead_lettered_at: Option<DateTime<Utc>>,
     pub(crate) dead_lettered_from: Option<String>,
+    pub(crate) run_id: Option<Uuid>,
 }
 
 impl TryFrom<MessageRow> for Message {
@@ -65,6 +68,7 @@ impl TryFrom<MessageRow> for Message {
             last_error: row.last_error,
             dead_lettered_at: row.dead_lettered_at,
             dead_lettered_from: row.dead_lettered_from.map(queue_name).transpose()?,
+            run_id: row.run_id.map(RunId::from_uuid),
         })
     }
 }

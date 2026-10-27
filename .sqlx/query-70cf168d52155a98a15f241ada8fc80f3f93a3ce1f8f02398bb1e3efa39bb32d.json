@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Shares the Workflow row lock while $2 is its Active Version, so the Version cannot stop\n-- being active until the surrounding transaction ends.\n-- $1: workflow id, $2: version\nSELECT 1 AS \"one!\"\nFROM workflows\nWHERE id = $1 AND active_version = $2\nFOR SHARE\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "one!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "70cf168d52155a98a15f241ada8fc80f3f93a3ce1f8f02398bb1e3efa39bb32d"
+}

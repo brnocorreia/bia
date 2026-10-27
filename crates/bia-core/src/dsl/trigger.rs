@@ -123,13 +123,17 @@ impl CatchUpPolicy {
     }
 }
 
-/// `type: queue`: starts Runs from the Messages of a Queue.
+/// `type: queue`: starts Runs from batches of a Queue's Messages, as `input.messages`. A
+/// Run's Messages are acked when it succeeds, delivered again when it fails (until the
+/// Queue's `max_retries`, then dead-lettered), and dead-lettered when it is cancelled.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
 pub struct QueueTrigger {
+    /// The Queue to consume. It must exist before the Version is published.
     pub queue: QueueName,
-    /// How many Messages one Run receives.
+    /// The most Messages one Run receives, at most 100. Defaults to the Queue's
+    /// `batch_size`. A Run starts with whatever is there, without waiting for a full batch.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = 1))]
+    #[schemars(range(min = 1, max = 100))]
     pub batch_size: Option<u32>,
 }
 

@@ -6,6 +6,9 @@ use bia_core::dsl::{
 use chrono::{DateTime, TimeDelta, Utc};
 use serde_json::Value;
 
+use crate::job::Backoff;
+use crate::run::RunId;
+
 /// What a Queue is configured with.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QueueSettings {
@@ -73,6 +76,9 @@ pub struct Message {
     pub dead_lettered_at: Option<DateTime<Utc>>,
     /// The Queue the Message exhausted its retries in.
     pub dead_lettered_from: Option<QueueName>,
+    /// The Run a queue Trigger delivered the Message to. It holds the Message until it
+    /// finishes, however long that takes.
+    pub run_id: Option<RunId>,
 }
 
 /// A time-bounded claim on one delivery of a Message: until the visibility timeout ends, no
@@ -143,4 +149,16 @@ pub struct MessageFilter {
     pub dead_letters: Option<bool>,
     pub after: Option<MessageId>,
     pub limit: u32,
+}
+
+/// What happens to the Messages a Run holds once it finishes (ADR-0061).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Settlement {
+    /// The Run succeeded: the Messages are deleted.
+    Ack,
+    /// The Run failed: each Message is delivered again after `backoff`, or dead-lettered once
+    /// it used its Queue's `max_retries`.
+    Retry { error: String, backoff: Backoff },
+    /// The Run was cancelled: the Messages are dead-lettered at once.
+    DeadLetter { error: String },
 }

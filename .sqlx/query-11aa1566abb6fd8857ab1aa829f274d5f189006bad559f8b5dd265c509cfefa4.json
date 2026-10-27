@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "-- A Queue's Messages, oldest first. Every filter but the Queue is optional.\n-- $1: queue, $2: only dead letters (true) or only others (false), $3: after this id, $4: limit\nSELECT id, queue, body, published_at, visible_at, deliveries, claimed_by, last_error,\n       dead_lettered_at, dead_lettered_from\nFROM messages\nWHERE queue = $1\n  AND ($2::boolean IS NULL OR (dead_lettered_at IS NOT NULL) = $2)\n  AND ($3::bigint IS NULL OR id > $3)\nORDER BY id\nLIMIT $4\n",
+  "query": "-- $1: queue, $2: consumer, $3: now, $4: how many to claim, $5: when the deliveries' visibility\n-- timeout ends, $6: max retries\n-- SKIP LOCKED leaves Messages another consumer is taking right now to that consumer, so no\n-- Message is delivered to two consumers at once. A Message held by a Run waits for that Run.\nWITH due AS MATERIALIZED (\n    SELECT id\n    FROM messages\n    WHERE queue = $1\n      AND visible_at <= $3\n      AND run_id IS NULL\n      AND (claimed_by IS NULL OR deliveries <= $6)\n    ORDER BY visible_at, id\n    LIMIT $4\n    FOR UPDATE SKIP LOCKED\n)\nUPDATE messages\nSET deliveries = deliveries + 1, claimed_by = $2, visible_at = $5\nFROM due\nWHERE messages.id = due.id\nRETURNING messages.id, queue, body, published_at, visible_at, deliveries, claimed_by,\n          last_error, dead_lettered_at, dead_lettered_from, run_id\n",
   "describe": {
     "columns": [
       {
@@ -112,14 +112,27 @@
             "name": "dead_lettered_from"
           }
         }
+      },
+      {
+        "ordinal": 10,
+        "name": "run_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "run_id"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
         "Text",
-        "Bool",
+        "Text",
+        "Timestamptz",
         "Int8",
-        "Int8"
+        "Timestamptz",
+        "Int4"
       ]
     },
     "nullable": [
@@ -132,8 +145,9 @@
       true,
       true,
       true,
+      true,
       true
     ]
   },
-  "hash": "1462ab6827f3c37231aaa4a5f6dfc2a00e71df0209d4323d7b4d48f5c9cae99f"
+  "hash": "11aa1566abb6fd8857ab1aa829f274d5f189006bad559f8b5dd265c509cfefa4"
 }

@@ -1,11 +1,14 @@
-//! The scheduler: fires the cron Triggers of Active Versions.
+//! The scheduler: fires the cron Triggers of Active Versions and dispatches the Messages of
+//! their queue Triggers.
 //!
 //! Every scheduler replica polls, and the one holding the leader lock works on each poll: it
-//! rebuilds the Schedules of Workflows whose Active Version changed, fires each due Schedule in
-//! a transaction of its own, and runs the [`Chore`]s that are due. Firing claims the Schedule's
-//! row and creates the Run with its first Job in the same transaction, so an occurrence fires
-//! exactly once even while two schedulers both believe they lead (ADR-0039). Which occurrences
-//! fire is ADR-0040. A Chore's run is claimed the same way, once per interval (ADR-0041).
+//! rebuilds the Schedules and queue Triggers of Workflows whose Active Version changed, fires
+//! each due Schedule in a transaction of its own, dispatches Messages to Runs, and runs the
+//! [`Chore`]s that are due. Firing claims the Schedule's row and creates the Run with its first
+//! Job in the same transaction, so an occurrence fires exactly once even while two schedulers
+//! both believe they lead (ADR-0039). Which occurrences fire is ADR-0040. Dispatching claims a
+//! batch of Messages the same way (ADR-0061). A Chore's run is claimed once per interval
+//! (ADR-0041).
 
 use std::fmt;
 use std::sync::Arc;
@@ -17,7 +20,7 @@ use bia_store::StoreError;
 use bia_store::chore::{ChoreClaim, ChoreRepository, PgChoreRepository};
 use bia_store::run::RunId;
 use bia_store::schedule::{
-    DueSchedule, LeaderLock, PgScheduleRepository, Schedule, ScheduleRepository,
+    DueSchedule, LeaderLock, PgScheduleRepository, QueueConsumer, Schedule, ScheduleRepository,
 };
 use bia_store::version::{PgVersionRepository, VersionNumber, VersionRepository};
 use chrono::{DateTime, SecondsFormat, TimeDelta, Utc};
@@ -28,6 +31,7 @@ use tracing::Instrument;
 use crate::{EngineError, start_run};
 
 mod plan;
+mod queue;
 
 pub use plan::{CATCH_UP_LIMIT, MISSED_AFTER, QUEUE_LIMIT};
 use plan::{due_at, plan};
@@ -163,9 +167,10 @@ impl Scheduler {
         .await
     }
 
-    /// Rebuilds the Schedules of Workflows whose Active Version changed, then fires every
-    /// Schedule due at the Clock's current time. Returns the Runs it started. Safe to call
-    /// from several schedulers at once, leading or not.
+    /// Rebuilds the Schedules and queue Triggers of Workflows whose Active Version changed,
+    /// fires every Schedule due at the Clock's current time, then dispatches the Messages
+    /// claimable then. Returns the Runs it started. Safe to call from several schedulers at
+    /// once, leading or not.
     pub async fn tick(&self) -> Result<Vec<RunId>, EngineError> {
         let now = self.clock.now();
         self.sync(now).await?;
@@ -176,6 +181,7 @@ impl Scheduler {
                 None => break,
             }
         }
+        started.extend(queue::dispatch(&self.pool, now).await?);
         Ok(started)
     }
 
@@ -223,10 +229,10 @@ impl Scheduler {
         Ok(())
     }
 
-    /// Replaces the Workflow's Schedules with those of its Active Version's cron Triggers. A
-    /// Trigger whose timing did not change keeps its next occurrence and queue; one whose
-    /// timing changed starts from the next occurrence after `now`. Both keep their last Run,
-    /// so the Overlap Policy still sees a Run the previous Version started.
+    /// Replaces the Workflow's Schedules and queue Triggers with those of its Active Version.
+    /// A cron Trigger whose timing did not change keeps its next occurrence and queue; one
+    /// whose timing changed starts from the next occurrence after `now`. Both keep their last
+    /// Run, so the Overlap Policy still sees a Run the previous Version started.
     async fn sync_workflow(
         &self,
         workflow: &WorkflowId,
@@ -246,6 +252,7 @@ impl Scheduler {
             .list_for_workflow(&mut tx, workflow)
             .await?;
         let mut schedules = Vec::new();
+        let mut consumers = Vec::new();
         if let Some(version) = state.active {
             let definition = PgVersionRepository
                 .get(&mut tx, workflow, version)
@@ -256,8 +263,21 @@ impl Scheduler {
                 })?
                 .definition;
             for trigger in definition.triggers {
-                let TriggerKind::Cron(cron) = trigger.kind else {
-                    continue;
+                let cron = match trigger.kind {
+                    TriggerKind::Cron(cron) => cron,
+                    TriggerKind::Queue(queue) => {
+                        consumers.push(QueueConsumer {
+                            workflow_id: workflow.clone(),
+                            trigger_id: trigger.id,
+                            version,
+                            queue: queue.queue,
+                            batch_size: queue.batch_size,
+                        });
+                        continue;
+                    }
+                    TriggerKind::Webhook(_) | TriggerKind::Manual | TriggerKind::Event(_) => {
+                        continue;
+                    }
                 };
                 let previous = existing
                     .iter()
@@ -282,13 +302,14 @@ impl Scheduler {
             }
         }
         PgScheduleRepository
-            .replace(&mut tx, workflow, state.active, &schedules)
+            .replace(&mut tx, workflow, state.active, &schedules, &consumers)
             .await?;
         tx.commit().await?;
         tracing::info!(
             workflow_id = %workflow,
             version = state.active.map(VersionNumber::get),
             schedules = schedules.len(),
+            queue_triggers = consumers.len(),
             "schedules rebuilt"
         );
         Ok(())

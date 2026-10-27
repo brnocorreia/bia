@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- $1: run id\nDELETE FROM messages\nWHERE run_id = $1\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "aba39c481134956b0c35d941d21bd1e7a1c730c8f908fcf99d1e4c06d403ace9"
+}

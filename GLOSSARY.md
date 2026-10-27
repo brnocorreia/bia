@@ -135,7 +135,7 @@ A named, explicitly created, durable buffer of Messages with its own retry, visi
 _Avoid_: topic, channel, stream
 
 **Message**:
-One item in a Queue, delivered at least once to a consumer, which hides it from other consumers for the Queue's visibility timeout and then acks it; a Message that is not acked in time is delivered again.
+One item in a Queue, delivered at least once to a consumer, which hides it from other consumers for the Queue's visibility timeout and then acks it; a Message that is not acked in time is delivered again. A queue Trigger's Run is the exception: it holds its Messages until it finishes, however long that takes.
 _Avoid_: job, event, item
 
 **Dead-Letter Queue**:
