@@ -6,6 +6,7 @@ mod repository;
 mod row;
 
 pub use model::{
-    Delivery, Message, MessageFilter, MessageId, MessageLease, Nacked, Queue, QueueSettings,
+    Delivery, Message, MessageCounts, MessageFilter, MessageId, MessageLease, Nacked, Queue,
+    QueueSettings,
 };
 pub use repository::{PgQueueRepository, QueueRepository};

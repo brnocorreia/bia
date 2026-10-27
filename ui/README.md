@@ -104,3 +104,7 @@ Monaco turns typed newlines into auto-indented lines, so `e2e/editor.spec.ts` pa
 ## Secrets and Tokens screens
 
 Both are admin-only (`RequireAdmin`; ADR-0057). A Secret's value goes from an uncontrolled password input straight into the request and is cleared at once; `putSecret` and `createToken` are plain functions rather than `useMutation`, so neither a Secret value nor a new Token's value ever enters the TanStack Query cache. The e2e server runs with a fixed test `BIA_MASTER_KEY`.
+
+## Queues and dead letters
+
+`/queues` lists every Queue with its settings and Message counts (ready, in flight, delayed, dead-lettered; they do not overlap). `/queues/$queueName` pages its Messages oldest first, filtered by `?show=dead` or `?show=live`, with each body behind a `JsonBlock`. Dead letters can be selected (at most a page, 200) and replayed to the Queue they came from or purged, behind a confirmation; the controls are disabled for a non-admin Token (ADR-0060). Queues are created and changed outside the UI. `e2e/queues.spec.ts` seeds in-flight Messages and dead letters with SQL, since nothing consumes Queues through the API yet.

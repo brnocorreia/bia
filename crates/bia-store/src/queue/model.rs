@@ -122,6 +122,19 @@ pub enum Nacked {
     DeadLettered,
 }
 
+/// How many Messages a Queue holds, by state. The counts do not overlap: a dead letter counts
+/// only as `dead_lettered`, even in a Dead-Letter Queue whose consumers still receive it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct MessageCounts {
+    /// Claimable now, including Messages whose delivery's visibility timeout ran out.
+    pub ready: u64,
+    /// Held by a consumer within its visibility timeout.
+    pub in_flight: u64,
+    /// Waiting out a publish delay or a retry backoff.
+    pub delayed: u64,
+    pub dead_lettered: u64,
+}
+
 /// Which of a Queue's Messages to list, oldest first.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MessageFilter {

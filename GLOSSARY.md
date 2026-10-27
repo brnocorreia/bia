@@ -139,7 +139,7 @@ One item in a Queue, delivered at least once to a consumer, which hides it from 
 _Avoid_: job, event, item
 
 **Dead-Letter Queue**:
-An ordinary Queue that another Queue names in `dead_letter` to receive its Messages which exhausted their retries. Such a Message is a **dead letter**; a Queue without a Dead-Letter Queue keeps its dead letters and never delivers them again.
+An ordinary Queue that another Queue names in `dead_letter` to receive its Messages which exhausted their retries. Such a Message is a **dead letter**; a Queue without a Dead-Letter Queue keeps its dead letters and never delivers them again. **Replaying** a dead letter makes it deliverable again in the Queue it was dead-lettered from, with its delivery count reset; **purging** deletes it. Replay applies only to dead letters, never to Runs (see Resume and Retry).
 _Avoid_: DLQ in prose (fine in identifiers), error queue
 
 **Job**:

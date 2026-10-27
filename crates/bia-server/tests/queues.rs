@@ -571,3 +571,347 @@ async fn a_dry_run_of_a_publish_step_publishes_nothing(pool: PgPool) {
     assert_eq!(report.timeline[0].output.as_ref().unwrap()["published"], 1);
     assert!(messages(&server, "emails").await.is_empty());
 }
+
+/// Publishes `bodies` to `queue` now, and dead-letters each by a failed delivery when `queue`
+/// gives no retries.
+async fn dead_letters(pool: &PgPool, server: &TestServer, queue: &str, bodies: &[Value]) {
+    let queues = PgQueueRepository;
+    let name = QueueName::new(queue).unwrap();
+    let mut conn = pool.acquire().await.unwrap();
+    let now = server.clock.now();
+    queues
+        .publish(&mut conn, &name, bodies, now, now)
+        .await
+        .unwrap();
+    let claimed = queues
+        .claim(&mut conn, &name, "consumer", 100, now)
+        .await
+        .unwrap();
+    for delivery in claimed {
+        queues
+            .nack(
+                &mut conn,
+                &delivery.lease,
+                "rejected",
+                &Backoff::default(),
+                now,
+            )
+            .await
+            .unwrap();
+    }
+}
+
+fn only_dead_letters() -> MessageQuery {
+    MessageQuery {
+        dead_letters: Some(true),
+        ..MessageQuery::default()
+    }
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn queues_count_their_messages_by_state(pool: PgPool) {
+    let server = TestServer::start(pool.clone()).await;
+    let client = &server.client;
+    client
+        .put_queue("emails-dlq", &QueueSettings::default())
+        .await
+        .unwrap();
+    client
+        .put_queue("emails", &settings(Some("emails-dlq"), 0))
+        .await
+        .unwrap();
+    client
+        .put_queue("idle", &QueueSettings::default())
+        .await
+        .unwrap();
+    dead_letters(&pool, &server, "emails", &[json!("dead")]).await;
+
+    let queues = PgQueueRepository;
+    let emails = QueueName::new("emails").unwrap();
+    let mut conn = pool.acquire().await.unwrap();
+    let now = server.clock.now();
+    queues
+        .publish(
+            &mut conn,
+            &emails,
+            &[json!("held"), json!("ready")],
+            now,
+            now,
+        )
+        .await
+        .unwrap();
+    queues
+        .claim(&mut conn, &emails, "consumer", 1, now)
+        .await
+        .unwrap();
+    queues
+        .publish(
+            &mut conn,
+            &emails,
+            &[json!("later")],
+            now + TimeDelta::minutes(5),
+            now,
+        )
+        .await
+        .unwrap();
+
+    let listed: Vec<_> = client
+        .list_queues()
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|queue| (queue.name, queue.messages))
+        .collect();
+    let counts = |ready, in_flight, delayed, dead_lettered| bia_client::MessageCounts {
+        ready,
+        in_flight,
+        delayed,
+        dead_lettered,
+    };
+    assert_eq!(
+        listed,
+        [
+            ("emails".to_owned(), counts(1, 1, 1, 0)),
+            ("emails-dlq".to_owned(), counts(0, 0, 0, 1)),
+            ("idle".to_owned(), counts(0, 0, 0, 0)),
+        ]
+    );
+
+    server.clock.advance(TimeDelta::minutes(5));
+    let emails = client.get_queue("emails").await.unwrap();
+    assert_eq!(
+        emails.messages,
+        counts(3, 0, 0, 0),
+        "the delay ended and the held delivery's visibility timeout ran out"
+    );
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn a_replayed_dead_letter_is_delivered_again_from_its_source_queue(pool: PgPool) {
+    let server = TestServer::start(pool.clone()).await;
+    let client = &server.client;
+    client
+        .put_queue("emails-dlq", &QueueSettings::default())
+        .await
+        .unwrap();
+    client
+        .put_queue("emails", &settings(Some("emails-dlq"), 0))
+        .await
+        .unwrap();
+    dead_letters(&pool, &server, "emails", &[json!("a"), json!("b")]).await;
+    let dead = client
+        .list_messages("emails-dlq", &only_dead_letters())
+        .await
+        .unwrap()
+        .messages;
+    assert_eq!(dead.len(), 2);
+
+    server.clock.advance(TimeDelta::minutes(1));
+    let replayed = client
+        .replay_dead_letters("emails-dlq", &[dead[0].id])
+        .await
+        .unwrap();
+    assert_eq!(replayed.len(), 1);
+
+    let left = messages(&server, "emails-dlq").await;
+    assert_eq!(left.len(), 1);
+    assert_eq!(left[0].body, json!("b"));
+    let back = messages(&server, "emails").await;
+    assert_eq!(back.len(), 1);
+    let message = &back[0];
+    assert_eq!(message.id, replayed[0]);
+    assert_eq!(message.body, json!("a"));
+    assert_eq!(message.deliveries, 0, "the delivery count starts again");
+    assert_eq!(message.visible_at, Some(server.clock.now()));
+    assert_eq!(message.published_at, dead[0].published_at);
+    assert_eq!(message.last_error.as_deref(), Some("rejected"));
+    assert_eq!(
+        (
+            message.dead_lettered_at,
+            message.dead_lettered_from.as_deref()
+        ),
+        (None, None)
+    );
+
+    let claimed = PgQueueRepository
+        .claim(
+            &mut pool.acquire().await.unwrap(),
+            &QueueName::new("emails").unwrap(),
+            "consumer",
+            10,
+            server.clock.now(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(claimed.len(), 1);
+    assert_eq!(claimed[0].message.id.get(), replayed[0]);
+    assert_eq!(claimed[0].lease.delivery(), 1);
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn a_dead_letter_kept_in_its_queue_is_replayed_in_place(pool: PgPool) {
+    let server = TestServer::start(pool.clone()).await;
+    let client = &server.client;
+    client.put_queue("audit", &settings(None, 0)).await.unwrap();
+    dead_letters(&pool, &server, "audit", &[json!(1)]).await;
+    let dead = messages(&server, "audit").await;
+    assert_eq!(dead[0].visible_at, None);
+
+    let replayed = client
+        .replay_dead_letters("audit", &[dead[0].id])
+        .await
+        .unwrap();
+
+    let back = messages(&server, "audit").await;
+    assert_eq!(back.len(), 1);
+    assert_eq!(back[0].id, replayed[0]);
+    assert_eq!(back[0].visible_at, Some(server.clock.now()));
+    assert_eq!(back[0].dead_lettered_at, None);
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn replay_skips_messages_that_are_not_idle_dead_letters_of_the_queue(pool: PgPool) {
+    let server = TestServer::start(pool.clone()).await;
+    let client = &server.client;
+    client
+        .put_queue("emails-dlq", &QueueSettings::default())
+        .await
+        .unwrap();
+    client
+        .put_queue("emails", &settings(Some("emails-dlq"), 0))
+        .await
+        .unwrap();
+    dead_letters(&pool, &server, "emails", &[json!("held")]).await;
+    let held = messages(&server, "emails-dlq").await[0].id;
+    PgQueueRepository
+        .claim(
+            &mut pool.acquire().await.unwrap(),
+            &QueueName::new("emails-dlq").unwrap(),
+            "dlq-consumer",
+            10,
+            server.clock.now(),
+        )
+        .await
+        .unwrap();
+    let mut conn = pool.acquire().await.unwrap();
+    let now = server.clock.now();
+    let alive = PgQueueRepository
+        .publish(
+            &mut conn,
+            &QueueName::new("emails").unwrap(),
+            &[json!("alive")],
+            now,
+            now,
+        )
+        .await
+        .unwrap()[0]
+        .get();
+
+    assert!(
+        client
+            .replay_dead_letters("emails-dlq", &[held, alive, 999_999])
+            .await
+            .unwrap()
+            .is_empty(),
+        "an in-flight dead letter, a Message of another Queue and an unknown id"
+    );
+    assert!(
+        client
+            .replay_dead_letters("emails", &[alive])
+            .await
+            .unwrap()
+            .is_empty(),
+        "a Message that is not a dead letter"
+    );
+
+    server.clock.advance(TimeDelta::seconds(30));
+    assert_eq!(
+        client
+            .replay_dead_letters("emails-dlq", &[held])
+            .await
+            .unwrap()
+            .len(),
+        1,
+        "once its visibility timeout ran out"
+    );
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn purging_deletes_only_the_selected_dead_letters(pool: PgPool) {
+    let server = TestServer::start(pool.clone()).await;
+    let client = &server.client;
+    client.put_queue("audit", &settings(None, 0)).await.unwrap();
+    dead_letters(&pool, &server, "audit", &[json!(1), json!(2), json!(3)]).await;
+    let mut conn = pool.acquire().await.unwrap();
+    let now = server.clock.now();
+    let alive = PgQueueRepository
+        .publish(
+            &mut conn,
+            &QueueName::new("audit").unwrap(),
+            &[json!("alive")],
+            now,
+            now,
+        )
+        .await
+        .unwrap()[0]
+        .get();
+    let dead = client
+        .list_messages("audit", &only_dead_letters())
+        .await
+        .unwrap()
+        .messages;
+
+    let purged = client
+        .purge_dead_letters("audit", &[dead[0].id, dead[2].id, alive])
+        .await
+        .unwrap();
+    assert_eq!(purged, 2);
+
+    let left: Vec<_> = messages(&server, "audit")
+        .await
+        .into_iter()
+        .map(|m| m.body)
+        .collect();
+    assert_eq!(left, [json!(2), json!("alive")]);
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn only_admins_replay_or_purge_a_bounded_selection(pool: PgPool) {
+    let server = TestServer::start(pool.clone()).await;
+    let admin = &server.client;
+    let agent = server.client_with(&server.token(Scope::Agent).await);
+    admin.put_queue("audit", &settings(None, 0)).await.unwrap();
+    dead_letters(&pool, &server, "audit", &[json!(1)]).await;
+    let dead = messages(&server, "audit").await[0].id;
+
+    assert_eq!(
+        failure(agent.replay_dead_letters("audit", &[dead]).await),
+        (StatusCode::FORBIDDEN, "insufficient_scope".into())
+    );
+    assert_eq!(
+        failure(agent.purge_dead_letters("audit", &[dead]).await),
+        (StatusCode::FORBIDDEN, "insufficient_scope".into())
+    );
+    assert_eq!(messages(&server, "audit").await.len(), 1);
+
+    let too_many: Vec<i64> = (1..=201).collect();
+    for ids in [&[][..], &too_many[..]] {
+        assert_eq!(
+            failure(admin.replay_dead_letters("audit", ids).await),
+            (StatusCode::BAD_REQUEST, "malformed_request".into())
+        );
+        assert_eq!(
+            failure(admin.purge_dead_letters("audit", ids).await),
+            (StatusCode::BAD_REQUEST, "malformed_request".into())
+        );
+    }
+    assert_eq!(
+        failure(admin.replay_dead_letters("nope", &[dead]).await),
+        (StatusCode::NOT_FOUND, "queue_not_found".into())
+    );
+    let full_page: Vec<i64> = std::iter::once(dead).chain(1_000..1_199).collect();
+    assert_eq!(
+        admin.purge_dead_letters("audit", &full_page).await.unwrap(),
+        1
+    );
+}

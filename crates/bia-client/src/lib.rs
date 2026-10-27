@@ -172,6 +172,31 @@ pub struct Queue {
     pub dead_letter: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub messages: MessageCounts,
+}
+
+/// How many Messages a Queue holds, by state. The counts do not overlap.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MessageCounts {
+    pub ready: u64,
+    pub in_flight: u64,
+    pub delayed: u64,
+    pub dead_lettered: u64,
+}
+
+#[derive(Debug, Serialize)]
+struct DeadLetterSelection<'a> {
+    ids: &'a [i64],
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct DeadLettersReplayed {
+    replayed: Vec<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct DeadLettersPurged {
+    purged: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -589,6 +614,31 @@ impl Client {
         }
         let path = Self::encode(&format!("/v1/queues/{queue}/messages"), pairs)?;
         self.send(Method::GET, &path, None::<&()>).await
+    }
+
+    /// Makes dead letters of `queue` deliverable again in the Queues they came from; returns
+    /// their new ids.
+    pub async fn replay_dead_letters(&self, queue: &str, ids: &[i64]) -> Result<Vec<i64>, Error> {
+        let replayed: DeadLettersReplayed = self
+            .send(
+                Method::POST,
+                &format!("/v1/queues/{queue}/dead-letters/replay"),
+                Some(&DeadLetterSelection { ids }),
+            )
+            .await?;
+        Ok(replayed.replayed)
+    }
+
+    /// Deletes dead letters of `queue`; returns how many went.
+    pub async fn purge_dead_letters(&self, queue: &str, ids: &[i64]) -> Result<u64, Error> {
+        let purged: DeadLettersPurged = self
+            .send(
+                Method::POST,
+                &format!("/v1/queues/{queue}/dead-letters/purge"),
+                Some(&DeadLetterSelection { ids }),
+            )
+            .await?;
+        Ok(purged.purged)
     }
 
     pub async fn list_workflows(&self) -> Result<Vec<Workflow>, Error> {

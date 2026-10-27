@@ -123,6 +123,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/queues/{name}/dead-letters/purge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deletes the selected dead letters of this Queue for good. Ids that are not dead letters of
+         *     this Queue are skipped. Needs an `admin` Token.
+         */
+        post: operations["purge_dead_letters"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/queues/{name}/dead-letters/replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Makes the selected dead letters of this Queue deliverable again, from now, in the Queue each
+         *     was dead-lettered from, as new Messages whose delivery count starts again at 0; their body,
+         *     `published_at` and `last_error` are kept. Skips ids that are not dead letters of this Queue,
+         *     dead letters a consumer holds right now, and those whose source Queue was deleted. Needs an
+         *     `admin` Token.
+         */
+        post: operations["replay_dead_letters"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/queues/{name}/messages": {
         parameters: {
             query?: never;
@@ -693,6 +736,25 @@ export interface components {
              */
             value: string;
         };
+        /** @description Dead letters of the Queue to act on. */
+        DeadLetterSelection: {
+            /** @description Message ids, 1 to 200. Ids that are not dead letters of this Queue are skipped. */
+            ids: number[];
+        };
+        DeadLettersPurged: {
+            /**
+             * Format: int64
+             * @description How many dead letters were deleted.
+             */
+            purged: number;
+        };
+        DeadLettersReplayed: {
+            /**
+             * @description The new ids of the replayed Messages in the Queues they were dead-lettered from, in the
+             *     order of their old ids. Fewer than selected when some were skipped.
+             */
+            replayed: number[];
+        };
         /** @description What a Dry Run of a Definition that need not be stored takes. */
         DefinitionDryRunRequest: {
             /** @description A Definition (see `GET /v1/schema`). Its Workflow need not exist. */
@@ -769,6 +831,33 @@ export interface components {
             next_after?: string | null;
             /** @description Failed Runs, newest first. */
             runs: components["schemas"]["FailedRun"][];
+        };
+        /**
+         * @description How many Messages the Queue holds, by state, when it was read. The four counts do not
+         *     overlap and add up to the Queue's depth.
+         */
+        MessageCountsInfo: {
+            /**
+             * Format: int64
+             * @description Dead letters, whether kept in this Queue or moved here as its Dead-Letter Queue. Only
+             *     counted here, even when a consumer of a Dead-Letter Queue receives them.
+             */
+            dead_lettered: number;
+            /**
+             * Format: int64
+             * @description Waiting out a publish delay or a retry backoff.
+             */
+            delayed: number;
+            /**
+             * Format: int64
+             * @description Held by a consumer within its visibility timeout.
+             */
+            in_flight: number;
+            /**
+             * Format: int64
+             * @description Deliverable now.
+             */
+            ready: number;
         };
         /** @description One Message of a Queue. */
         MessageInfo: {
@@ -890,6 +979,7 @@ export interface components {
             dead_letter?: string | null;
             /** Format: int32 */
             max_retries: number;
+            messages: components["schemas"]["MessageCountsInfo"];
             /** @example emails */
             name: string;
             /**
@@ -1596,6 +1686,136 @@ export interface operations {
             };
             /** @description `queue_in_use`: another Queue names it as its `dead_letter`. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    purge_dead_letters: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Queue holding the dead letters. */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeadLetterSelection"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeadLettersPurged"];
+                };
+            };
+            /** @description `malformed_request`: no ids, or more than 200. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `queue_not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    replay_dead_letters: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Queue holding the dead letters. */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeadLetterSelection"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeadLettersReplayed"];
+                };
+            };
+            /** @description `malformed_request`: no ids, or more than 200. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `queue_not_found`. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
