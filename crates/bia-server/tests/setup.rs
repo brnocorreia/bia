@@ -135,11 +135,12 @@ async fn error_bodies_never_quote_the_code_or_the_password(pool: PgPool) {
     let server = TestServer::without_tokens(pool).await;
     let code = server.setup_code.clone();
     let wrong_code = format!("{}-{}", "f".repeat(8), "e".repeat(32));
+    // serde quotes a value of the wrong type in its own errors.
+    let not_a_string = u64::MAX - 7;
     let refusals = [
         json!({ "code": wrong_code, "password": "a-secret-password" }),
         json!({ "code": code, "password": "secret" }),
-        // serde quotes a value of the wrong type in its own errors.
-        json!({ "code": code, "password": 314159265358979_u64 }),
+        json!({ "code": code, "password": not_a_string }),
         json!({ "code": code, "password": "a-secret-password", "extra": 1 }),
     ];
 
