@@ -3,7 +3,7 @@
 //! They sit in the Action Registry like any Action, so validation, `GET /v1/schema` and Dry Run
 //! know their Params, but the interpreter publishes their Messages in the transaction that
 //! records the Step's Attempt, so a Message exists exactly when the Step succeeded and a
-//! retried Attempt cannot publish it twice (ADR-0058). [`QueueAction::execute`] is never called
+//! retried Attempt cannot publish it twice (ADR-0059). [`QueueAction::execute`] is never called
 //! by a Worker. The interpreter reads their Params with [`Publish::from_params`].
 
 use schemars::json_schema;

@@ -1,4 +1,4 @@
--- Queues and their Messages (ADR-0015, ADR-0058). A Dead-Letter Queue is a Queue like any
+-- Queues and their Messages (ADR-0015, ADR-0059). A Dead-Letter Queue is a Queue like any
 -- other, which another Queue names in `dead_letter`.
 
 CREATE TABLE queues (

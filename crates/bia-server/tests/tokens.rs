@@ -5,13 +5,9 @@
 
 use std::sync::Arc;
 
-use axum::Router;
-use axum::http::StatusCode as AxumStatus;
-use axum::routing::post;
 use bia_client::{Error, NewToken, Scope, WebhookBinding};
 use bia_core::clock::ManualClock;
-use bia_server::auth::Webhook;
-use bia_server::{ApiConfig, ApiState};
+use bia_server::ApiState;
 use chrono::TimeDelta;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -93,60 +89,6 @@ async fn an_agent_token_is_forbidden_on_admin_routes_and_an_admin_token_passes(p
 
     server.client.schema().await.unwrap();
     assert_eq!(server.client.list_tokens().await.unwrap().len(), 2);
-}
-
-/// A server with a stand-in webhook route at `/hooks/{workflow_id}/{trigger_id}`.
-async fn server_with_a_webhook_route(pool: PgPool) -> TestServer {
-    async fn hook(_: Webhook) -> AxumStatus {
-        AxumStatus::ACCEPTED
-    }
-    let clock = ManualClock::new(common::t0());
-    let state = common::state(pool, &clock, ApiConfig::default());
-    let hooks = Router::new()
-        .route("/hooks/{workflow_id}/{trigger_id}", post(hook))
-        .with_state(state.clone());
-    TestServer::bootstrapped(bia_server::router(state).merge(hooks), clock).await
-}
-
-#[sqlx::test(migrator = "bia_store::MIGRATOR")]
-async fn a_webhook_token_reaches_only_its_own_webhook_route(pool: PgPool) {
-    let server = server_with_a_webhook_route(pool).await;
-    let webhook = server.webhook_token("onboarding-email", "signup").await;
-    let agent = server.token(Scope::Agent).await;
-    let http = reqwest::Client::new();
-    let call = |path: &str, token: &str| http.post(server.url(path)).bearer_auth(token).send();
-
-    let own = call("/hooks/onboarding-email/signup", &webhook)
-        .await
-        .unwrap();
-    assert_eq!(own.status(), StatusCode::ACCEPTED);
-    for other in [
-        "/hooks/onboarding-email/other",
-        "/hooks/other-workflow/signup",
-    ] {
-        let response = call(other, &webhook).await.unwrap();
-        assert_eq!(response.status(), StatusCode::FORBIDDEN, "{other}");
-        let body: Value = response.json().await.unwrap();
-        assert_eq!(body["code"], "insufficient_scope");
-    }
-    let client = server.client_with(&webhook);
-    assert_eq!(
-        failure(client.schema().await),
-        (StatusCode::FORBIDDEN, "insufficient_scope".into())
-    );
-    assert_eq!(
-        failure(client.list_tokens().await),
-        (StatusCode::FORBIDDEN, "insufficient_scope".into())
-    );
-
-    let by_agent = call("/hooks/onboarding-email/signup", &agent)
-        .await
-        .unwrap();
-    assert_eq!(by_agent.status(), StatusCode::FORBIDDEN);
-    let by_admin = call("/hooks/onboarding-email/signup", &server.admin_token)
-        .await
-        .unwrap();
-    assert_eq!(by_admin.status(), StatusCode::ACCEPTED);
 }
 
 #[sqlx::test(migrator = "bia_store::MIGRATOR")]

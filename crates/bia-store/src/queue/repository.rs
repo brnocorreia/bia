@@ -12,7 +12,7 @@ use super::{
 use crate::StoreError;
 use crate::job::Backoff;
 
-/// Queues and the lifecycle of their Messages (ADR-0058). Every method takes a connection, so
+/// Queues and the lifecycle of their Messages (ADR-0059). Every method takes a connection, so
 /// a publish can commit with the Checkpoint of the Step that publishes (ADR-0010), and takes
 /// `now` from the caller's `Clock` (ADR-0022). A delivery's Lease is fenced by the Message's
 /// delivery counter, as a Job's is by its attempts (ADR-0031): once the Message is delivered

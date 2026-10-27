@@ -30,6 +30,133 @@
         }
       }
     },
+    "/hooks/{workflow_id}/{trigger_id}": {
+      "post": {
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "Starts a Run of the Workflow's Active Version from one of its webhook Triggers, with the\nJSON body (`{}` when empty) as `input`, checked against the `input_schema`. A Trigger without\n`hmac` needs its bound `webhook` Token or an `admin` Token as `Authorization: Bearer`; one\nwith `hmac` needs the HMAC-SHA256 of the raw body, as hex optionally prefixed `sha256=`, in\nits `hmac.header`. Without a Token, a path that names no webhook Trigger of an Active Version\nanswers `missing_token`, like a Trigger that needs one.",
+        "operationId": "trigger_webhook",
+        "parameters": [
+          {
+            "name": "workflow_id",
+            "in": "path",
+            "description": "The Workflow's id.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "trigger_id",
+            "in": "path",
+            "description": "The webhook Trigger's id.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The Run input, as JSON.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookAccepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_request`: the body is not JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`webhook_not_found`, to a caller with a Token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`request_too_large`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_run_input`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`hmac_secret_unavailable`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          },
+          {}
+        ]
+      }
+    },
     "/ready": {
       "get": {
         "tags": [
@@ -2945,6 +3072,10 @@
           "run_finished",
           "run_not_finished",
           "run_not_resumable",
+          "webhook_not_found",
+          "missing_signature",
+          "invalid_signature",
+          "hmac_secret_unavailable",
           "secret_not_found",
           "master_key_missing",
           "queue_not_found",
@@ -3800,6 +3931,19 @@
           },
           "workflow_id": {
             "type": "string"
+          }
+        }
+      },
+      "WebhookAccepted": {
+        "type": "object",
+        "required": [
+          "run_id"
+        ],
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The Run the request started. It is `pending` until a Worker picks it up."
           }
         }
       },

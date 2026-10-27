@@ -4,4 +4,4 @@
 
 ## Amendments
 
-- `list_queues` is registered now that `GET /v1/queues` exists (ADR-0058).
+- `list_queues` is registered now that `GET /v1/queues` exists (ADR-0059).

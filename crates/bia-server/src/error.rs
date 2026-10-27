@@ -68,6 +68,16 @@ pub enum ErrorCode {
     RunNotFinished,
     /// The Run cannot be resumed: it is not `failed`, or it failed before any Step ran.
     RunNotResumable,
+    /// No webhook Trigger of the Workflow's Active Version has this id, or the Workflow has no
+    /// Active Version.
+    WebhookNotFound,
+    /// The webhook Trigger checks an HMAC signature and the request carries none in its header.
+    MissingSignature,
+    /// The request's HMAC signature does not match its body.
+    InvalidSignature,
+    /// The Secret holding the webhook Trigger's HMAC key does not exist or cannot be read; the
+    /// server's logs say which.
+    HmacSecretUnavailable,
     /// No Secret has this name.
     SecretNotFound,
     /// The server has no `BIA_MASTER_KEY`, so it cannot store Secrets.

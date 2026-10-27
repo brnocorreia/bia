@@ -3,11 +3,12 @@
 //! A handler declares what it requires by taking [`Admin`], [`Agent`] or [`Webhook`] as its
 //! first argument, before anything that reads the request, so an unauthenticated caller gets
 //! 401 rather than a validation error. A handler that takes none is public; a test checks that
-//! only the probes and bootstrapping are.
+//! only the probes and bootstrapping are. The webhook route takes `Option<Webhook>`, since a
+//! Trigger with `hmac` is authenticated by its signature instead (ADR-0058).
 
 use std::fmt;
 
-use axum::extract::{FromRequestParts, RawPathParams};
+use axum::extract::{FromRequestParts, OptionalFromRequestParts, RawPathParams};
 use axum::http::request::Parts;
 use axum::http::{HeaderMap, StatusCode, header};
 use bia_store::token::{PgTokenRepository, Scope, Token, TokenHash, TokenRepository};
@@ -92,6 +93,24 @@ impl FromRequestParts<ApiState> for Webhook {
     }
 }
 
+/// `None` when the request has no `Authorization` header; a Token it does carry must be valid
+/// for this Trigger.
+impl OptionalFromRequestParts<ApiState> for Webhook {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &ApiState,
+    ) -> Result<Option<Self>, ApiError> {
+        if !parts.headers.contains_key(header::AUTHORIZATION) {
+            return Ok(None);
+        }
+        <Self as FromRequestParts<ApiState>>::from_request_parts(parts, state)
+            .await
+            .map(Some)
+    }
+}
+
 /// The unrevoked Token the request carries.
 async fn authenticate(headers: &HeaderMap, state: &ApiState) -> Result<Token, ApiError> {
     let presented = bearer(headers)?;
@@ -113,11 +132,7 @@ async fn authenticate(headers: &HeaderMap, state: &ApiState) -> Result<Token, Ap
 /// The credential in `Authorization: Bearer <credential>`. Errors never quote it.
 pub(crate) fn bearer(headers: &HeaderMap) -> Result<&str, ApiError> {
     let Some(authorization) = headers.get(header::AUTHORIZATION) else {
-        return Err(ApiError::new(
-            StatusCode::UNAUTHORIZED,
-            ErrorCode::MissingToken,
-            "this route needs a Token; send `Authorization: Bearer <token>`",
-        ));
+        return Err(missing_token());
     };
     authorization
         .to_str()
@@ -136,6 +151,14 @@ pub(crate) fn bearer(headers: &HeaderMap) -> Result<&str, ApiError> {
                 "the `Authorization` header is not `Bearer <token>`",
             )
         })
+}
+
+pub(crate) fn missing_token() -> ApiError {
+    ApiError::new(
+        StatusCode::UNAUTHORIZED,
+        ErrorCode::MissingToken,
+        "this route needs a Token; send `Authorization: Bearer <token>`",
+    )
 }
 
 fn unknown_token() -> ApiError {

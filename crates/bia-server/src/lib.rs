@@ -6,7 +6,8 @@
 //! this crate's manifest; a test fails when the two drift (`just openapi` rewrites it).
 //!
 //! Every route but the probes and bootstrapping needs a Token, whose Scope the handler checks
-//! through the extractors in [`auth`] (ADR-0043).
+//! through the extractors in [`auth`] (ADR-0043). The one exception is a webhook Trigger with
+//! `hmac`, whose callers sign the body instead (ADR-0058).
 
 use std::fmt;
 use std::sync::Arc;
@@ -165,6 +166,7 @@ fn documented() -> OpenApiRouter<ApiState> {
         .routes(routes!(routes::run::cancel_run))
         .routes(routes!(routes::run::resume_run))
         .routes(routes!(routes::run::retry_run))
+        .routes(routes!(routes::webhook::trigger_webhook))
 }
 
 /// The OpenAPI document of every route [`router`] serves.

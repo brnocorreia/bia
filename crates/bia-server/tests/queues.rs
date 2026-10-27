@@ -1,5 +1,5 @@
 //! Queues through the API: created, replaced and deleted by `admin`, read with their Messages
-//! by `agent`, checked by validation, and published to by Workflows (ADR-0015, ADR-0058).
+//! by `agent`, checked by validation, and published to by Workflows (ADR-0015, ADR-0059).
 
 #![allow(clippy::unwrap_used)]
 

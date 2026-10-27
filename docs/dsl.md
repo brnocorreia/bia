@@ -137,6 +137,15 @@ Only the cron Triggers of the Active Version fire. Activating another Version re
 - `catch_up` decides what happens to occurrences missed while no scheduler ran, meaning reached more than a minute after they were due: `none` drops them, `latest` (default) fires the newest one, and `all` fires each, up to the 100 most recent. The fired occurrences then go through `overlap`, so `all` with `skip` fires only the first.
 - A cron Run's input is `{}`, and its `trigger` is `{ "type": "cron", "id": "<trigger id>", "scheduled_at": "<occurrence, RFC 3339 UTC>" }`. `scheduled_at` is the occurrence before jitter, even when the Run started later from the queue or after downtime.
 
+### Webhook
+
+`POST /hooks/{workflow_id}/{trigger_id}` starts a Run of the Active Version; webhook Triggers of other Versions answer 404. Semantics: ADR-0058.
+
+- Without `hmac`, the caller sends `Authorization: Bearer <token>`: the `webhook` Token bound to this Trigger (`POST /v1/tokens` with `webhook: { workflow_id, trigger_id }`) or an `admin` Token.
+- With `hmac`, the caller sends the HMAC-SHA256 of the raw body, keyed by the Secret `hmac.secret` names, in the `hmac.header` header, as hex optionally prefixed `sha256=` (GitHub's `X-Hub-Signature-256` format). No Token is needed, but one that is sent must be valid for this Trigger.
+- The JSON body is the Run's `input` (an empty body is `{}`), checked against `input_schema` before the Run is created. An accepted request answers 202 with `{ "run_id" }`.
+- The Run's `trigger` is `{ "type": "webhook", "id": "<trigger id>", "received_at": "<RFC 3339 UTC>", "headers": { "<lowercased name>": "<value>" } }`. `headers` leaves out every header that may carry a credential: the `hmac.header`, and any whose name contains `auth`, `token`, `secret`, `signature`, `password`, `session`, `credential`, `cookie` or `key`.
+
 ## Queue resources
 
 Queues are declared separately from Workflows (ADR-0015). A resource file is told apart from a Definition by its top-level `kind`; Definitions never have one (ADR-0025). Only `kind` and `name` are required. `bia workflow apply -f` applies Queue files before Definitions, and applying one again replaces all of its settings, so a setting left out goes back to its default.
@@ -157,7 +166,7 @@ dead_letter: emails-dlq
 | `batch_size` | `10` | Messages a consumer receives at once, 1 to 100. |
 | `dead_letter` | none | The Dead-Letter Queue: an existing Queue that receives Messages which exhausted their retries. Without one, they stay in this Queue as dead letters and are not delivered again. |
 
-Dead letters are kept for `BIA_DEAD_LETTER_RETENTION_DAYS` (default 90). Storage and delivery semantics: ADR-0058.
+Dead letters are kept for `BIA_DEAD_LETTER_RETENTION_DAYS` (default 90). Storage and delivery semantics: ADR-0059.
 
 ### Publishing
 

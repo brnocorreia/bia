@@ -22,6 +22,8 @@ use sqlx::PgPool;
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 
+pub mod webhook;
+
 /// The bootstrap key every test server is started with.
 pub const BOOTSTRAP_KEY: &str = "test-bootstrap-key-0123456789abcdef";
 

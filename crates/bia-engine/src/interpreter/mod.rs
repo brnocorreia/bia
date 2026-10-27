@@ -110,7 +110,7 @@ struct Transition {
     entry: Option<NewTimelineEntry>,
     next_job_at: Option<DateTime<Utc>>,
     at: DateTime<Utc>,
-    /// Messages a `queue.*` Step publishes, committed with the transition (ADR-0058).
+    /// Messages a `queue.*` Step publishes, committed with the transition (ADR-0059).
     publish: Option<Pending>,
 }
 

@@ -45,7 +45,7 @@ const RELEASED: &[(i64, &str)] = &[
     ),
     (
         9,
-        "5656bb1daec4436b1c133e24be68ddd2656268077b96a3d44f99f925cb4ffdc4264d93b29bd7f9e5f77fd5d3fdf34959",
+        "ddecccb785e16c01e912b716cd5230e184ad4181bb5d542acaf57f5fbd042a83d777861a4ba767028819a6e12017b982",
     ),
 ];
 

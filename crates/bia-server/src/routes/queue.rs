@@ -1,5 +1,5 @@
 //! Queues: created, replaced and deleted by `admin`, read with their Messages by `admin` and
-//! `agent` (ADR-0015, ADR-0058). Workflows publish to them with `queue.publish` and
+//! `agent` (ADR-0015, ADR-0059). Workflows publish to them with `queue.publish` and
 //! `queue.publish_batch`.
 
 use axum::extract::State;

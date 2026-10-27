@@ -52,13 +52,13 @@ Engine, scheduler and store read time from an injected `Clock` (ADR-0022), and w
 
 ## Access
 
-Every route but the probes, `/openapi.json` and bootstrapping needs a Token whose Scope the handler checks with an `Admin`, `Agent` or `Webhook` extractor (ADR-0008, ADR-0043). Tokens are stored as SHA-256 hashes. CORS allows only the configured origins.
+Every route but the probes, `/openapi.json` and bootstrapping needs a Token whose Scope the handler checks with an `Admin`, `Agent` or `Webhook` extractor (ADR-0008, ADR-0043). A webhook Trigger with `hmac` is the exception: its callers sign the body instead (ADR-0058). Tokens are stored as SHA-256 hashes. CORS allows only the configured origins.
 
 ## Run lifecycle
 
 1. A Trigger fires (Schedule, Message, webhook, manual, Event), and the server or the scheduler creates a Run pinned to the Active Version, plus a Job to advance it, in one transaction.
 2. A Worker claims the Job under a Lease, loads the Checkpoint and executes the Step at the Cursor: it resolves Templates and Secrets, calls the Action with the Idempotency Key and enforces the timeout.
-3. In one transaction, the Worker writes the Attempt to the Timeline, updates the Checkpoint and Cursor, publishes the Messages of a `queue.publish` Step (ADR-0058), completes the Job and enqueues the next Job (or a delayed Job for `sleep`/retry backoff, or nothing while waiting for an Event). Each Job makes one transition: starting the Run (checking its input against the `input_schema`) or one Attempt of one Step (ADR-0032). The Timeline entry shape is ADR-0033.
+3. In one transaction, the Worker writes the Attempt to the Timeline, updates the Checkpoint and Cursor, publishes the Messages of a `queue.publish` Step (ADR-0059), completes the Job and enqueues the next Job (or a delayed Job for `sleep`/retry backoff, or nothing while waiting for an Event). Each Job makes one transition: starting the Run (checking its input against the `input_schema`) or one Attempt of one Step (ADR-0032). The Timeline entry shape is ADR-0033.
 4. Run statuses: `pending → running → (sleeping | waiting) → running → succeeded | failed | cancelled`.
 
 A failed Run can be resumed from the Step that failed, or retried as a new Run on the same Version and input, linked to the original (ADR-0045).
