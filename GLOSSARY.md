@@ -135,11 +135,11 @@ A named, explicitly created, durable buffer of Messages with its own retry, visi
 _Avoid_: topic, channel, stream
 
 **Message**:
-One item in a Queue, delivered at least once to a consumer.
+One item in a Queue, delivered at least once to a consumer, which hides it from other consumers for the Queue's visibility timeout and then acks it; a Message that is not acked in time is delivered again.
 _Avoid_: job, event, item
 
 **Dead-Letter Queue**:
-The Queue that receives Messages which exhausted their retries.
+An ordinary Queue that another Queue names in `dead_letter` to receive its Messages which exhausted their retries. Such a Message is a **dead letter**; a Queue without a Dead-Letter Queue keeps its dead letters and never delivers them again.
 _Avoid_: DLQ in prose (fine in identifiers), error queue
 
 **Job**:

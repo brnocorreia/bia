@@ -728,3 +728,151 @@ async fn bia_mcp_reports_a_refused_token_as_a_json_rpc_error(pool: PgPool) {
 fn write_all(dir: &Path, name: &str, text: &str) {
     std::fs::write(dir.join(name), text).unwrap();
 }
+
+const EMAILS_QUEUE_YAML: &str = "\
+kind: queue
+name: emails
+max_retries: 5
+visibility_timeout: 2m
+dead_letter: failed-emails
+";
+
+const SENDER_YAML: &str = "\
+schema_version: 1
+id: sender
+triggers:
+  - id: by_hand
+    type: manual
+steps:
+  - id: send
+    action: queue.publish
+    params:
+      queue: emails
+      body: hello
+";
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn apply_creates_queues_before_the_definitions_that_use_them_and_updates_them(pool: PgPool) {
+    let h = start(pool).await;
+    h.write("setup/emails.yaml", EMAILS_QUEUE_YAML);
+    h.write(
+        "setup/failed-emails.yaml",
+        "kind: queue\nname: failed-emails\n",
+    );
+    h.write("setup/sender.yaml", SENDER_YAML);
+
+    let applied = h
+        .bia(&["workflow", "apply", "-f", "setup", "--activate", "--json"])
+        .await;
+    assert_eq!(applied.code(), 0, "{}", applied.stdout());
+    let report = applied.json();
+    let queues: Vec<_> = report["queues"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|q| (q["queue"].as_str().unwrap(), q["result"].as_str().unwrap()))
+        .collect();
+    assert_eq!(
+        queues,
+        [("failed-emails", "created"), ("emails", "created")]
+    );
+    assert_eq!(report["applied"][0]["activated"], true);
+    let emails = h.client.get_queue("emails").await.unwrap();
+    assert_eq!(
+        (
+            emails.max_retries,
+            emails.visibility_timeout.as_str(),
+            emails.batch_size
+        ),
+        (5, "2m", 10)
+    );
+    assert_eq!(emails.dead_letter.as_deref(), Some("failed-emails"));
+
+    h.write(
+        "setup/emails.yaml",
+        "kind: queue\nname: emails\nmax_retries: 1\n",
+    );
+    let again = h.bia(&["workflow", "apply", "-f", "setup"]).await;
+    assert_eq!(again.code(), 0, "{}", again.stderr());
+    assert!(
+        again.stdout().contains("updated queue emails"),
+        "{}",
+        again.stdout()
+    );
+    assert!(
+        again.stdout().contains("unchanged queue failed-emails"),
+        "{}",
+        again.stdout()
+    );
+    let emails = h.client.get_queue("emails").await.unwrap();
+    assert_eq!((emails.max_retries, emails.dead_letter), (1, None));
+
+    let validated = h
+        .bia(&["workflow", "validate", "-f", "setup", "--json"])
+        .await;
+    assert_eq!(validated.code(), 0, "{}", validated.stdout());
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn a_bad_queue_file_is_refused_before_anything_is_applied(pool: PgPool) {
+    let h = start(pool).await;
+    h.write(
+        "bad/emails.yaml",
+        "kind: queue\nname: emails\nmax_retires: 5\n",
+    );
+    h.write("bad/sender.yaml", SENDER_YAML);
+
+    let applied = h.bia(&["workflow", "apply", "-f", "bad"]).await;
+    assert_ne!(applied.code(), 0);
+    assert!(
+        applied.stderr().contains("max_retires"),
+        "{}",
+        applied.stderr()
+    );
+    assert!(h.client.list_queues().await.unwrap().is_empty());
+    assert!(h.client.list_workflows().await.unwrap().is_empty());
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn queue_commands_set_list_show_and_delete_queues(pool: PgPool) {
+    let h = start(pool).await;
+
+    let set = h
+        .bia(&[
+            "queue",
+            "set",
+            "jobs",
+            "--max-retries",
+            "0",
+            "--visibility-timeout",
+            "45s",
+        ])
+        .await;
+    assert_eq!(set.code(), 0, "{}", set.stderr());
+    let listed = h.bia_with(&h.agent, &["queue", "list"]).await;
+    assert_eq!(listed.code(), 0, "{}", listed.stderr());
+    assert!(listed.stdout().contains("jobs"), "{}", listed.stdout());
+    assert!(listed.stdout().contains("45s"), "{}", listed.stdout());
+    let shown = h
+        .bia_with(&h.agent, &["queue", "get", "jobs", "--json"])
+        .await;
+    assert_eq!(shown.json()["max_retries"], 0);
+    let messages = h.bia(&["queue", "messages", "jobs", "--json"]).await;
+    assert_eq!(messages.json()["messages"], json!([]));
+
+    let refused = h.bia_with(&h.agent, &["queue", "delete", "jobs"]).await;
+    assert_ne!(refused.code(), 0);
+    assert!(
+        refused.stderr().contains("insufficient_scope"),
+        "{}",
+        refused.stderr()
+    );
+    let deleted = h.bia(&["queue", "delete", "jobs"]).await;
+    assert_eq!(deleted.code(), 0, "{}", deleted.stderr());
+    let missing = h.bia(&["queue", "get", "jobs"]).await;
+    assert!(
+        missing.stderr().contains("queue_not_found"),
+        "{}",
+        missing.stderr()
+    );
+}

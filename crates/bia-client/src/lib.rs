@@ -148,6 +148,72 @@ struct SecretDeleted {
     name: String,
 }
 
+/// `PUT /v1/queues/{name}`: a Queue's settings. A field left out takes its default.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QueueSettings {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_retries: Option<u32>,
+    /// A Duration such as `30s`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visibility_timeout: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub batch_size: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dead_letter: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Queue {
+    pub name: String,
+    pub max_retries: u32,
+    /// A Duration such as `30s`.
+    pub visibility_timeout: String,
+    pub batch_size: u32,
+    pub dead_letter: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct QueueList {
+    queues: Vec<Queue>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct QueueDeleted {
+    name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Message {
+    pub id: i64,
+    pub queue: String,
+    pub body: Value,
+    pub published_at: DateTime<Utc>,
+    /// Absent for a dead letter that is not delivered again.
+    pub visible_at: Option<DateTime<Utc>>,
+    pub deliveries: i32,
+    pub in_flight: bool,
+    pub last_error: Option<String>,
+    pub dead_lettered_at: Option<DateTime<Utc>>,
+    pub dead_lettered_from: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MessagePage {
+    pub messages: Vec<Message>,
+    pub next_after: Option<i64>,
+}
+
+/// Filters and paging of `list_messages`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MessageQuery {
+    /// Only dead letters with `Some(true)`, only the others with `Some(false)`.
+    pub dead_letters: Option<bool>,
+    pub after: Option<i64>,
+    pub limit: Option<u32>,
+}
+
 /// A Workflow and the Version new Runs and Schedules use.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Workflow {
@@ -483,6 +549,48 @@ impl Client {
         Ok(())
     }
 
+    pub async fn list_queues(&self) -> Result<Vec<Queue>, Error> {
+        let list: QueueList = self.send(Method::GET, "/v1/queues", None::<&()>).await?;
+        Ok(list.queues)
+    }
+
+    pub async fn get_queue(&self, name: &str) -> Result<Queue, Error> {
+        self.send(Method::GET, &format!("/v1/queues/{name}"), None::<&()>)
+            .await
+    }
+
+    /// Creates the Queue or replaces all of its settings.
+    pub async fn put_queue(&self, name: &str, settings: &QueueSettings) -> Result<Queue, Error> {
+        self.send(Method::PUT, &format!("/v1/queues/{name}"), Some(settings))
+            .await
+    }
+
+    pub async fn delete_queue(&self, name: &str) -> Result<(), Error> {
+        let _: QueueDeleted = self
+            .send(Method::DELETE, &format!("/v1/queues/{name}"), None::<&()>)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn list_messages(
+        &self,
+        queue: &str,
+        query: &MessageQuery,
+    ) -> Result<MessagePage, Error> {
+        let mut pairs: Vec<(&str, String)> = Vec::new();
+        if let Some(dead_letters) = query.dead_letters {
+            pairs.push(("dead_letters", dead_letters.to_string()));
+        }
+        if let Some(after) = query.after {
+            pairs.push(("after", after.to_string()));
+        }
+        if let Some(limit) = query.limit {
+            pairs.push(("limit", limit.to_string()));
+        }
+        let path = Self::encode(&format!("/v1/queues/{queue}/messages"), pairs)?;
+        self.send(Method::GET, &path, None::<&()>).await
+    }
+
     pub async fn list_workflows(&self) -> Result<Vec<Workflow>, Error> {
         let list: WorkflowList = self.send(Method::GET, "/v1/workflows", None::<&()>).await?;
         Ok(list.workflows)
@@ -714,6 +822,10 @@ impl Client {
         if let Some(limit) = query.limit {
             pairs.push(("limit", limit.to_string()));
         }
+        Self::encode(path, pairs)
+    }
+
+    fn encode(path: &str, pairs: Vec<(&str, String)>) -> Result<String, Error> {
         // Only for its query encoding: `send` joins the path onto the real base.
         let url = Url::parse_with_params(&format!("http://localhost{path}"), pairs)
             .map_err(|_| Error::BaseUrl(path.to_owned()))?;

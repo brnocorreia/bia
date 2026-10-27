@@ -1,23 +1,30 @@
-//! Definition files and the JSON or YAML documents (input, Mocks) the commands read.
+//! Definition and Queue resource files, and the JSON or YAML documents (input, Mocks) the
+//! commands read.
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, bail};
-use bia_core::dsl::yaml_to_json;
+use bia_core::dsl::{Document, QueueResource, yaml_to_json};
 use serde_json::Value;
 
 use super::locate;
 
-/// A Definition file, converted to the JSON the server accepts.
+/// A Definition or `kind: queue` resource file, converted to the JSON the server accepts.
 pub(crate) struct Source {
     pub(crate) path: PathBuf,
     pub(crate) value: Value,
     /// The YAML text, kept to point Diagnostics at its lines.
     yaml: Option<String>,
+    queue: Option<QueueResource>,
 }
 
 impl Source {
+    /// The Queue a `kind: queue` file declares; `None` for a Definition.
+    pub(crate) fn queue(&self) -> Option<&QueueResource> {
+        self.queue.as_ref()
+    }
+
     /// The Workflow id the file declares.
     pub(crate) fn workflow_id(&self) -> &str {
         self.value
@@ -43,19 +50,22 @@ impl Source {
                 .map_err(|error| anyhow::anyhow!("{}: invalid JSON: {error}", path.display()))?;
             (value, None)
         };
-        if let Some(kind) = value.get("kind") {
-            bail!(
-                "{}: `kind: {}` resources cannot be applied yet; only Workflow Definitions can",
-                path.display(),
-                kind.as_str().unwrap_or("?")
-            );
-        }
+        // Resources are checked here, since no route validates them without applying them.
+        let queue = match value.get("kind") {
+            None => None,
+            Some(_) => match Document::from_value(value.clone()) {
+                Ok(Document::Queue(queue)) => Some(queue),
+                Ok(Document::Workflow(_)) => unreachable!("a document with `kind` is a resource"),
+                Err(error) => bail!("{}: {error}", path.display()),
+            },
+        };
         let source = Self {
             path: path.to_owned(),
             value,
             yaml,
+            queue,
         };
-        if source.workflow_id().is_empty() {
+        if source.queue.is_none() && source.workflow_id().is_empty() {
             bail!("{}: the Definition has no string `id`", path.display());
         }
         Ok(source)

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- $1: message id, $2: the Lease's delivery, $3: when the visibility timeout now ends\nUPDATE messages\nSET visible_at = $3\nWHERE id = $1 AND deliveries = $2 AND claimed_by IS NOT NULL\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int4",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "26addc95a63dbc366f3552d9d0433aaecef1e0faa27a1045d215ccae15c2fc33"
+}

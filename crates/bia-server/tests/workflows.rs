@@ -3,12 +3,7 @@
 
 #![allow(clippy::unwrap_used)]
 
-use std::collections::BTreeSet;
-use std::sync::Arc;
-
 use bia_client::{Error, Scope, Target, VersionState};
-use bia_core::clock::ManualClock;
-use bia_server::{ApiConfig, QueueNames};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -335,43 +330,4 @@ async fn unknown_workflows_and_versions_are_not_found(pool: PgPool) {
         failure(client.get_version("greeter", 0).await),
         (StatusCode::BAD_REQUEST, "malformed_request".into())
     );
-}
-
-#[sqlx::test(migrator = "bia_store::MIGRATOR")]
-async fn publishing_checks_that_referenced_queues_exist(pool: PgPool) {
-    let clock = ManualClock::new(common::t0());
-    let queues = QueueNames(BTreeSet::new());
-    let state = common::state(pool, &clock, ApiConfig::default()).with_queues(Arc::new(queues));
-    let server = TestServer::bootstrapped(bia_server::router(state), clock).await;
-    let client = &server.client;
-    let mut consumer = definition("consumer", "hi");
-    consumer["triggers"] = json!([{ "id": "signups", "type": "queue", "queue": "signups" }]);
-    client.create_draft("consumer", &consumer).await.unwrap();
-
-    let draft = client
-        .validate_version("consumer", 1, Target::Draft)
-        .await
-        .unwrap();
-    assert!(draft.valid, "{draft:?}");
-    let Err(Error::Api { body, .. }) = client.publish_version("consumer", 1).await else {
-        panic!("publishing should fail");
-    };
-    assert_eq!(body.diagnostics[0].path, "/triggers/0/queue");
-}
-
-#[sqlx::test(migrator = "bia_store::MIGRATOR")]
-async fn a_configured_queue_directory_lets_a_definition_publish(pool: PgPool) {
-    let clock = ManualClock::new(common::t0());
-    let queues = QueueNames(BTreeSet::from(["signups".to_owned()]));
-    let state = common::state(pool, &clock, ApiConfig::default()).with_queues(Arc::new(queues));
-    let server = TestServer::bootstrapped(bia_server::router(state), clock).await;
-    let mut consumer = definition("consumer", "hi");
-    consumer["triggers"] = json!([{ "id": "signups", "type": "queue", "queue": "signups" }]);
-    server
-        .client
-        .create_draft("consumer", &consumer)
-        .await
-        .unwrap();
-
-    server.client.publish_version("consumer", 1).await.unwrap();
 }

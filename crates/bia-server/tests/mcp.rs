@@ -185,6 +185,14 @@ async fn workflow_and_version_reads_return_their_endpoints(pool: PgPool) {
         ok(mcp, "list_workflows", json!({})).await,
         f.api("/v1/workflows").await
     );
+    f.server
+        .client
+        .put_queue("emails", &bia_client::QueueSettings::default())
+        .await
+        .unwrap();
+    let queues = ok(mcp, "list_queues", json!({})).await;
+    assert_eq!(queues["queues"][0]["name"], "emails");
+    assert_eq!(queues, f.api("/v1/queues").await);
     assert_eq!(
         ok(mcp, "get_workflow", json!({ "workflow_id": "greeter" })).await,
         f.api("/v1/workflows/greeter").await

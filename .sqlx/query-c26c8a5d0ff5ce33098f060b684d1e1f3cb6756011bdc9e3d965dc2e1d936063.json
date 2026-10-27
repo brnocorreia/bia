@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Deletes up to $2 dead letters, oldest first.\n-- $1: delete only those dead-lettered before this, $2: limit\nDELETE FROM messages\nWHERE id IN (\n    SELECT id\n    FROM messages\n    WHERE dead_lettered_at < $1\n    ORDER BY dead_lettered_at\n    LIMIT $2\n    FOR UPDATE SKIP LOCKED\n)\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c26c8a5d0ff5ce33098f060b684d1e1f3cb6756011bdc9e3d965dc2e1d936063"
+}

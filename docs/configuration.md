@@ -28,7 +28,7 @@ A file key `section.name` is the variable `BIA_SECTION_NAME`. Durations are a wh
 | `scheduler.poll_interval` | `BIA_SCHEDULER_POLL_INTERVAL` | `1s` | How often a scheduler fires due cron Triggers and checks whether it leads. It bounds how late an occurrence fires and how long another scheduler takes over after the leader dies. |
 | `run.retention_days` | `BIA_RUN_RETENTION_DAYS` | `90` | Days succeeded and cancelled Runs are kept after they finish, at least 1. Past it the leading scheduler deletes them with their Timelines and Jobs. Unfinished Runs are never deleted. |
 | `run.failed_retention_days` | `BIA_RUN_FAILED_RETENTION_DAYS` | `90` | Days failed Runs are kept after they finish, at least 1, independently of `run.retention_days`. |
-| `dead_letter.retention_days` | `BIA_DEAD_LETTER_RETENTION_DAYS` | `90` | Days Messages stay in a Dead-Letter Queue, at least 1. It takes effect once Queues exist. |
+| `dead_letter.retention_days` | `BIA_DEAD_LETTER_RETENTION_DAYS` | `90` | Days a Message is kept once it is dead-lettered, at least 1. |
 | `limits.max_steps_per_run` | `BIA_LIMITS_MAX_STEPS_PER_RUN` | `10000` | Most Steps one Run may take up, at least 1. A Step counts once each time the Run reaches it; retries do not count again. Past it the Run fails with `run_step_limit_exceeded`. |
 | `limits.max_iterations` | `BIA_LIMITS_MAX_ITERATIONS` | `10000` | Most iterations one loop may run, `flow.foreach` items included, at least 1. Past it the loop's Step fails with `iteration_limit_exceeded`. |
 | `limits.max_subworkflow_depth` | `BIA_LIMITS_MAX_SUBWORKFLOW_DEPTH` | `8` | How many levels of `flow.subworkflow` may nest below a Run; `0` forbids Subworkflows. Past it the Step fails with `subworkflow_depth_exceeded`. |

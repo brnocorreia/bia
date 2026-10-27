@@ -22,7 +22,10 @@ mod trigger;
 pub use duration::{Duration, DurationUnit, InvalidDuration};
 pub use ids::{ActionName, InvalidName, QueueName, StepId, TriggerId, WorkflowId};
 pub use parse::{ParseError, ParseErrorKind, yaml_to_json};
-pub use queue::{QueueKind, QueueResource};
+pub use queue::{
+    DEFAULT_BATCH_SIZE, DEFAULT_MAX_RETRIES, MAX_BATCH_SIZE, QueueKind, QueueResource,
+    default_visibility_timeout,
+};
 pub use schema::{definition_schema, queue_resource_schema};
 pub(crate) use step::BLOCK_ACTIONS;
 pub use step::{

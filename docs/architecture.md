@@ -58,7 +58,7 @@ Every route but the probes, `/openapi.json` and bootstrapping needs a Token whos
 
 1. A Trigger fires (Schedule, Message, webhook, manual, Event), and the server or the scheduler creates a Run pinned to the Active Version, plus a Job to advance it, in one transaction.
 2. A Worker claims the Job under a Lease, loads the Checkpoint and executes the Step at the Cursor: it resolves Templates and Secrets, calls the Action with the Idempotency Key and enforces the timeout.
-3. In one transaction, the Worker writes the Attempt to the Timeline, updates the Checkpoint and Cursor, completes the Job and enqueues the next Job (or a delayed Job for `sleep`/retry backoff, or nothing while waiting for an Event). Each Job makes one transition: starting the Run (checking its input against the `input_schema`) or one Attempt of one Step (ADR-0032). The Timeline entry shape is ADR-0033.
+3. In one transaction, the Worker writes the Attempt to the Timeline, updates the Checkpoint and Cursor, publishes the Messages of a `queue.publish` Step (ADR-0058), completes the Job and enqueues the next Job (or a delayed Job for `sleep`/retry backoff, or nothing while waiting for an Event). Each Job makes one transition: starting the Run (checking its input against the `input_schema`) or one Attempt of one Step (ADR-0032). The Timeline entry shape is ADR-0033.
 4. Run statuses: `pending → running → (sleeping | waiting) → running → succeeded | failed | cancelled`.
 
 A failed Run can be resumed from the Step that failed, or retried as a new Run on the same Version and input, linked to the original (ADR-0045).
@@ -69,7 +69,7 @@ Cancellation sets a flag on the Run that Postgres announces to Workers, which al
 
 - `GET /v1/schema`: DSL JSON Schema plus the Action catalogue (name, description, param schema, output schema, examples).
 - `GET /openapi.json`: the OpenAPI document of every endpoint, also committed as `crates/bia-server/openapi.json` (`just openapi` rewrites it, and a test fails when it drifts). Every failure has one error body: a stable `code`, a `message`, and the Diagnostics when a Definition was at fault. Routes, codes and the error body follow ADR-0042.
-- MCP tools mirror the API, each calling one endpoint with the caller's own Token (ADR-0048): `get_schema`, `list_actions`, `list_workflows`, `get_workflow`, `list_versions`, `get_version`, `validate_workflow`, `create_draft`, `replace_draft`, `dry_run`, `diff_versions`, `trigger_run`, `get_run`, `list_runs`, `list_failures`, `retry_run`, `resume_run`, `cancel_run`. `send_event` and `list_queues` join when their endpoints exist. Publishing and activation are admin-only (ADR-0008) and have no tool.
+- MCP tools mirror the API, each calling one endpoint with the caller's own Token (ADR-0048): `get_schema`, `list_actions`, `list_workflows`, `get_workflow`, `list_versions`, `get_version`, `validate_workflow`, `create_draft`, `replace_draft`, `dry_run`, `diff_versions`, `trigger_run`, `get_run`, `list_runs`, `list_failures`, `retry_run`, `resume_run`, `cancel_run`, `list_secrets`, `list_queues`. `send_event` joins when its endpoint exists. Publishing and activation are admin-only (ADR-0008) and have no tool.
 
 ## UI
 

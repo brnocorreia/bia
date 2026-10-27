@@ -66,6 +66,11 @@ enum Command {
     /// Speaks MCP on stdin and stdout for a local client such as Claude Code, forwarding to the
     /// server's `/mcp` endpoint with the Token in `BIA_TOKEN`.
     Mcp,
+    /// Creates, lists and deletes Queues, and lists their Messages.
+    Queue {
+        #[command(subcommand)]
+        command: api::QueueCommand,
+    },
     /// Sets, lists and deletes Secrets. No command shows a value.
     Secret {
         #[command(subcommand)]
@@ -149,6 +154,9 @@ async fn main() -> anyhow::Result<ExitCode> {
         }
         Command::Workflow { command } => {
             api::workflow(&api_context(&cli.config, &cli.url, cli.json)?, command).await
+        }
+        Command::Queue { command } => {
+            api::queue(&api_context(&cli.config, &cli.url, cli.json)?, command).await
         }
         Command::Secret { command } => {
             api::secret(&api_context(&cli.config, &cli.url, cli.json)?, command).await

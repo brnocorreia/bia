@@ -16,15 +16,19 @@ use std::fmt;
 use std::sync::Arc;
 
 use bia_core::action::flow::{self, Control};
+use bia_core::action::queue;
 use bia_core::action::{
     ActionCall, ActionError, ActionRegistry, CancellationToken, IdempotencyKey, Lookup, Output,
     RunContext,
 };
 use bia_core::clock::Clock;
-use bia_core::dsl::{Branch, Definition, Params, RetryPolicy, Step, StepKind, WorkflowId};
+use bia_core::dsl::{
+    Branch, Definition, Params, QueueName, RetryPolicy, Step, StepKind, WorkflowId,
+};
 use bia_core::expression::{self, Scope, Template, resolve_params};
 use bia_core::validation::schema_violations;
 use bia_store::job::{Claimed, JobRepository, Lease, NewJob, PgJobRepository};
+use bia_store::queue::{PgQueueRepository, QueueRepository};
 use bia_store::run::{Checkpoint, NewRun, PgRunRepository, Run, RunId, RunRepository, RunStatus};
 use bia_store::timeline::{
     AttemptStatus, NewTimelineEntry, PgTimelineRepository, StepAttempt, TimelineRepository,
@@ -106,6 +110,15 @@ struct Transition {
     entry: Option<NewTimelineEntry>,
     next_job_at: Option<DateTime<Utc>>,
     at: DateTime<Utc>,
+    /// Messages a `queue.*` Step publishes, committed with the transition (ADR-0058).
+    publish: Option<Pending>,
+}
+
+/// Messages to publish once the Attempt that asked for them commits.
+struct Pending {
+    queue: QueueName,
+    bodies: Vec<Value>,
+    visible_at: DateTime<Utc>,
 }
 
 struct Started<'a> {
@@ -145,6 +158,8 @@ fn is_flow(name: &str) -> bool {
 struct Attempted {
     input: Option<Value>,
     outcome: Outcome,
+    /// Set only when the Attempt succeeded.
+    publish: Option<Pending>,
 }
 
 enum Outcome {
@@ -286,6 +301,7 @@ impl Interpreter {
             }),
             next_job_at: None,
             at: now,
+            publish: None,
         }
     }
 
@@ -307,6 +323,7 @@ impl Interpreter {
                 }),
                 next_job_at: None,
                 at: now,
+                publish: None,
             };
         }
         self.at(Cursor::start(definition), RunState::default(), None, now)
@@ -372,7 +389,11 @@ impl Interpreter {
                 Ok(self.control(run, definition, started, state, params))
             }
             _ => {
-                let Attempted { input, outcome } = self
+                let Attempted {
+                    input,
+                    outcome,
+                    publish,
+                } = self
                     .attempt(run, step, started.attempt, &state, cancel)
                     .await;
                 Ok(match outcome {
@@ -384,7 +405,10 @@ impl Interpreter {
                         entry.input = input;
                         entry.output = Some(output.clone());
                         state.outputs.insert(step.id.as_str().to_owned(), output);
-                        self.advance_past(definition, started.cursor, state, entry)
+                        let mut transition =
+                            self.advance_past(definition, started.cursor, state, entry);
+                        transition.publish = publish;
+                        transition
                     }
                     Outcome::Failed(failure) => self.fail_step(started, state, input, failure),
                     Outcome::Cancelled => self.cancel_step(started, state, input),
@@ -551,6 +575,7 @@ impl Interpreter {
             entry: None,
             next_job_at: Some(until),
             at: now,
+            publish: None,
         }
     }
 
@@ -571,6 +596,7 @@ impl Interpreter {
                 entry: None,
                 next_job_at: Some(sleep.until()),
                 at: now,
+                publish: None,
             };
         }
         started.started_at = sleep.started_at();
@@ -628,6 +654,7 @@ impl Interpreter {
             entry: Some(entry),
             next_job_at,
             at: finished_at,
+            publish: None,
         }
     }
 
@@ -649,6 +676,7 @@ impl Interpreter {
             entry: Some(entry),
             next_job_at: None,
             at: finished_at,
+            publish: None,
         }
     }
 
@@ -670,6 +698,7 @@ impl Interpreter {
             entry,
             next_job_at: (!finished).then_some(at),
             at,
+            publish: None,
         }
     }
 
@@ -686,6 +715,7 @@ impl Interpreter {
             _ => {
                 return Attempted {
                     input: None,
+                    publish: None,
                     outcome: Outcome::Failed(Failure::raised(
                         FailureCode::UnsupportedStep,
                         ActionError::fatal(format!(
@@ -700,6 +730,7 @@ impl Interpreter {
         let fail = |input: Option<Value>, code, error| Attempted {
             input,
             outcome: Outcome::Failed(Failure::raised(code, error)),
+            publish: None,
         };
 
         let action = match self.actions.lookup(action.as_str()) {
@@ -722,6 +753,23 @@ impl Interpreter {
             }
         };
 
+        let publishes =
+            queue::Publish::from_params(action.descriptor().name.as_str(), params).is_some();
+        if publishes && let Some(name) = secrets_read(params).into_iter().next() {
+            // A Message is stored as published and readable through the API, so it must never
+            // hold a Secret.
+            let message = format!(
+                "`{}` cannot read Secrets, such as `secrets.{name}`: Messages are stored and \
+                 readable as published",
+                action.descriptor().name
+            );
+            return fail(
+                written,
+                FailureCode::InvalidParams,
+                ActionError::fatal(message),
+            );
+        }
+
         let mut scope = scope(run, attempt, state);
         let mut masker = Masker::default();
         for name in secrets_read(params) {
@@ -742,6 +790,7 @@ impl Interpreter {
                     return Attempted {
                         input: written,
                         outcome: Outcome::Failed(Failure::from_action(error)),
+                        publish: None,
                     };
                 }
             }
@@ -792,8 +841,19 @@ impl Interpreter {
             action = %action.descriptor().name,
             "attempt started"
         );
+        let mut publish = None;
         let outcome = match self.mocked(step, action.descriptor(), attempt) {
             Some(outcome) => outcome,
+            None if publishes => {
+                let name = action.descriptor().name.as_str();
+                match self.prepare_publish(name, &call.params).await {
+                    Ok((output, pending)) => {
+                        publish = Some(pending);
+                        Outcome::Succeeded(output)
+                    }
+                    Err(failure) => Outcome::Failed(failure),
+                }
+            }
             None => self.call(&*action, call, timeout, cancel).await,
         };
         let outcome = match outcome {
@@ -807,7 +867,66 @@ impl Interpreter {
         Attempted {
             input: recorded,
             outcome,
+            publish,
         }
+    }
+
+    /// Checks what a `queue.*` Step asks to publish and returns its Output, with the Messages
+    /// for [`commit`](Self::commit) to publish.
+    async fn prepare_publish(
+        &self,
+        action: &str,
+        params: &Params,
+    ) -> Result<(Output, Pending), Failure> {
+        let invalid = |error| Failure::raised(FailureCode::InvalidParams, error);
+        let publish = match queue::Publish::from_params(action, params) {
+            Some(Ok(publish)) => publish,
+            Some(Err(error)) => return Err(invalid(error)),
+            None => unreachable!("only queue Actions are prepared for publishing"),
+        };
+        let exists = async {
+            let mut conn = self.pool.acquire().await?;
+            PgQueueRepository.get(&mut conn, &publish.queue).await
+        };
+        match exists.await {
+            Ok(Some(_)) => {}
+            Ok(None) => {
+                let message = format!("Queue '{}' does not exist", publish.queue);
+                return Err(Failure::raised(
+                    FailureCode::UnknownQueue,
+                    ActionError::fatal(message),
+                ));
+            }
+            Err(error) => {
+                tracing::warn!(%error, "cannot look up a Queue to publish to");
+                return Err(Failure::from_action(ActionError::retryable(format!(
+                    "cannot look up Queue '{}'",
+                    publish.queue
+                ))));
+            }
+        }
+        let now = self.clock.now();
+        let delay = publish.delay.map_or(Some(TimeDelta::zero()), |delay| {
+            TimeDelta::try_milliseconds(i64::try_from(delay.as_millis()).ok()?)
+        });
+        let Some(visible_at) = delay.and_then(|delay| now.checked_add_signed(delay)) else {
+            return Err(invalid(ActionError::fatal(
+                "the delay ends beyond the dates a timestamp can hold",
+            )));
+        };
+        let output = json!({
+            "queue": publish.queue.as_str(),
+            "published": publish.bodies.len(),
+            "visible_at": visible_at.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true),
+        });
+        Ok((
+            output,
+            Pending {
+                queue: publish.queue,
+                bodies: publish.bodies,
+                visible_at,
+            },
+        ))
     }
 
     async fn call(
@@ -882,6 +1001,17 @@ impl Interpreter {
         if let Some(run_at) = transition.next_job_at {
             PgJobRepository
                 .enqueue(&mut tx, &NewJob::advance_run(run, run_at))
+                .await?;
+        }
+        if let Some(pending) = &transition.publish {
+            PgQueueRepository
+                .publish(
+                    &mut tx,
+                    &pending.queue,
+                    &pending.bodies,
+                    pending.visible_at,
+                    transition.at,
+                )
                 .await?;
         }
         tx.commit().await?;
