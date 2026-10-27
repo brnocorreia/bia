@@ -8,6 +8,7 @@ use std::sync::Arc;
 use axum::Router;
 use bia_client::{CreatedToken, NewToken, Scope, WebhookBinding};
 use bia_core::action::flow::Flow;
+use bia_core::action::queue::QueueAction;
 use bia_core::action::testing::FakeAction;
 use bia_core::action::{
     Action, ActionExample, ActionRegistry, CancellationToken, Effect, InMemoryRegistry,
@@ -168,8 +169,8 @@ pub fn state(pool: PgPool, clock: &ManualClock, config: ApiConfig) -> ApiState {
     ApiState::new(pool, Arc::new(registry()), Arc::new(clock.clone())).with_config(config)
 }
 
-/// The flow Actions, `test.echo` with schemas and an example, and a disabled dangerous
-/// side-effecting `test.shell`.
+/// The flow and queue Actions, `test.echo` with schemas and an example, and a disabled
+/// dangerous side-effecting `test.shell`.
 pub fn registry() -> InMemoryRegistry {
     let mut registry = InMemoryRegistry::new();
     let echo = FakeAction::new("test.echo").with_descriptor(|d| {
@@ -194,7 +195,10 @@ pub fn registry() -> InMemoryRegistry {
     let flow = Flow::all()
         .into_iter()
         .map(|action| Arc::new(action) as Arc<dyn Action>);
-    for action in actions.into_iter().chain(flow) {
+    let queue = QueueAction::all()
+        .into_iter()
+        .map(|action| Arc::new(action) as Arc<dyn Action>);
+    for action in actions.into_iter().chain(flow).chain(queue) {
         registry.register(action).unwrap();
     }
     registry

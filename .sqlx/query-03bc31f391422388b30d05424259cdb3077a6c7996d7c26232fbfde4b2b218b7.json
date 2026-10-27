@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Moves Messages that exhausted their retries to their Queue's Dead-Letter Queue as new rows,\n-- so a Lease on the old row can never ack the dead letter; without a Dead-Letter Queue they\n-- stay where they are and are never delivered again. The caller holds the rows' locks.\n-- $1: message ids, $2: now, $3: error to record, or NULL to keep the last one\nWITH dead AS (\n    SELECT messages.id, queues.dead_letter\n    FROM messages\n    JOIN queues ON queues.name = messages.queue\n    WHERE messages.id = ANY($1)\n),\nkept AS (\n    UPDATE messages\n    SET visible_at = NULL,\n        claimed_by = NULL,\n        last_error = coalesce($3, messages.last_error),\n        dead_lettered_at = $2,\n        dead_lettered_from = messages.queue\n    FROM dead\n    WHERE messages.id = dead.id AND dead.dead_letter IS NULL\n    RETURNING messages.id\n),\nmoved AS (\n    DELETE FROM messages\n    USING dead\n    WHERE messages.id = dead.id AND dead.dead_letter IS NOT NULL\n    RETURNING messages.id, messages.queue, messages.body, messages.published_at,\n              messages.last_error, dead.dead_letter\n)\nINSERT INTO messages (queue, body, published_at, visible_at, last_error, dead_lettered_at,\n                      dead_lettered_from)\nSELECT dead_letter, body, published_at, $2, coalesce($3, last_error), $2, queue\nFROM moved\nORDER BY id\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8Array",
+        "Timestamptz",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "03bc31f391422388b30d05424259cdb3077a6c7996d7c26232fbfde4b2b218b7"
+}

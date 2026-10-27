@@ -71,6 +71,24 @@ impl Duration {
     pub fn to_std(self) -> std::time::Duration {
         std::time::Duration::from_millis(self.as_millis())
     }
+
+    /// `millis` in the largest unit that divides it evenly, so `90000` is `90s` and `60000`
+    /// is `1m`.
+    pub fn from_millis(millis: u64) -> Self {
+        let unit = [
+            DurationUnit::Days,
+            DurationUnit::Hours,
+            DurationUnit::Minutes,
+            DurationUnit::Seconds,
+        ]
+        .into_iter()
+        .find(|unit| millis != 0 && millis.is_multiple_of(unit.millis()))
+        .unwrap_or(DurationUnit::Milliseconds);
+        Self {
+            amount: millis / unit.millis(),
+            unit,
+        }
+    }
 }
 
 impl PartialEq for Duration {

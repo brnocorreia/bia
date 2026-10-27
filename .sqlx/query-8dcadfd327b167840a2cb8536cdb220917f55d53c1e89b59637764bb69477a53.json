@@ -1,0 +1,141 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- $1: queue, $2: consumer, $3: now, $4: how many to claim, $5: when the deliveries' visibility\n-- timeout ends, $6: max retries\n-- SKIP LOCKED leaves Messages another consumer is taking right now to that consumer, so no\n-- Message is delivered to two consumers at once.\nWITH due AS MATERIALIZED (\n    SELECT id\n    FROM messages\n    WHERE queue = $1\n      AND visible_at <= $3\n      AND (claimed_by IS NULL OR deliveries <= $6)\n    ORDER BY visible_at, id\n    LIMIT $4\n    FOR UPDATE SKIP LOCKED\n)\nUPDATE messages\nSET deliveries = deliveries + 1, claimed_by = $2, visible_at = $5\nFROM due\nWHERE messages.id = due.id\nRETURNING messages.id, queue, body, published_at, visible_at, deliveries, claimed_by,\n          last_error, dead_lettered_at, dead_lettered_from\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "queue",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "queue"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "body",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "body"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "published_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "published_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "visible_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "visible_at"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "deliveries",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "deliveries"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "claimed_by",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "claimed_by"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "last_error",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "last_error"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "dead_lettered_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "dead_lettered_at"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "dead_lettered_from",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "dead_lettered_from"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Timestamptz",
+        "Int8",
+        "Timestamptz",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "8dcadfd327b167840a2cb8536cdb220917f55d53c1e89b59637764bb69477a53"
+}

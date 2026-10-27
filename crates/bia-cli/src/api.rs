@@ -9,8 +9,11 @@ use std::path::PathBuf;
 
 use anyhow::{Context, bail};
 use bia_client::{
-    Client, DryRunReport, Error, Run, RunQuery, RunStatus, RunSummary, Target, Version,
-    VersionState,
+    Client, DryRunReport, Error, MessageQuery, Queue, QueueSettings, Run, RunQuery, RunStatus,
+    RunSummary, Target, Version, VersionState,
+};
+use bia_core::dsl::{
+    DEFAULT_BATCH_SIZE, DEFAULT_MAX_RETRIES, Duration, QueueResource, default_visibility_timeout,
 };
 use bia_core::validation::Diagnostic;
 use chrono::{DateTime, Utc};
@@ -40,9 +43,11 @@ pub(crate) enum WorkflowCommand {
     /// Prints a Version with its Definition as JSON.
     Get { workflow: String, version: i32 },
     /// Saves Definition files as Drafts: replaces the Workflow's latest Draft, or creates a
-    /// new one. Directories are searched recursively for .json, .yaml and .yml files.
+    /// new one. Directories are searched recursively for .json, .yaml and .yml files. Files
+    /// with `kind: queue` create or replace their Queue first, so the Definitions see it.
+    /// Needs an `admin` Token for Queues.
     Apply {
-        /// Files or directories of Definitions.
+        /// Files or directories of Definitions and Queue resources.
         #[arg(short = 'f', long = "file", required = true, num_args = 1.., value_name = "PATH")]
         files: Vec<PathBuf>,
         /// Also publishes each Draft. Needs an `admin` Token.
@@ -174,6 +179,45 @@ pub(crate) enum RunCommand {
 }
 
 #[derive(Debug, Subcommand)]
+pub(crate) enum QueueCommand {
+    /// Lists Queues with their settings.
+    List,
+    /// Shows one Queue's settings.
+    Get { name: String },
+    /// Creates a Queue or replaces all of its settings: a setting not given takes its
+    /// default. Needs an `admin` Token.
+    Set {
+        name: String,
+        /// Deliveries after the first before a Message is dead-lettered (default 3).
+        #[arg(long)]
+        max_retries: Option<u32>,
+        /// How long a delivered Message stays hidden, e.g. `30s` (the default).
+        #[arg(long, value_name = "DURATION")]
+        visibility_timeout: Option<String>,
+        /// Messages a consumer receives at once, 1 to 100 (default 10).
+        #[arg(long)]
+        batch_size: Option<u32>,
+        /// The existing Queue that receives Messages which exhausted their retries.
+        #[arg(long, value_name = "QUEUE")]
+        dead_letter: Option<String>,
+    },
+    /// Deletes a Queue and its Messages. Needs an `admin` Token.
+    Delete { name: String },
+    /// Lists a Queue's Messages, oldest first.
+    Messages {
+        name: String,
+        /// Only dead letters.
+        #[arg(long)]
+        dead_letters: bool,
+        #[arg(long)]
+        limit: Option<u32>,
+        /// The `next_after` of the previous page.
+        #[arg(long)]
+        after: Option<i64>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
 pub(crate) enum SecretCommand {
     /// Creates a Secret or replaces its value. The value is read from standard input, or from
     /// `--file`, never from an argument that `ps` would show; one trailing newline is dropped.
@@ -207,6 +251,116 @@ pub(crate) async fn run(ctx: &Ctx, command: RunCommand) -> bool {
 
 pub(crate) async fn secret(ctx: &Ctx, command: SecretCommand) -> bool {
     finish(ctx, secret_command(ctx, command).await)
+}
+
+pub(crate) async fn queue(ctx: &Ctx, command: QueueCommand) -> bool {
+    finish(ctx, queue_command(ctx, command).await)
+}
+
+async fn queue_command(ctx: &Ctx, command: QueueCommand) -> anyhow::Result<bool> {
+    let client = &ctx.client;
+    match command {
+        QueueCommand::List => {
+            let queues = client.list_queues().await?;
+            emit(ctx, &json!({ "queues": queues }), || {
+                let rows: Vec<_> = queues.iter().map(queue_row).collect();
+                render::table(
+                    &["QUEUE", "RETRIES", "VISIBILITY", "BATCH", "DEAD LETTER"],
+                    &rows,
+                )
+            })?;
+        }
+        QueueCommand::Get { name } => {
+            let queue = client.get_queue(&name).await?;
+            emit(ctx, &queue, || describe_queue(&queue))?;
+        }
+        QueueCommand::Set {
+            name,
+            max_retries,
+            visibility_timeout,
+            batch_size,
+            dead_letter,
+        } => {
+            let settings = QueueSettings {
+                max_retries,
+                visibility_timeout,
+                batch_size,
+                dead_letter,
+            };
+            let queue = client.put_queue(&name, &settings).await?;
+            emit(ctx, &queue, || format!("set queue {}\n", queue.name))?;
+        }
+        QueueCommand::Delete { name } => {
+            client.delete_queue(&name).await?;
+            emit(ctx, &json!({ "deleted": name }), || {
+                format!("deleted queue {name}\n")
+            })?;
+        }
+        QueueCommand::Messages {
+            name,
+            dead_letters,
+            limit,
+            after,
+        } => {
+            let query = MessageQuery {
+                dead_letters: dead_letters.then_some(true),
+                after,
+                limit,
+            };
+            let page = client.list_messages(&name, &query).await?;
+            emit(ctx, &page, || {
+                let rows: Vec<_> = page
+                    .messages
+                    .iter()
+                    .map(|message| {
+                        let state = match (&message.dead_lettered_at, message.in_flight) {
+                            (Some(_), _) => "dead letter",
+                            (None, true) => "in flight",
+                            (None, false) => "waiting",
+                        };
+                        vec![
+                            message.id.to_string(),
+                            state.to_owned(),
+                            message.deliveries.to_string(),
+                            render::time(message.published_at),
+                            message.body.to_string(),
+                        ]
+                    })
+                    .collect();
+                let mut out = render::table(
+                    &["MESSAGE", "STATE", "DELIVERIES", "PUBLISHED", "BODY"],
+                    &rows,
+                );
+                if let Some(after) = page.next_after {
+                    out.push_str(&format!("more: --after {after}\n"));
+                }
+                out
+            })?;
+        }
+    }
+    Ok(true)
+}
+
+fn queue_row(queue: &Queue) -> Vec<String> {
+    vec![
+        queue.name.clone(),
+        queue.max_retries.to_string(),
+        queue.visibility_timeout.clone(),
+        queue.batch_size.to_string(),
+        queue.dead_letter.clone().unwrap_or_else(|| "-".to_owned()),
+    ]
+}
+
+fn describe_queue(queue: &Queue) -> String {
+    format!(
+        "queue               {}\nmax retries         {}\nvisibility timeout  {}\nbatch size          {}\ndead letter         {}\nupdated             {}\n",
+        queue.name,
+        queue.max_retries,
+        queue.visibility_timeout,
+        queue.batch_size,
+        queue.dead_letter.as_deref().unwrap_or("-"),
+        render::time(queue.updated_at)
+    )
 }
 
 async fn secret_command(ctx: &Ctx, command: SecretCommand) -> anyhow::Result<bool> {
@@ -464,6 +618,15 @@ struct Applied {
     error: Option<ApiFailure>,
 }
 
+#[derive(Serialize)]
+struct AppliedQueue {
+    file: String,
+    queue: String,
+    /// `created`, `updated`, `unchanged` or `failed`.
+    result: &'static str,
+    error: Option<ApiFailure>,
+}
+
 async fn apply(
     ctx: &Ctx,
     paths: &[PathBuf],
@@ -471,18 +634,128 @@ async fn apply(
     activate: bool,
 ) -> anyhow::Result<bool> {
     let sources = source::collect(paths)?;
-    let mut applied = Vec::new();
+    let (queues, definitions): (Vec<&Source>, Vec<&Source>) =
+        sources.iter().partition(|source| source.queue().is_some());
     let mut text = String::new();
-    for source in &sources {
+    let mut applied_queues = Vec::new();
+    for source in dead_letter_queues_first(queues) {
+        let outcome = apply_queue(&ctx.client, source).await?;
+        describe_applied_queue(&mut text, &outcome);
+        applied_queues.push(outcome);
+    }
+    let mut applied = Vec::new();
+    for source in definitions {
         let outcome = apply_one(&ctx.client, source, publish, activate).await?;
         describe_applied(&mut text, source, &outcome);
         applied.push(outcome);
     }
-    let success = applied
-        .iter()
-        .all(|a| a.result != "failed" && render::error_count(&a.diagnostics) == 0);
-    emit(ctx, &json!({ "applied": applied }), || text)?;
+    let success = applied_queues.iter().all(|a| a.result != "failed")
+        && applied
+            .iter()
+            .all(|a| a.result != "failed" && render::error_count(&a.diagnostics) == 0);
+    let report = if applied_queues.is_empty() {
+        json!({ "applied": applied })
+    } else {
+        json!({ "queues": applied_queues, "applied": applied })
+    };
+    emit(ctx, &report, || text)?;
     Ok(success)
+}
+
+/// Orders Queue files so that a Dead-Letter Queue declared among them is applied before the
+/// Queues that name it, which the API requires. Otherwise path order is kept.
+fn dead_letter_queues_first(mut pending: Vec<&Source>) -> Vec<&Source> {
+    let mut ordered = Vec::with_capacity(pending.len());
+    while !pending.is_empty() {
+        let waits = |source: &Source, pending: &[&Source]| {
+            let dead_letter = source.queue().and_then(|queue| queue.dead_letter.as_ref());
+            pending.iter().any(|other| {
+                let name = other.queue().map(|queue| &queue.name);
+                dead_letter.is_some() && name == dead_letter && !std::ptr::eq(*other, source)
+            })
+        };
+        // A cycle cannot be ordered; the API then reports the missing Queue.
+        let next = pending
+            .iter()
+            .position(|source| !waits(source, &pending))
+            .unwrap_or(0);
+        ordered.push(pending.remove(next));
+    }
+    ordered
+}
+
+/// Creates or replaces one Queue; a refusal by the API is part of the outcome.
+async fn apply_queue(client: &Client, source: &Source) -> anyhow::Result<AppliedQueue> {
+    let Some(queue) = source.queue() else {
+        unreachable!("only Queue files are applied as Queues");
+    };
+    let name = queue.name.as_str();
+    let mut applied = AppliedQueue {
+        file: source.path.display().to_string(),
+        queue: name.to_owned(),
+        result: "failed",
+        error: None,
+    };
+    let existing = match client.get_queue(name).await {
+        Ok(existing) => Some(existing),
+        Err(Error::Api { body, .. }) if body.code == "queue_not_found" => None,
+        Err(error) => return Err(error.into()),
+    };
+    if existing
+        .as_ref()
+        .is_some_and(|existing| same_settings(existing, queue))
+    {
+        applied.result = "unchanged";
+        return Ok(applied);
+    }
+    let settings = QueueSettings {
+        max_retries: queue.max_retries,
+        visibility_timeout: queue.visibility_timeout.map(|timeout| timeout.to_string()),
+        batch_size: queue.batch_size,
+        dead_letter: queue.dead_letter.as_ref().map(ToString::to_string),
+    };
+    match client.put_queue(name, &settings).await {
+        Ok(_) => {
+            applied.result = if existing.is_some() {
+                "updated"
+            } else {
+                "created"
+            };
+        }
+        Err(Error::Api { body, .. }) => {
+            applied.error = Some(ApiFailure {
+                code: body.code,
+                message: body.message,
+                diagnostics: body.diagnostics,
+            });
+        }
+        Err(error) => return Err(error.into()),
+    }
+    Ok(applied)
+}
+
+/// Whether `existing` already has the settings `declared` asks for, defaults included.
+fn same_settings(existing: &Queue, declared: &QueueResource) -> bool {
+    let visibility = declared
+        .visibility_timeout
+        .unwrap_or_else(default_visibility_timeout);
+    existing.max_retries == declared.max_retries.unwrap_or(DEFAULT_MAX_RETRIES)
+        && existing.batch_size == declared.batch_size.unwrap_or(DEFAULT_BATCH_SIZE)
+        && existing.visibility_timeout.parse::<Duration>().ok() == Some(visibility)
+        && existing.dead_letter.as_deref() == declared.dead_letter.as_ref().map(|q| q.as_str())
+}
+
+fn describe_applied_queue(out: &mut String, applied: &AppliedQueue) {
+    let AppliedQueue {
+        file, queue, error, ..
+    } = applied;
+    match error {
+        Some(error) => out.push_str(&format!(
+            "failed queue {queue} ({file}): {}: {}\n",
+            error.code, error.message
+        )),
+        None => out.push_str(&format!("{} queue {queue} ({file})\n", applied.result)),
+    }
 }
 
 fn describe_applied(out: &mut String, source: &Source, applied: &Applied) {
@@ -621,6 +894,9 @@ struct Validated {
     workflow: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     version: Option<i32>,
+    /// The Queue a `kind: queue` file declares, checked without the server.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    queue: Option<String>,
     valid: bool,
     diagnostics: Vec<Diagnostic>,
 }
@@ -631,6 +907,19 @@ async fn validate(ctx: &Ctx, subject: &Subject, target: Target) -> anyhow::Resul
     match subject.resolve()? {
         Resolved::Files(files) => {
             for source in files {
+                if let Some(queue) = source.queue() {
+                    // It parsed when the file was read, which is all a Queue file can fail.
+                    results.push(Validated {
+                        file: Some(source.path.display().to_string()),
+                        workflow: None,
+                        version: None,
+                        queue: Some(queue.name.to_string()),
+                        valid: true,
+                        diagnostics: Vec::new(),
+                    });
+                    sources.push(Some(source));
+                    continue;
+                }
                 let report = ctx.client.validate_definition(&source.value, target).await;
                 let (valid, diagnostics) = match report {
                     Ok(report) => (report.valid, report.diagnostics),
@@ -644,6 +933,7 @@ async fn validate(ctx: &Ctx, subject: &Subject, target: Target) -> anyhow::Resul
                     file: Some(source.path.display().to_string()),
                     workflow: Some(source.workflow_id().to_owned()),
                     version: None,
+                    queue: None,
                     valid,
                     diagnostics,
                 });
@@ -659,6 +949,7 @@ async fn validate(ctx: &Ctx, subject: &Subject, target: Target) -> anyhow::Resul
                 file: None,
                 workflow: Some(workflow),
                 version: Some(version),
+                queue: None,
                 valid: report.valid,
                 diagnostics: report.diagnostics,
             });
@@ -707,6 +998,12 @@ async fn dry_run(
                 );
             }
             let source = files.remove(0);
+            if source.queue().is_some() {
+                bail!(
+                    "{} is a Queue resource; a Dry Run takes a Workflow Definition",
+                    source.path.display()
+                );
+            }
             match ctx
                 .client
                 .dry_run_definition(&source.value, &input, &mocks)

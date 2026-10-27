@@ -1,6 +1,6 @@
 //! Run retention deletes finished Runs with their Timelines and Jobs once they are past their
-//! retention, keeps failed Runs on a retention of their own, and never touches unfinished
-//! Runs (ADR-0021, ADR-0041).
+//! retention, keeps failed Runs on a retention of their own, never touches unfinished Runs, and
+//! deletes dead letters on a retention of their own (ADR-0021, ADR-0041).
 
 #![allow(clippy::unwrap_used)]
 
@@ -9,9 +9,10 @@ use std::time::Duration;
 
 use bia_core::action::CancellationToken;
 use bia_core::clock::ManualClock;
-use bia_core::dsl::{ActionName, Definition, StepId, WorkflowId};
+use bia_core::dsl::{ActionName, Definition, QueueName, StepId, WorkflowId};
 use bia_engine::{Chore, Retention, RetentionConfig, Scheduler, SchedulerConfig, start_run};
 use bia_store::job::{JobRepository, PgJobRepository};
+use bia_store::queue::{MessageFilter, PgQueueRepository, QueueRepository, QueueSettings};
 use bia_store::run::{Checkpoint, PgRunRepository, RunId, RunRepository, RunStatus};
 use bia_store::timeline::{
     AttemptStatus, NewTimelineEntry, PgTimelineRepository, StepAttempt, TimelineRepository,
@@ -225,6 +226,79 @@ async fn a_backlog_is_deleted_in_batches_over_several_runs(pool: PgPool) {
 
     h.retain(config, t0() + days(100)).await;
     assert!(h.deleted(runs[4]).await);
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn dead_letters_are_deleted_once_past_their_own_retention(pool: PgPool) {
+    let queue = |name| QueueName::new(name).unwrap();
+    let queues = PgQueueRepository;
+    let mut conn = pool.acquire().await.unwrap();
+    let no_retries = QueueSettings {
+        max_retries: 0,
+        ..QueueSettings::default()
+    };
+    for name in ["emails-dlq", "emails"] {
+        let settings = QueueSettings {
+            dead_letter: (name == "emails").then(|| queue("emails-dlq")),
+            ..no_retries.clone()
+        };
+        queues
+            .put(&mut conn, &queue(name), &settings, t0())
+            .await
+            .unwrap();
+    }
+    let bodies = [json!("dead on day 0"), json!("dead on day 5")];
+    for (day, body) in [0, 5].into_iter().zip(bodies) {
+        let at = t0() + days(day);
+        queues
+            .publish(&mut conn, &queue("emails"), &[body], at, at)
+            .await
+            .unwrap();
+        let delivered = queues
+            .claim(&mut conn, &queue("emails"), "consumer", 10, at)
+            .await
+            .unwrap();
+        let backoff = bia_store::job::Backoff::default();
+        queues
+            .nack(&mut conn, &delivered[0].lease, "bounced", &backoff, at)
+            .await
+            .unwrap();
+    }
+    queues
+        .publish(&mut conn, &queue("emails"), &[json!("waiting")], t0(), t0())
+        .await
+        .unwrap();
+    let left = |queue_name| MessageFilter {
+        queue: queue(queue_name),
+        dead_letters: None,
+        after: None,
+        limit: 10,
+    };
+    let config = RetentionConfig {
+        dead_letters: days(14),
+        ..RetentionConfig::default()
+    };
+
+    Retention::new(config)
+        .run(&pool, t0() + days(15))
+        .await
+        .unwrap();
+
+    let dead = queues
+        .list_messages(&mut conn, &left("emails-dlq"))
+        .await
+        .unwrap();
+    assert_eq!(dead.len(), 1);
+    assert_eq!(dead[0].body, json!("dead on day 5"));
+    let waiting = queues
+        .list_messages(&mut conn, &left("emails"))
+        .await
+        .unwrap();
+    assert_eq!(
+        waiting.len(),
+        1,
+        "a Message that is not a dead letter is kept"
+    );
 }
 
 #[sqlx::test(migrator = "bia_store::MIGRATOR")]

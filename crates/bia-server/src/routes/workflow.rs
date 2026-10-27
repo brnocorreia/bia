@@ -7,6 +7,7 @@ use axum::http::StatusCode;
 use bia_core::dsl::{Definition, WorkflowId};
 use bia_core::validation::{Diagnostic, KnownResources, Target, Validator};
 use bia_store::StoreError;
+use bia_store::queue::{PgQueueRepository, QueueRepository};
 use bia_store::version::{
     PgVersionRepository, Version, VersionNumber, VersionRepository, VersionState,
 };
@@ -360,7 +361,7 @@ pub(crate) async fn validate_version(
     let number = version_number(number)?;
     let mut conn = acquire(&state).await?;
     let version = existing_version(&mut conn, &workflow_id, number).await?;
-    let resources = known_resources(&state, &mut conn).await?;
+    let resources = known_resources(&mut conn).await?;
     let diagnostics =
         validator(&state, target(query.target), &resources).validate(&version.definition);
     Ok(Json(report(diagnostics)))
@@ -390,7 +391,7 @@ pub(crate) async fn validate_definition(
     Json(body): Json<Value>,
 ) -> Result<Json<ValidationReport>, ApiError> {
     let mut conn = acquire(&state).await?;
-    let resources = known_resources(&state, &mut conn).await?;
+    let resources = known_resources(&mut conn).await?;
     let found = validator(&state, target(query.target), &resources).validate_value(body);
     Ok(Json(report(found.diagnostics)))
 }
@@ -433,7 +434,7 @@ pub(crate) async fn publish_version(
             number,
         }));
     }
-    let resources = known_resources(&state, &mut tx).await?;
+    let resources = known_resources(&mut tx).await?;
     let diagnostics = validator(&state, Target::Publish, &resources).validate(&draft.definition);
     if diagnostics.iter().any(Diagnostic::is_error) {
         return Err(ApiError::invalid_definition(diagnostics));
@@ -546,7 +547,7 @@ async fn parse(
     workflow_id: &WorkflowId,
     body: Value,
 ) -> Result<(Definition, Vec<Diagnostic>), ApiError> {
-    let resources = known_resources(state, conn).await?;
+    let resources = known_resources(conn).await?;
     let found = validator(state, Target::Draft, &resources).validate_value(body);
     let Some(definition) = found.definition else {
         return Err(ApiError::invalid_definition(found.diagnostics));
@@ -572,12 +573,15 @@ pub(super) fn validator<'a>(
     Validator::new(target, state.actions.as_ref(), resources)
 }
 
-pub(super) async fn known_resources(
-    state: &ApiState,
-    conn: &mut PgConnection,
-) -> Result<KnownResources, ApiError> {
+pub(super) async fn known_resources(conn: &mut PgConnection) -> Result<KnownResources, ApiError> {
     let mut known = KnownResources::new();
-    known.queues = state.queues.names().await;
+    known.queues = PgQueueRepository
+        .list(conn)
+        .await
+        .map_err(store_error)?
+        .into_iter()
+        .map(|queue| queue.name.as_str().to_owned())
+        .collect();
     known.workflows = workflows()
         .list(conn)
         .await

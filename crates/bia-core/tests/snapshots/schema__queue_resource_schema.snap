@@ -25,23 +25,24 @@ expression: queue_resource_schema()
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "A Queue declared as a resource file (ADR-0015).",
+  "description": "A Queue declared as a resource file (ADR-0015). Every setting is optional; applying the\nfile again replaces all of them, so a setting left out goes back to its default.",
   "properties": {
     "batch_size": {
-      "description": "How many Messages a consumer receives at once.",
+      "description": "How many Messages a consumer receives at once, at most 100. Default 10.",
       "format": "uint32",
+      "maximum": 100,
       "minimum": 1,
       "type": "integer"
     },
     "dead_letter": {
       "$ref": "#/$defs/QueueName",
-      "description": "Queue that receives Messages which exhausted their retries."
+      "description": "The Queue that receives Messages which exhausted their retries. It must exist before\nthis Queue names it. Without one, exhausted Messages stay in this Queue as dead\nletters and are not delivered again."
     },
     "kind": {
       "$ref": "#/$defs/QueueKind"
     },
     "max_retries": {
-      "description": "Deliveries a Message gets before it moves to the Dead-Letter Queue.",
+      "description": "How many more times a Message is delivered after its first delivery fails or is not\nacked within the visibility timeout, before it moves to the Dead-Letter Queue. Default\n3; `0` dead-letters a Message after one failed delivery.",
       "format": "uint32",
       "minimum": 0,
       "type": "integer"
@@ -51,7 +52,7 @@ expression: queue_resource_schema()
     },
     "visibility_timeout": {
       "$ref": "#/$defs/Duration",
-      "description": "How long a delivered Message stays hidden from other consumers."
+      "description": "How long a delivered Message stays hidden from other consumers before it is delivered\nagain, unless it is acked first. Default `30s`."
     }
   },
   "required": [

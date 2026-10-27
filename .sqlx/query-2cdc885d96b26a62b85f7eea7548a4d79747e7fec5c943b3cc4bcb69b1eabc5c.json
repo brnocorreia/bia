@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- The delivery a Lease holds, locked; none once the Message was claimed again, acked or\n-- dead-lettered.\n-- $1: message id, $2: the Lease's delivery\nSELECT messages.deliveries, queues.max_retries\nFROM messages\nJOIN queues ON queues.name = messages.queue\nWHERE messages.id = $1 AND messages.deliveries = $2 AND messages.claimed_by IS NOT NULL\nFOR UPDATE OF messages\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "deliveries",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "deliveries"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "max_retries",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "queues",
+            "name": "max_retries"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "2cdc885d96b26a62b85f7eea7548a4d79747e7fec5c943b3cc4bcb69b1eabc5c"
+}

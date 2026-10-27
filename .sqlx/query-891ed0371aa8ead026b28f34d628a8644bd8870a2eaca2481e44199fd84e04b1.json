@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- $1: queue, $2: bodies, $3: now, $4: when the Messages become claimable\nINSERT INTO messages (queue, body, published_at, visible_at)\nSELECT $1, body, $3, $4\nFROM unnest($2::jsonb[]) WITH ORDINALITY AS bodies (body, position)\nORDER BY position\nRETURNING id\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "JsonbArray",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "891ed0371aa8ead026b28f34d628a8644bd8870a2eaca2481e44199fd84e04b1"
+}

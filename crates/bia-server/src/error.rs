@@ -82,6 +82,12 @@ pub enum ErrorCode {
     SecretNotFound,
     /// The server has no `BIA_MASTER_KEY`, so it cannot store Secrets.
     MasterKeyMissing,
+    /// No Queue has this name.
+    QueueNotFound,
+    /// The Queue's `dead_letter` names a Queue that does not exist; create that one first.
+    DeadLetterQueueNotFound,
+    /// Another Queue names this one as its `dead_letter`, so it cannot be deleted.
+    QueueInUse,
     /// The server cannot serve requests yet: the database is unreachable or migrations are
     /// pending.
     NotReady,

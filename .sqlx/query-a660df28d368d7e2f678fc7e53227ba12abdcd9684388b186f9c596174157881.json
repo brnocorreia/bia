@@ -1,0 +1,98 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT name, max_retries, visibility_timeout_ms, batch_size, dead_letter, created_at, updated_at\nFROM queues\nORDER BY name\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "queues",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "max_retries",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "queues",
+            "name": "max_retries"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "visibility_timeout_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "queues",
+            "name": "visibility_timeout_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "batch_size",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "queues",
+            "name": "batch_size"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "dead_letter",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "queues",
+            "name": "dead_letter"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "queues",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "queues",
+            "name": "updated_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "a660df28d368d7e2f678fc7e53227ba12abdcd9684388b186f9c596174157881"
+}

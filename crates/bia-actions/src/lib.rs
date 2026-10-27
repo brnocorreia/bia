@@ -26,7 +26,10 @@ pub fn builtin_registry() -> Result<InMemoryRegistry, BuiltinError> {
     let flow = bia_core::action::flow::Flow::all()
         .into_iter()
         .map(|action| Arc::new(action) as Arc<dyn Action>);
-    for action in actions.into_iter().chain(flow) {
+    let queue = bia_core::action::queue::QueueAction::all()
+        .into_iter()
+        .map(|action| Arc::new(action) as Arc<dyn Action>);
+    for action in actions.into_iter().chain(flow).chain(queue) {
         registry
             .register(action)
             .expect("builtin Actions have distinct names");

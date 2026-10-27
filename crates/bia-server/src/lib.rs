@@ -31,7 +31,6 @@ mod cors;
 mod error;
 mod extract;
 mod mcp;
-mod resources;
 mod routes;
 #[cfg(feature = "ui")]
 mod ui;
@@ -40,7 +39,6 @@ pub use auth::BootstrapKey;
 pub use cors::{CorsOrigins, InvalidOrigin};
 pub use error::{ApiError, ErrorBody, ErrorCode};
 pub use extract::{Json, Path, Query};
-pub use resources::{QueueDirectory, QueueNames};
 
 /// What every handler shares.
 #[derive(Clone)]
@@ -48,7 +46,6 @@ pub struct ApiState {
     pool: PgPool,
     actions: Arc<dyn ActionRegistry>,
     clock: Arc<dyn Clock>,
-    queues: Arc<dyn QueueDirectory>,
     config: Arc<ApiConfig>,
 }
 
@@ -67,15 +64,8 @@ impl ApiState {
             pool,
             actions,
             clock,
-            queues: Arc::new(QueueNames::default()),
             config: Arc::default(),
         }
-    }
-
-    /// Where validation looks up the Queues a Definition names.
-    pub fn with_queues(mut self, queues: Arc<dyn QueueDirectory>) -> Self {
-        self.queues = queues;
-        self
     }
 
     pub fn with_config(mut self, config: ApiConfig) -> Self {
@@ -145,6 +135,13 @@ fn documented() -> OpenApiRouter<ApiState> {
             routes::secret::put_secret,
             routes::secret::delete_secret
         ))
+        .routes(routes!(routes::queue::list_queues))
+        .routes(routes!(
+            routes::queue::get_queue,
+            routes::queue::put_queue,
+            routes::queue::delete_queue
+        ))
+        .routes(routes!(routes::queue::list_messages))
         .routes(routes!(routes::workflow::list_workflows))
         .routes(routes!(routes::workflow::get_workflow))
         .routes(routes!(

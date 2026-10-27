@@ -65,6 +65,17 @@ never returned by any tool, and no tool sets or deletes a Secret. Maps to `GET /
         build: |_| Ok(get("/v1/secrets".into(), None)),
     },
     ToolDef {
+        name: "list_queues",
+        description: "Lists every Queue with its settings: `max_retries`, `visibility_timeout`, \
+`batch_size` and `dead_letter`. A Step publishes to one with `queue.publish` or \
+`queue.publish_batch`, and a `queue` Trigger consumes one; both must name an existing Queue, \
+since Queues are never created on first use and no tool creates one (ask a human with an \
+`admin` Token). Maps to `GET /v1/queues`.",
+        read_only: true,
+        schema: || object(json!({}), &[]),
+        build: |_| Ok(get("/v1/queues".into(), None)),
+    },
+    ToolDef {
         name: "get_workflow",
         description: "Shows one Workflow and which Version is Active. Fails with \
 `workflow_not_found` when it does not exist. Maps to `GET /v1/workflows/{workflow_id}`.",

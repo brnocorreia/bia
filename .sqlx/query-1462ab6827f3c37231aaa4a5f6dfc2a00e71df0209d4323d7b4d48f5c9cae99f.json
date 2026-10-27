@@ -1,0 +1,139 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- A Queue's Messages, oldest first. Every filter but the Queue is optional.\n-- $1: queue, $2: only dead letters (true) or only others (false), $3: after this id, $4: limit\nSELECT id, queue, body, published_at, visible_at, deliveries, claimed_by, last_error,\n       dead_lettered_at, dead_lettered_from\nFROM messages\nWHERE queue = $1\n  AND ($2::boolean IS NULL OR (dead_lettered_at IS NOT NULL) = $2)\n  AND ($3::bigint IS NULL OR id > $3)\nORDER BY id\nLIMIT $4\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "queue",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "queue"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "body",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "body"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "published_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "published_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "visible_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "visible_at"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "deliveries",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "deliveries"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "claimed_by",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "claimed_by"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "last_error",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "last_error"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "dead_lettered_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "dead_lettered_at"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "dead_lettered_from",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "dead_lettered_from"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bool",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "1462ab6827f3c37231aaa4a5f6dfc2a00e71df0209d4323d7b4d48f5c9cae99f"
+}

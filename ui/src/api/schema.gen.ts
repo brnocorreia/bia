@@ -79,6 +79,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/queues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every Queue with its settings. Needs an `admin` or `agent` Token: an agent writing a
+         *     Definition needs the names to publish to.
+         */
+        get: operations["list_queues"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/queues/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_queue"];
+        /**
+         * Creates the Queue, or replaces all of its settings. Needs an `admin` Token. Its Messages
+         *     are kept; new settings apply from their next delivery.
+         */
+        put: operations["put_queue"];
+        post?: never;
+        /**
+         * Deletes a Queue and its Messages. Needs an `admin` Token. Steps that publish to it then
+         *     fail with `unknown_queue`, and Definitions naming it can no longer be published.
+         */
+        delete: operations["delete_queue"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/queues/{name}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A Queue's Messages oldest first, dead letters included unless filtered out, paged with
+         *     `after` and `limit`. Needs an `admin` or `agent` Token.
+         */
+        get: operations["list_messages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/runs": {
         parameters: {
             query?: never;
@@ -692,7 +756,7 @@ export interface components {
          *     added, but renaming or removing one needs an ADR (ADR-0042).
          * @enum {string}
          */
-        ErrorCode: "route_not_found" | "method_not_allowed" | "malformed_request" | "request_too_large" | "invalid_definition" | "missing_token" | "invalid_token" | "insufficient_scope" | "token_not_found" | "bootstrap_disabled" | "already_bootstrapped" | "workflow_not_found" | "version_not_found" | "version_published" | "version_not_published" | "version_changed" | "workflow_id_mismatch" | "no_active_version" | "no_manual_trigger" | "invalid_run_input" | "invalid_mock" | "dry_run_too_long" | "run_not_found" | "run_finished" | "run_not_finished" | "run_not_resumable" | "webhook_not_found" | "missing_signature" | "invalid_signature" | "hmac_secret_unavailable" | "secret_not_found" | "master_key_missing" | "not_ready" | "internal_error";
+        ErrorCode: "route_not_found" | "method_not_allowed" | "malformed_request" | "request_too_large" | "invalid_definition" | "missing_token" | "invalid_token" | "insufficient_scope" | "token_not_found" | "bootstrap_disabled" | "already_bootstrapped" | "workflow_not_found" | "version_not_found" | "version_published" | "version_not_published" | "version_changed" | "workflow_id_mismatch" | "no_active_version" | "no_manual_trigger" | "invalid_run_input" | "invalid_mock" | "dry_run_too_long" | "run_not_found" | "run_finished" | "run_not_finished" | "run_not_resumable" | "webhook_not_found" | "missing_signature" | "invalid_signature" | "hmac_secret_unavailable" | "secret_not_found" | "master_key_missing" | "queue_not_found" | "dead_letter_queue_not_found" | "queue_in_use" | "not_ready" | "internal_error";
         /** @description A failed Run and the entry that failed it. */
         FailedRun: components["schemas"]["RunSummary"] & {
             failure?: components["schemas"]["TimelineEntryInfo"] | null;
@@ -705,6 +769,47 @@ export interface components {
             next_after?: string | null;
             /** @description Failed Runs, newest first. */
             runs: components["schemas"]["FailedRun"][];
+        };
+        /** @description One Message of a Queue. */
+        MessageInfo: {
+            body: unknown;
+            /**
+             * Format: date-time
+             * @description When it exhausted its retries; absent unless it is a dead letter.
+             */
+            dead_lettered_at?: string | null;
+            /** @description The Queue it exhausted its retries in. */
+            dead_lettered_from?: string | null;
+            /**
+             * Format: int32
+             * @description Deliveries in this Queue so far.
+             */
+            deliveries: number;
+            /** Format: int64 */
+            id: number;
+            /** @description Whether a consumer holds it right now. */
+            in_flight: boolean;
+            /** @description Why the last delivery failed. */
+            last_error?: string | null;
+            /** Format: date-time */
+            published_at: string;
+            queue: string;
+            /**
+             * Format: date-time
+             * @description When a consumer can receive it next: after its delay or retry backoff, or once the
+             *     visibility timeout of the delivery holding it ends. Absent for a dead letter kept in a
+             *     Queue without a Dead-Letter Queue, which is not delivered again.
+             */
+            visible_at?: string | null;
+        };
+        MessageList: {
+            /** @description Oldest first. */
+            messages: components["schemas"]["MessageInfo"][];
+            /**
+             * Format: int64
+             * @description Pass as `after` for the next page; absent on the last page.
+             */
+            next_after?: number | null;
         };
         /**
          * @description What a Step returns in a Dry Run instead of calling its Action. Give exactly one of
@@ -739,10 +844,68 @@ export interface components {
             scope: components["schemas"]["ScopeName"];
             webhook?: components["schemas"]["WebhookBinding"] | null;
         };
+        /**
+         * @description A Queue's settings. Every field is optional and a field left out takes its default, so
+         *     putting a Queue again replaces all of its settings.
+         */
+        PutQueueRequest: {
+            /**
+             * Format: int32
+             * @description How many Messages a consumer receives at once, 1 to 100. Default 10.
+             */
+            batch_size?: number | null;
+            /**
+             * @description The Queue that receives Messages which exhausted their retries. It must already exist.
+             *     Without one, exhausted Messages stay in this Queue as dead letters.
+             * @example emails-dlq
+             */
+            dead_letter?: string | null;
+            /**
+             * Format: int32
+             * @description How many more times a Message is delivered after its first delivery fails or is not
+             *     acked in time, before it is dead-lettered. 0 to 1000; default 3.
+             */
+            max_retries?: number | null;
+            /**
+             * @description How long a delivered Message stays hidden from other consumers, a Duration such as
+             *     `30s`. Default `30s`.
+             * @example 30s
+             */
+            visibility_timeout?: string | null;
+        };
         /** @description The value of a Secret, to store. */
         PutSecretRequest: {
             /** @description Encrypted before it is stored and never returned by any route. At least one character. */
             value: string;
+        };
+        QueueDeleted: {
+            name: string;
+        };
+        /** @description A Queue and its settings. */
+        QueueInfo: {
+            /** Format: int32 */
+            batch_size: number;
+            /** Format: date-time */
+            created_at: string;
+            dead_letter?: string | null;
+            /** Format: int32 */
+            max_retries: number;
+            /** @example emails */
+            name: string;
+            /**
+             * Format: date-time
+             * @description When the settings were last put.
+             */
+            updated_at: string;
+            /**
+             * @description A Duration such as `30s`.
+             * @example 30s
+             */
+            visibility_timeout: string;
+        };
+        QueueList: {
+            /** @description Every Queue, ordered by name. */
+            queues: components["schemas"]["QueueInfo"][];
         };
         /** @description A Run with its input and its Timeline. */
         RunInfo: components["schemas"]["RunSummary"] & {
@@ -1215,6 +1378,292 @@ export interface operations {
             };
             /** @description `invalid_definition`, `invalid_mock` or `dry_run_too_long`. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_queues: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueList"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_queue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Queue's name. */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueInfo"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `queue_not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    put_queue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Lowercase letters, digits, `_` or `-`, starting with a letter; at most 64 characters. */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutQueueRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueInfo"];
+                };
+            };
+            /** @description `malformed_request`: the name or a setting is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `dead_letter_queue_not_found`: `dead_letter` names no Queue. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_queue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Queue's name. */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueDeleted"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `queue_not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `queue_in_use`: another Queue names it as its `dead_letter`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_messages: {
+        parameters: {
+            query?: {
+                /** @description `true` lists only dead letters, `false` only the other Messages. Both by default. */
+                dead_letters?: boolean;
+                /** @description Return the page after this Message id (a previous page's `next_after`). */
+                after?: number;
+                /** @description Page size, 1 to 200. Defaults to 50. */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The Queue's name. */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageList"];
+                };
+            };
+            /** @description `malformed_request`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `queue_not_found`. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

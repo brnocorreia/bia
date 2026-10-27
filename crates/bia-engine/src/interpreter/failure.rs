@@ -69,4 +69,6 @@ pub(crate) enum FailureCode {
     NoMock,
     /// The Action returned an Output larger than `max_output_bytes`; it was not stored.
     OutputLimitExceeded,
+    /// A `queue.*` Step names a Queue that does not exist (ADR-0015).
+    UnknownQueue,
 }

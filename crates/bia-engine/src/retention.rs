@@ -1,9 +1,11 @@
 //! Run retention (ADR-0021): a [`Chore`] that deletes Runs finished longer ago than their
-//! retention, with their Timelines and leftover Jobs. Succeeded and cancelled Runs follow one
-//! retention and failed Runs another, so failures can be kept longer for investigation
-//! (ADR-0041). Unfinished Runs are never deleted, however old.
+//! retention, with their Timelines and leftover Jobs, and dead letters dead-lettered longer
+//! ago than theirs. Succeeded and cancelled Runs follow one retention and failed Runs another,
+//! so failures can be kept longer for investigation (ADR-0041). Unfinished Runs are never
+//! deleted, however old.
 
 use bia_core::action::BoxFuture;
+use bia_store::queue::{PgQueueRepository, QueueRepository};
 use bia_store::run::{PgRunRepository, RunRepository, RunStatus};
 use chrono::{DateTime, TimeDelta, Utc};
 use sqlx::PgPool;
@@ -19,11 +21,12 @@ pub struct RetentionConfig {
     pub finished_runs: TimeDelta,
     /// How long failed Runs are kept after they finish.
     pub failed_runs: TimeDelta,
-    /// How long Messages stay in a Dead-Letter Queue. Nothing reads it until Queues are
-    /// stored.
+    /// How long a Message is kept once it is dead-lettered, in a Dead-Letter Queue or in its
+    /// own Queue when that has none.
     pub dead_letters: TimeDelta,
     pub interval: TimeDelta,
-    /// Runs deleted per transaction, which bounds how long one holds its locks.
+    /// Runs, or dead letters, deleted per transaction, which bounds how long one holds its
+    /// locks.
     pub batch_size: u32,
     /// Batches per retention kind in one run, so a backlog cannot hold up the scheduler; the
     /// rest waits for the next interval.
@@ -76,6 +79,29 @@ impl Retention {
         );
         Ok(deleted)
     }
+
+    async fn delete_dead_letters(
+        &self,
+        pool: &PgPool,
+        before: DateTime<Utc>,
+    ) -> Result<u64, EngineError> {
+        let mut deleted = 0;
+        for _ in 0..self.config.batches_per_run {
+            let mut conn = pool.acquire().await?;
+            let batch = PgQueueRepository
+                .delete_dead_letters(&mut conn, before, self.config.batch_size)
+                .await?;
+            deleted += batch;
+            if batch < u64::from(self.config.batch_size) {
+                return Ok(deleted);
+            }
+        }
+        tracing::info!(
+            deleted,
+            "more dead letters are past their retention; deleting them on the next run"
+        );
+        Ok(deleted)
+    }
 }
 
 impl Chore for Retention {
@@ -101,6 +127,12 @@ impl Chore for Retention {
                 .await?;
             if finished + failed > 0 {
                 tracing::info!(finished, failed, "runs past their retention deleted");
+            }
+            let dead_letters = self
+                .delete_dead_letters(pool, now - self.config.dead_letters)
+                .await?;
+            if dead_letters > 0 {
+                tracing::info!(dead_letters, "dead letters past their retention deleted");
             }
             Ok(())
         })

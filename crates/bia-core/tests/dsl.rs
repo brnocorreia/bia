@@ -400,6 +400,21 @@ fn durations_accept_every_unit() {
 }
 
 #[test]
+fn durations_from_milliseconds_take_the_largest_unit_that_fits_evenly() {
+    for (millis, text) in [
+        (0, "0ms"),
+        (1_500, "1500ms"),
+        (90_000, "90s"),
+        (60_000, "1m"),
+        (5_400_000, "90m"),
+        (86_400_000, "1d"),
+    ] {
+        assert_eq!(Duration::from_millis(millis).to_string(), text);
+        assert_eq!(Duration::from_millis(millis).as_millis(), millis);
+    }
+}
+
+#[test]
 fn durations_reject_malformed_strings() {
     let malformed = [
         "",

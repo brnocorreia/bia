@@ -262,6 +262,380 @@
         ]
       }
     },
+    "/v1/queues": {
+      "get": {
+        "tags": [
+          "queues"
+        ],
+        "summary": "Every Queue with its settings. Needs an `admin` or `agent` Token: an agent writing a\nDefinition needs the names to publish to.",
+        "operationId": "list_queues",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/v1/queues/{name}": {
+      "get": {
+        "tags": [
+          "queues"
+        ],
+        "operationId": "get_queue",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "The Queue's name.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueInfo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`queue_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "queues"
+        ],
+        "summary": "Creates the Queue, or replaces all of its settings. Needs an `admin` Token. Its Messages\nare kept; new settings apply from their next delivery.",
+        "operationId": "put_queue",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "Lowercase letters, digits, `_` or `-`, starting with a letter; at most 64 characters.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutQueueRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueInfo"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_request`: the name or a setting is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`dead_letter_queue_not_found`: `dead_letter` names no Queue.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "queues"
+        ],
+        "summary": "Deletes a Queue and its Messages. Needs an `admin` Token. Steps that publish to it then\nfail with `unknown_queue`, and Definitions naming it can no longer be published.",
+        "operationId": "delete_queue",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "The Queue's name.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueDeleted"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`queue_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`queue_in_use`: another Queue names it as its `dead_letter`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/v1/queues/{name}/messages": {
+      "get": {
+        "tags": [
+          "queues"
+        ],
+        "summary": "A Queue's Messages oldest first, dead letters included unless filtered out, paged with\n`after` and `limit`. Needs an `admin` or `agent` Token.",
+        "operationId": "list_messages",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "The Queue's name.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dead_letters",
+            "in": "query",
+            "description": "`true` lists only dead letters, `false` only the other Messages. Both by default.",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "description": "Return the page after this Message id (a previous page's `next_after`).",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, 1 to 200. Defaults to 50.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_request`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`queue_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
     "/v1/runs": {
       "get": {
         "tags": [
@@ -2704,6 +3078,9 @@
           "hmac_secret_unavailable",
           "secret_not_found",
           "master_key_missing",
+          "queue_not_found",
+          "dead_letter_queue_not_found",
+          "queue_in_use",
           "not_ready",
           "internal_error"
         ]
@@ -2752,6 +3129,94 @@
               "$ref": "#/components/schemas/FailedRun"
             },
             "description": "Failed Runs, newest first."
+          }
+        }
+      },
+      "MessageInfo": {
+        "type": "object",
+        "description": "One Message of a Queue.",
+        "required": [
+          "id",
+          "queue",
+          "body",
+          "published_at",
+          "deliveries",
+          "in_flight"
+        ],
+        "properties": {
+          "body": {},
+          "dead_lettered_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When it exhausted its retries; absent unless it is a dead letter."
+          },
+          "dead_lettered_from": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The Queue it exhausted its retries in."
+          },
+          "deliveries": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Deliveries in this Queue so far."
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "in_flight": {
+            "type": "boolean",
+            "description": "Whether a consumer holds it right now."
+          },
+          "last_error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the last delivery failed."
+          },
+          "published_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "queue": {
+            "type": "string"
+          },
+          "visible_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When a consumer can receive it next: after its delay or retry backoff, or once the\nvisibility timeout of the delivery holding it ends. Absent for a dead letter kept in a\nQueue without a Dead-Letter Queue, which is not delivered again."
+          }
+        }
+      },
+      "MessageList": {
+        "type": "object",
+        "required": [
+          "messages"
+        ],
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MessageInfo"
+            },
+            "description": "Oldest first."
+          },
+          "next_after": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Pass as `after` for the next page; absent on the last page."
           }
         }
       },
@@ -2804,6 +3269,47 @@
         },
         "additionalProperties": false
       },
+      "PutQueueRequest": {
+        "type": "object",
+        "description": "A Queue's settings. Every field is optional and a field left out takes its default, so\nputting a Queue again replaces all of its settings.",
+        "properties": {
+          "batch_size": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "How many Messages a consumer receives at once, 1 to 100. Default 10.",
+            "minimum": 0
+          },
+          "dead_letter": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The Queue that receives Messages which exhausted their retries. It must already exist.\nWithout one, exhausted Messages stay in this Queue as dead letters.",
+            "example": "emails-dlq"
+          },
+          "max_retries": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "How many more times a Message is delivered after its first delivery fails or is not\nacked in time, before it is dead-lettered. 0 to 1000; default 3.",
+            "minimum": 0
+          },
+          "visibility_timeout": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "How long a delivered Message stays hidden from other consumers, a Duration such as\n`30s`. Default `30s`.",
+            "example": "30s"
+          }
+        },
+        "additionalProperties": false
+      },
       "PutSecretRequest": {
         "type": "object",
         "description": "The value of a Secret, to store.",
@@ -2817,6 +3323,80 @@
           }
         },
         "additionalProperties": false
+      },
+      "QueueDeleted": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "QueueInfo": {
+        "type": "object",
+        "description": "A Queue and its settings.",
+        "required": [
+          "name",
+          "max_retries",
+          "visibility_timeout",
+          "batch_size",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "batch_size": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dead_letter": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "max_retries": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string",
+            "example": "emails"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the settings were last put."
+          },
+          "visibility_timeout": {
+            "type": "string",
+            "description": "A Duration such as `30s`.",
+            "example": "30s"
+          }
+        }
+      },
+      "QueueList": {
+        "type": "object",
+        "required": [
+          "queues"
+        ],
+        "properties": {
+          "queues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QueueInfo"
+            },
+            "description": "Every Queue, ordered by name."
+          }
+        }
       },
       "RunInfo": {
         "allOf": [

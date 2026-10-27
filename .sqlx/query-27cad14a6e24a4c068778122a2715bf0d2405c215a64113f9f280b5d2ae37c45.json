@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- $1: message id, $2: when it is claimable again, $3: error\nUPDATE messages\nSET claimed_by = NULL, visible_at = $2, last_error = $3\nWHERE id = $1\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Timestamptz",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "27cad14a6e24a4c068778122a2715bf0d2405c215a64113f9f280b5d2ae37c45"
+}

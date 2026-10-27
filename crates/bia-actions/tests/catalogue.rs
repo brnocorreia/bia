@@ -57,6 +57,8 @@ fn builtin_actions_are_enabled() {
             ("flow.sleep_until".to_owned(), true),
             ("flow.succeed".to_owned(), true),
             ("http.request".to_owned(), true),
+            ("queue.publish".to_owned(), true),
+            ("queue.publish_batch".to_owned(), true),
             ("transform.expr".to_owned(), true)
         ]
     );

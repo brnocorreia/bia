@@ -148,7 +148,7 @@ Only the cron Triggers of the Active Version fire. Activating another Version re
 
 ## Queue resources
 
-Queues are declared separately from Workflows (ADR-0015). A resource file is told apart from a Definition by its top-level `kind`; Definitions never have one (ADR-0025). Only `kind` and `name` are required.
+Queues are declared separately from Workflows (ADR-0015). A resource file is told apart from a Definition by its top-level `kind`; Definitions never have one (ADR-0025). Only `kind` and `name` are required. `bia workflow apply -f` applies Queue files before Definitions, and applying one again replaces all of its settings, so a setting left out goes back to its default.
 
 ```yaml
 kind: queue
@@ -158,6 +158,19 @@ visibility_timeout: 30s
 batch_size: 10
 dead_letter: emails-dlq
 ```
+
+| Field | Default | Meaning |
+|---|---|---|
+| `max_retries` | `3` | Deliveries after the first before a Message is dead-lettered, so a Message is delivered at most `max_retries + 1` times. |
+| `visibility_timeout` | `30s` | How long a delivered Message stays hidden from other consumers. One not acked by then is delivered again. |
+| `batch_size` | `10` | Messages a consumer receives at once, 1 to 100. |
+| `dead_letter` | none | The Dead-Letter Queue: an existing Queue that receives Messages which exhausted their retries. Without one, they stay in this Queue as dead letters and are not delivered again. |
+
+Dead letters are kept for `BIA_DEAD_LETTER_RETENTION_DAYS` (default 90). Storage and delivery semantics: ADR-0059.
+
+### Publishing
+
+`queue.publish` (`queue`, `body`, optional `delay`) adds one Message, and `queue.publish_batch` (`queue`, `bodies`, optional `delay`) adds 1 to 100 in order. A body is any JSON value of at most 256 KiB as compact JSON, and `delay` is a Duration during which the Messages cannot be claimed. Messages are published in the same transaction that records the Step's success, so a retried Attempt never publishes twice. The Output is `{ "queue", "published", "visible_at" }`. Params may not read `secrets.*`, since a Message is stored as published. A missing Queue fails the Step with the `fatal` code `unknown_queue`.
 
 ## Diagnostics
 

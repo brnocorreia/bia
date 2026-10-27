@@ -125,8 +125,9 @@ test("publishing a Draft with errors shows its Diagnostics", async ({
   await page.getByRole("dialog").getByRole("button", { name: "Publish" }).click();
 
   const diagnostics = page.getByRole("dialog").getByRole("list", { name: "Diagnostics" });
-  await expect(diagnostics).toContainText("/steps/0/action");
-  await expect(diagnostics).toContainText("unknown_action");
+  // A missing Queue is only a warning on a Draft, so it is publishing that fails.
+  await expect(diagnostics).toContainText("/steps/0/params/queue");
+  await expect(diagnostics).toContainText("unknown_queue");
   await expect(page.getByRole("row", { name: "Version 1" })).toContainText("Draft");
 });
 

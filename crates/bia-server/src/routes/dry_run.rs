@@ -126,7 +126,7 @@ pub(crate) async fn dry_run_version(
     let number = version_number(number)?;
     let mut conn = acquire(&state).await?;
     let version = existing_version(&mut conn, &workflow_id, number).await?;
-    let resources = known_resources(&state, &mut conn).await?;
+    let resources = known_resources(&mut conn).await?;
     let diagnostics = validator(&state, Target::Draft, &resources).validate(&version.definition);
     drop(conn);
     run(
@@ -160,7 +160,7 @@ pub(crate) async fn dry_run_definition(
     Json(request): Json<DefinitionDryRunRequest>,
 ) -> Result<Json<DryRunReport>, ApiError> {
     let mut conn = acquire(&state).await?;
-    let resources = known_resources(&state, &mut conn).await?;
+    let resources = known_resources(&mut conn).await?;
     let found = validator(&state, Target::Draft, &resources).validate_value(request.definition);
     drop(conn);
     let Some(definition) = found.definition else {

@@ -1,8 +1,9 @@
 //! The error every repository method returns.
 
-use bia_core::dsl::WorkflowId;
+use bia_core::dsl::{QueueName, WorkflowId};
 
 use crate::job::JobId;
+use crate::queue::MessageId;
 use crate::run::RunId;
 use crate::version::VersionNumber;
 
@@ -42,6 +43,18 @@ pub enum StoreError {
     /// was already acked or failed.
     #[error("lease on job {0} was lost")]
     LeaseLost(JobId),
+    #[error("queue `{0}` not found")]
+    QueueNotFound(QueueName),
+    /// A Queue names a Dead-Letter Queue that does not exist.
+    #[error("dead-letter queue `{0}` not found")]
+    DeadLetterQueueNotFound(QueueName),
+    /// Another Queue names this one as its Dead-Letter Queue, so it cannot be deleted.
+    #[error("queue `{0}` is another queue's dead-letter queue")]
+    QueueInUse(QueueName),
+    /// The delivery's Lease ended: the Message was delivered again after its visibility
+    /// timeout ran out, or was already acked, retried or dead-lettered.
+    #[error("lease on message {0} was lost")]
+    MessageLeaseLost(MessageId),
     /// A stored value this build cannot read back.
     #[error("stored {what} is invalid: {message}")]
     InvalidStoredData { what: &'static str, message: String },
