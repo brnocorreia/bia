@@ -52,7 +52,7 @@ Engine, scheduler and store read time from an injected `Clock` (ADR-0022), and w
 
 ## Access
 
-Every route but the probes, `/openapi.json` and bootstrapping needs a Token whose Scope the handler checks with an `Admin`, `Agent` or `Webhook` extractor (ADR-0008, ADR-0043). Tokens are stored as SHA-256 hashes. CORS allows only the configured origins.
+Every route but the probes, `/openapi.json` and bootstrapping needs a Token whose Scope the handler checks with an `Admin`, `Agent` or `Webhook` extractor (ADR-0008, ADR-0043). A webhook Trigger with `hmac` is the exception: its callers sign the body instead (ADR-0058). Tokens are stored as SHA-256 hashes. CORS allows only the configured origins.
 
 ## Run lifecycle
 

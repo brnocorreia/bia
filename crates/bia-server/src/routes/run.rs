@@ -559,7 +559,7 @@ fn manual_trigger<'a>(
     })
 }
 
-fn check_input(definition: &Definition, input: &Value) -> Result<(), ApiError> {
+pub(super) fn check_input(definition: &Definition, input: &Value) -> Result<(), ApiError> {
     let Some(schema) = &definition.input_schema else {
         return Ok(());
     };
@@ -686,7 +686,7 @@ pub(super) fn entry(entry: TimelineEntry) -> TimelineEntryInfo {
     }
 }
 
-fn engine_error(error: EngineError) -> ApiError {
+pub(super) fn engine_error(error: EngineError) -> ApiError {
     match error {
         EngineError::RunNotFound(id) | EngineError::Store(StoreError::RunNotFound(id)) => {
             run_not_found(id)
