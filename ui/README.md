@@ -14,7 +14,7 @@ pnpm dev          # http://localhost:5173
 
 The API URL comes from `config.json` at the site root, read at startup, so one build works everywhere. In development it is `public/config.json` (default `http://127.0.0.1:8080`); on a deployment, put your own `config.json` next to `index.html`. The site must be served from the root of its origin. An empty `apiUrl` means "the page's own origin". The API must allow the UI's origin in `BIA_CORS_ORIGINS`.
 
-Run an API for development with `just db-up`, `bia migrate`, then `bia serve` (set `BIA_BOOTSTRAP_KEY` and `BIA_CORS_ORIGINS=http://localhost:5173`), and mint a Token with `bia token create --bootstrap`.
+Run an API for development with `just db-up`, `bia migrate`, then `bia serve` (set `BIA_CORS_ORIGINS=http://localhost:5173` and `BIA_UI_URL=http://localhost:5173`), and open the Setup Link it logs to set the password and get an admin Token.
 
 ## Layout
 
@@ -41,7 +41,7 @@ pnpm check:api     # regenerates the API types and fails if they differ from the
 
 ## End-to-end tests
 
-Playwright drives a real `bia serve`. The global setup (`e2e/support/global-setup.ts`) drops and recreates a database, migrates it, starts `bia serve`, bootstraps an admin Token, and serves `dist/` with a `config.json` pointing at that server. `pnpm test:e2e` builds first. One-time: `pnpm exec playwright install chromium`.
+Playwright drives a real `bia serve`. The global setup (`e2e/support/global-setup.ts`) drops and recreates a database, migrates it, starts `bia serve`, reads the Setup Link from its logs, and serves `dist/` with a `config.json` pointing at that server. The `setup` project (`e2e/first-run.setup.ts`) then sets up the admin through the `/setup` page and leaves its Token in `e2e/.auth/` for the other tests, which depend on it. `pnpm test:e2e` builds first. One-time: `pnpm exec playwright install chromium`.
 
 | Variable               | Default                                     | Meaning                                                                                               |
 | ---------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------- |

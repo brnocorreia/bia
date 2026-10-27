@@ -1,9 +1,8 @@
-//! Tokens: created, listed and revoked by `admin`, and the first admin Token bootstrapped with
-//! the server's bootstrap key (ADR-0043). A Token's value is in the response that creates it
-//! and nowhere else.
+//! Tokens: created, listed and revoked by `admin` (ADR-0043). A Token's value is in the response
+//! that creates it and nowhere else.
 
 use axum::extract::State;
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::StatusCode;
 use bia_core::dsl::{TriggerId, WorkflowId};
 use bia_store::token::{NewToken, PgTokenRepository, Scope, Token, TokenId, TokenRepository};
 use chrono::{DateTime, Utc};
@@ -11,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::auth::{self, Admin, Agent, AuthErrors, TokenValue};
+use crate::auth::{Admin, Agent, AuthErrors, TokenValue};
 use crate::{ApiError, ApiState, ErrorBody, ErrorCode, Json, Path};
 
 const MAX_NAME_LEN: usize = 128;
@@ -48,14 +47,6 @@ pub(crate) struct NewTokenRequest {
     /// Required with the `webhook` Scope, and refused with any other.
     #[serde(default)]
     webhook: Option<WebhookBinding>,
-}
-
-#[derive(Debug, Deserialize, ToSchema)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct BootstrapRequest {
-    /// What the Token is for, e.g. `admin`.
-    #[schema(example = "admin")]
-    name: String,
 }
 
 /// A Token, without its value.
@@ -105,7 +96,7 @@ pub(crate) struct TokenList {
     )
 )]
 pub(crate) async fn create_token(
-    _: Admin,
+    Admin(caller): Admin,
     State(state): State<ApiState>,
     Json(request): Json<NewTokenRequest>,
 ) -> Result<(StatusCode, Json<CreatedToken>), ApiError> {
@@ -142,6 +133,7 @@ pub(crate) async fn create_token(
                 name,
                 hash,
                 scope,
+                user_id: caller.user_id,
                 created_at: state.clock.now(),
             },
         )
@@ -178,7 +170,7 @@ pub(crate) async fn list_tokens(
 }
 
 /// Revokes a Token at once; revoking it again changes nothing. Needs an `admin` Token, which
-/// may revoke itself. With every admin Token revoked, only bootstrapping can mint another.
+/// may revoke itself.
 #[utoipa::path(
     post,
     path = "/v1/tokens/{token_id}/revoke",
@@ -229,63 +221,6 @@ pub(crate) async fn current_token(Agent(token): Agent) -> Json<TokenInfo> {
     Json(token.into())
 }
 
-/// Mints the first admin Token of a fresh install, authenticated with the server's bootstrap
-/// key (`BIA_BOOTSTRAP_KEY`) instead of a Token. It refuses once an unrevoked admin Token
-/// exists, so the key cannot mint a second one; `bia token create --bootstrap` calls it.
-#[utoipa::path(
-    post,
-    path = "/v1/tokens/bootstrap",
-    tag = "tokens",
-    security(("bootstrap_key" = [])),
-    request_body = BootstrapRequest,
-    responses(
-        (status = CREATED, body = CreatedToken),
-        (status = UNAUTHORIZED, description = "No bootstrap key, or the wrong one; `code` is `missing_token` or `invalid_token`.", body = ErrorBody),
-        (status = FORBIDDEN, description = "`bootstrap_disabled`: the server has no bootstrap key.", body = ErrorBody),
-        (status = CONFLICT, description = "`already_bootstrapped`: an unrevoked admin Token exists.", body = ErrorBody),
-    )
-)]
-pub(crate) async fn bootstrap_token(
-    State(state): State<ApiState>,
-    headers: HeaderMap,
-    Json(request): Json<BootstrapRequest>,
-) -> Result<(StatusCode, Json<CreatedToken>), ApiError> {
-    let Some(key) = &state.config.bootstrap_key else {
-        return Err(ApiError::new(
-            StatusCode::FORBIDDEN,
-            ErrorCode::BootstrapDisabled,
-            "bootstrapping is off; start the server with BIA_BOOTSTRAP_KEY set",
-        ));
-    };
-    if !key.matches(auth::bearer(&headers)?) {
-        return Err(ApiError::new(
-            StatusCode::UNAUTHORIZED,
-            ErrorCode::InvalidToken,
-            "the bootstrap key is wrong",
-        ));
-    }
-    let name = token_name(request.name)?;
-    let (value, hash) = TokenValue::generate().map_err(|e| ApiError::internal(&e))?;
-    let mut conn = state
-        .pool
-        .acquire()
-        .await
-        .map_err(|e| ApiError::internal(&e))?;
-    let token = PgTokenRepository
-        .create_first_admin(&mut conn, &name, hash, state.clock.now())
-        .await
-        .map_err(|e| ApiError::internal(&e))?
-        .ok_or_else(|| {
-            ApiError::new(
-                StatusCode::CONFLICT,
-                ErrorCode::AlreadyBootstrapped,
-                "an admin Token exists; create Tokens with it through `POST /v1/tokens`",
-            )
-        })?;
-    tracing::warn!(token_id = %token.id, "bootstrapped the first admin token");
-    Ok(created(token, value))
-}
-
 fn token_name(name: String) -> Result<String, ApiError> {
     let name = name.trim();
     if name.is_empty() || name.chars().count() > MAX_NAME_LEN {
@@ -296,7 +231,7 @@ fn token_name(name: String) -> Result<String, ApiError> {
     Ok(name.to_owned())
 }
 
-fn created(token: Token, value: TokenValue) -> (StatusCode, Json<CreatedToken>) {
+pub(crate) fn created(token: Token, value: TokenValue) -> (StatusCode, Json<CreatedToken>) {
     (
         StatusCode::CREATED,
         Json(CreatedToken {

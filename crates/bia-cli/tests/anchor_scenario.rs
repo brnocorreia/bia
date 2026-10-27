@@ -19,7 +19,7 @@ use bia_client::Client;
 use bia_core::action::CancellationToken;
 use bia_core::clock::{Clock, ManualClock};
 use bia_engine::{InternalSecrets, Interpreter, Scheduler, SchedulerConfig, Worker, WorkerConfig};
-use bia_server::{ApiConfig, ApiState, BootstrapKey};
+use bia_server::{ApiConfig, ApiState, SetupCode};
 use bia_store::secret::MasterKey;
 use chrono::{DateTime, TimeDelta, Utc};
 use rmcp::ServiceExt;
@@ -35,7 +35,7 @@ use tokio::process::Command;
 use wiremock::matchers::path;
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 
-const BOOTSTRAP_KEY: &str = "anchor-bootstrap-key-0123456789abcdef";
+const PASSWORD: &str = "cli-test-password";
 const SECRET: &str = "uptime-token-7f3a9c1e5b2d4086";
 const POLL: TimeDelta = TimeDelta::seconds(1);
 
@@ -160,8 +160,9 @@ async fn an_agent_authors_an_admin_ships_cron_runs_it_and_the_agent_retries_the_
     let clock = ManualClock::new(start);
     let registry = Arc::new(bia_actions::builtin_registry().unwrap());
     let key = MasterKey::parse(&"0f".repeat(32)).unwrap();
+    let (setup_code, code) = SetupCode::generate().unwrap();
     let config = ApiConfig {
-        bootstrap_key: Some(BootstrapKey::new(BOOTSTRAP_KEY).unwrap()),
+        setup_code: Some(setup_code),
         master_key: Some(key.clone()),
         ..ApiConfig::default()
     };
@@ -195,9 +196,10 @@ async fn an_agent_authors_an_admin_ships_cron_runs_it_and_the_agent_retries_the_
     // Setup, as the quickstart does: the admin Token, the agent Token, the Secret.
     let admin = Client::new(&url)
         .unwrap()
-        .bootstrap_token(BOOTSTRAP_KEY, "admin")
+        .set_up(&code, PASSWORD)
         .await
         .unwrap()
+        .token
         .value;
     let created = bia(
         &url,

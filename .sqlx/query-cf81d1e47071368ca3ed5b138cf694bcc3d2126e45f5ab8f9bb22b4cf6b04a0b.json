@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Revokes every Token the User still has; already revoked ones keep their time.\n-- $1: user id, $2: now\nUPDATE tokens SET revoked_at = $2\nWHERE user_id = $1 AND revoked_at IS NULL\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cf81d1e47071368ca3ed5b138cf694bcc3d2126e45f5ab8f9bb22b4cf6b04a0b"
+}

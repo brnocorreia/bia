@@ -1,4 +1,5 @@
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { createInterface } from "node:readline";
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { preview } from "vite";
@@ -52,6 +53,23 @@ async function waitUntilReady(url: string, server: ChildProcess) {
   throw new Error(`bia serve did not become ready at ${url}`);
 }
 
+/** Passes the server's logs through, and resolves with the Setup Link it logs on a fresh database. */
+function logsSetupLink(server: ChildProcess): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const lines = createInterface({ input: server.stdout! });
+    lines.on("line", (line) => {
+      console.log(line);
+      try {
+        const link = (JSON.parse(line) as { fields?: { setup_link?: string } }).fields?.setup_link;
+        if (link) resolve(link);
+      } catch {
+        /* not a JSON log line */
+      }
+    });
+    lines.on("close", () => reject(new Error("bia serve exited without logging a Setup Link")));
+  });
+}
+
 export default async function globalSetup() {
   const env = e2eEnv();
   await recreateDatabase(env.databaseUrl);
@@ -61,26 +79,17 @@ export default async function globalSetup() {
     ...process.env,
     DATABASE_URL: env.databaseUrl,
     BIA_API_BIND: `127.0.0.1:${env.apiPort}`,
-    BIA_BOOTSTRAP_KEY: env.bootstrapKey,
     BIA_MASTER_KEY: env.masterKey,
     BIA_CORS_ORIGINS: env.uiUrl,
+    BIA_UI_URL: env.uiUrl,
+    BIA_LOG_FORMAT: "json",
   };
   execFileSync(bia, ["migrate"], { env: serverEnv, stdio: "inherit" });
-  const server = spawn(bia, ["serve"], { env: serverEnv, stdio: "inherit" });
+  const server = spawn(bia, ["serve"], { env: serverEnv, stdio: ["ignore", "pipe", "inherit"] });
+  const setupLink = logsSetupLink(server);
   await waitUntilReady(env.apiUrl, server);
-
-  const bootstrap = await fetch(`${env.apiUrl}/v1/tokens/bootstrap`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.bootstrapKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ name: "e2e-admin" }),
-  });
-  if (!bootstrap.ok)
-    throw new Error(`bootstrap failed: ${bootstrap.status} ${await bootstrap.text()}`);
-  // Workers inherit this, and fixtures read it.
-  process.env.BIA_E2E_ADMIN_TOKEN = ((await bootstrap.json()) as { value: string }).value;
+  // Workers inherit this; the setup project opens it to create the admin.
+  process.env.BIA_E2E_SETUP_LINK = await setupLink;
 
   // The binary serves the UI itself and its own `config.json`.
   if (env.embedded) return async () => void server.kill("SIGTERM");

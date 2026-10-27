@@ -12,7 +12,7 @@ use std::time::Duration;
 use bia_client::{Client, NewToken, Run, RunStatus, Scope};
 use bia_core::action::CancellationToken;
 use bia_engine::{InternalSecrets, Interpreter, Worker, WorkerConfig};
-use bia_server::{ApiConfig, ApiState, BootstrapKey};
+use bia_server::{ApiConfig, ApiState, SetupCode};
 use bia_store::SystemClock;
 use bia_store::secret::MasterKey;
 use serde_json::{Value, json};
@@ -23,7 +23,7 @@ use tokio::process::Command;
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 
-const BOOTSTRAP_KEY: &str = "cli-test-bootstrap-key-0123456789abcdef";
+const PASSWORD: &str = "cli-test-password";
 const SECRET: &str = "tok-7f3a9c1e5b2d4086";
 
 struct Harness {
@@ -42,8 +42,9 @@ impl Drop for Harness {
 async fn start(pool: PgPool) -> Harness {
     let registry = Arc::new(bia_actions::builtin_registry().unwrap());
     let key = MasterKey::parse(&"0f".repeat(32)).unwrap();
+    let (setup_code, code) = SetupCode::generate().unwrap();
     let config = ApiConfig {
-        bootstrap_key: Some(BootstrapKey::new(BOOTSTRAP_KEY).unwrap()),
+        setup_code: Some(setup_code),
         master_key: Some(key.clone()),
         ..ApiConfig::default()
     };
@@ -64,11 +65,7 @@ async fn start(pool: PgPool) -> Harness {
     tokio::spawn(async move { worker.run(stop).await.unwrap() });
 
     let anonymous = Client::new(&url).unwrap();
-    let admin = anonymous
-        .bootstrap_token(BOOTSTRAP_KEY, "admin")
-        .await
-        .unwrap()
-        .value;
+    let admin = anonymous.set_up(&code, PASSWORD).await.unwrap().token.value;
     Harness {
         client: anonymous.with_token(&admin),
         url,

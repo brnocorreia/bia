@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "-- Serialises creating the first admin Token until the transaction ends.\n-- $1: the advisory lock key\nSELECT pg_advisory_xact_lock($1)\n",
+  "query": "-- Serialises setup until the transaction ends.\n-- $1: the advisory lock key\nSELECT pg_advisory_xact_lock($1)\n",
   "describe": {
     "columns": [
       {
@@ -19,5 +19,5 @@
       null
     ]
   },
-  "hash": "59cdd00d678a5c1209cf2ca29aa9fe061cff34f6f4c515f48cdac5ee595c0f60"
+  "hash": "12f5c2ba9c129c54ee8a373b341816fa3c27e630b764ef878517f5bd619fcbfd"
 }

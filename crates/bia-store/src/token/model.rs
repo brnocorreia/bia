@@ -4,6 +4,8 @@ use bia_core::dsl::{TriggerId, WorkflowId};
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
+use crate::user::UserId;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TokenId(Uuid);
 
@@ -62,6 +64,7 @@ pub struct Token {
     pub id: TokenId,
     pub name: String,
     pub scope: Scope,
+    pub user_id: UserId,
     pub created_at: DateTime<Utc>,
     /// When the Token last authenticated a request, to the minute: recording every use would
     /// write on every request.
@@ -74,5 +77,7 @@ pub struct NewToken {
     pub name: String,
     pub hash: TokenHash,
     pub scope: Scope,
+    /// Who the Token acts for.
+    pub user_id: UserId,
     pub created_at: DateTime<Utc>,
 }

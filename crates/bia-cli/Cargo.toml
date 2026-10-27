@@ -35,6 +35,8 @@ sqlx.workspace = true
 tokio = { version = "1.53.3", features = ["macros", "rt-multi-thread", "signal", "io-std", "io-util", "sync"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
+rpassword = "7.5.4"
+url = "2.5.8"
 
 [dev-dependencies]
 bia-core = { workspace = true, features = ["testing"] }

@@ -48,11 +48,11 @@ Engine, scheduler and store read time from an injected `Clock` (ADR-0022), and w
 - A Worker runs claimed Jobs as concurrent tasks, heartbeats their Leases, and on SIGTERM stops claiming, waits a grace period, then releases the Leases of what did not finish (ADR-0036).
 - Any number of schedulers poll, and the one holding a Postgres advisory lock leads: it rebuilds the Schedules and queue Triggers of Workflows whose Active Version changed, fires due Schedules, each in one transaction that claims the Schedule row and creates the Run with its first Job, dispatches batches of Messages to new Runs the same way, and runs Chores such as Run retention. Firing, dispatching and each interval of a Chore stay exactly-once even if two schedulers briefly both lead (ADR-0039, ADR-0040, ADR-0041, ADR-0061).
 - `bia mcp` is a stdio → HTTP proxy for local MCP clients; the `api` Role serves `/mcp` (ADR-0048).
-- Every other subcommand is an API client (ADR-0007), `bia token create --bootstrap` included: it mints the first admin Token through the API with the bootstrap key `serve` was started with (ADR-0043).
+- Every other subcommand is an API client (ADR-0007), `bia setup` included: it sets up the User through `POST /v1/setup` with the code from the Setup Link `serve` logs. `bia serve --reset-admin` resets the User itself before serving (ADR-0062).
 
 ## Access
 
-Every route but the probes, `/openapi.json` and bootstrapping needs a Token whose Scope the handler checks with an `Admin`, `Agent` or `Webhook` extractor (ADR-0008, ADR-0043). A webhook Trigger with `hmac` is the exception: its callers sign the body instead (ADR-0058). Tokens are stored as SHA-256 hashes. CORS allows only the configured origins.
+Every route but the probes, `/openapi.json` and first-run setup needs a Token, which acts for a User and whose Scope the handler checks with an `Admin`, `Agent` or `Webhook` extractor (ADR-0008, ADR-0043). A webhook Trigger with `hmac` is the exception: its callers sign the body instead (ADR-0058). Tokens are stored as SHA-256 hashes. CORS allows only the configured origins.
 
 ## Run lifecycle
 

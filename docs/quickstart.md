@@ -11,23 +11,21 @@ cargo install --path crates/bia-cli --locked      # installs the `bia` binary
 docker compose up --detach --wait postgres        # Postgres on localhost:5432
 
 export DATABASE_URL=postgres://bia:bia@localhost:5432/bia
-export BIA_BOOTSTRAP_KEY="$(openssl rand -hex 32)"   # lets you mint the first admin Token
 export BIA_MASTER_KEY="$(openssl rand -hex 32)"      # encrypts Secrets; back it up
 
 bia migrate
 bia serve --role all
 ```
 
-`bia serve --role all` keeps running, so use a second terminal for the rest. Both keys are only read by the server. See [`configuration.md`](configuration.md) for every setting.
+`bia serve --role all` keeps running, so use a second terminal for the rest. The master key is only read by the server. On this fresh database the server logs a Setup Link, `http://localhost:8080/setup?code=…`: keep it for the next step. See [`configuration.md`](configuration.md) for every setting.
 
 ## 2. Create the Tokens
 
-In the second terminal, `BIA_URL` defaults to `http://127.0.0.1:8080`, so only `BIA_BOOTSTRAP_KEY` needs to be set again, with the value you exported for the server:
+In the second terminal, `BIA_URL` defaults to `http://127.0.0.1:8080`. `bia setup` asks for the Setup Link (or just its code) and a password of at least 12 characters, and prints the admin Token:
 
 ```sh
-export BIA_BOOTSTRAP_KEY=<the same value as in the first terminal>
-export BIA_TOKEN="$(bia token create --bootstrap --name admin)"    # the admin Token
-bia token create --name claude --scope agent                       # prints the agent Token once
+export BIA_TOKEN="$(bia setup)"                    # the admin Token
+bia token create --name claude --scope agent       # prints the agent Token once
 ```
 
 Keep the admin Token for yourself. Copy the agent Token's value (it starts with `bia_`) for the MCP client. An `agent` Token can author Drafts, validate, dry-run, trigger and read, but cannot publish or activate (ADR-0008).

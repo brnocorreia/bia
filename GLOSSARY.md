@@ -174,12 +174,21 @@ _Avoid_: timer, now
 One structured validation finding: JSON path, code, severity (error or warning), message and suggestion.
 _Avoid_: validation error (when it may be a warning), lint
 
+**User**:
+A person who signs in to bia and on whose behalf Tokens act. An install has one, the admin, created by first-run setup.
+_Avoid_: account, admin (for the row; "admin" is a Scope)
+
 **Token**:
-A credential for the API with a Scope, shown once when created and stored only as a hash.
+A credential for the API with a Scope, belonging to a User, shown once when created and stored only as a hash.
 _Avoid_: API key
 
-**Bootstrap Key**:
-The secret `bia serve` is started with that mints the first admin Token, and works only while no unrevoked admin Token exists.
+**Setup Link**:
+`{ui_url}/setup?code=<code>`, which `bia serve` logs while no User can sign in; its one-time code sets the User's password. A new code is made on every start.
+_Avoid_: invite, bootstrap link
+
+**Public URL**:
+The URL people reach the API at (`public_url`), and `ui_url` the one they reach the UI at; links the server hands out are built from them.
+_Avoid_: base URL, host
 
 **Scope**:
 What a Token may do: `admin` (everything), `agent` (author Drafts, dry-run, trigger, read; never publish or activate), `webhook` (start Runs from one webhook Trigger).

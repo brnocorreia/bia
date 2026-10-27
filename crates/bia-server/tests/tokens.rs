@@ -1,13 +1,9 @@
-//! Every request but the probes and bootstrapping is authenticated by a Token, whose Scope
+//! Every request but the probes and setup is authenticated by a Token, whose Scope
 //! decides which routes it reaches; Token values are shown once and stored only as hashes.
 
 #![allow(clippy::unwrap_used)]
 
-use std::sync::Arc;
-
 use bia_client::{Error, NewToken, Scope, WebhookBinding};
-use bia_core::clock::ManualClock;
-use bia_server::ApiState;
 use chrono::TimeDelta;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -15,7 +11,7 @@ use sqlx::PgPool;
 
 mod common;
 
-use common::{BOOTSTRAP_KEY, TestServer};
+use common::TestServer;
 
 /// The status and code of a failed call.
 fn failure<T: std::fmt::Debug>(result: Result<T, Error>) -> (StatusCode, String) {
@@ -243,69 +239,7 @@ async fn a_token_request_with_a_misplaced_or_missing_webhook_binding_is_malforme
 }
 
 #[sqlx::test(migrator = "bia_store::MIGRATOR")]
-async fn bootstrapping_mints_the_first_admin_token_only_while_none_is_unrevoked(pool: PgPool) {
-    let server = TestServer::without_tokens(pool).await;
-    let client = server.anonymous();
-
-    let wrong = client.bootstrap_token(&"x".repeat(40), "admin").await;
-    assert_eq!(
-        failure(wrong),
-        (StatusCode::UNAUTHORIZED, "invalid_token".into())
-    );
-    let first = client
-        .bootstrap_token(BOOTSTRAP_KEY, "admin")
-        .await
-        .unwrap();
-    assert_eq!(first.token.scope, Scope::Admin);
-    let admin = server.client_with(&first.value);
-    admin.list_tokens().await.unwrap();
-
-    let again = client.bootstrap_token(BOOTSTRAP_KEY, "second").await;
-    assert_eq!(
-        failure(again),
-        (StatusCode::CONFLICT, "already_bootstrapped".into())
-    );
-
-    // Once every admin Token is revoked, the bootstrap key is the way back in.
-    admin.revoke_token(first.token.id).await.unwrap();
-    let recovered = client
-        .bootstrap_token(BOOTSTRAP_KEY, "recovered")
-        .await
-        .unwrap();
-    let mut names: Vec<_> = server
-        .client_with(&recovered.value)
-        .list_tokens()
-        .await
-        .unwrap()
-        .into_iter()
-        .map(|token| (token.name, token.revoked_at.is_some()))
-        .collect();
-    names.sort();
-    assert_eq!(
-        names,
-        [("admin".to_owned(), true), ("recovered".to_owned(), false)]
-    );
-}
-
-#[sqlx::test(migrator = "bia_store::MIGRATOR")]
-async fn bootstrapping_is_disabled_without_a_bootstrap_key(pool: PgPool) {
-    let clock = ManualClock::new(common::t0());
-    let state = ApiState::new(pool, Arc::new(common::registry()), Arc::new(clock.clone()));
-    let server = TestServer::serve(bia_server::router(state), clock).await;
-
-    let result = server
-        .anonymous()
-        .bootstrap_token(BOOTSTRAP_KEY, "admin")
-        .await;
-
-    assert_eq!(
-        failure(result),
-        (StatusCode::FORBIDDEN, "bootstrap_disabled".into())
-    );
-}
-
-#[sqlx::test(migrator = "bia_store::MIGRATOR")]
-async fn every_route_but_the_probes_and_bootstrapping_needs_a_token(pool: PgPool) {
+async fn every_route_but_the_probes_and_setup_needs_a_token(pool: PgPool) {
     let server = TestServer::start(pool).await;
     let document = serde_json::to_value(bia_server::openapi()).unwrap();
     let http = reqwest::Client::new();
@@ -337,10 +271,7 @@ async fn every_route_but_the_probes_and_bootstrapping_needs_a_token(pool: PgPool
         }
     }
     public.sort();
-    assert_eq!(
-        public,
-        ["get /health", "get /ready", "post /v1/tokens/bootstrap"]
-    );
+    assert_eq!(public, ["get /health", "get /ready", "post /v1/setup"]);
 }
 
 #[sqlx::test(migrator = "bia_store::MIGRATOR")]

@@ -2,7 +2,7 @@
 //! environment. Naming and precedence are ADR-0037; the keys are listed in
 //! `docs/configuration.md`, which must follow any change to them.
 
-use std::net::{Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::num::{NonZeroU32, NonZeroU64, NonZeroUsize};
 use std::path::Path;
 use std::str::FromStr;
@@ -10,7 +10,7 @@ use std::str::FromStr;
 use anyhow::{Context, anyhow, bail};
 use bia_core::dsl::Duration;
 use bia_engine::{InterpreterConfig, RetentionConfig, RunLimits, SchedulerConfig, WorkerConfig};
-use bia_server::{ApiConfig, BootstrapKey, CorsOrigins};
+use bia_server::{ApiConfig, CorsOrigins};
 use bia_store::secret::MasterKey;
 use chrono::TimeDelta;
 use figment::Figment;
@@ -19,6 +19,7 @@ use figment::value::{Uncased, UncasedStr};
 use serde::Deserialize;
 use sqlx::postgres::PgConnectOptions;
 use tracing_subscriber::EnvFilter;
+use url::Url;
 
 const ENV_PREFIX: &str = "BIA_";
 const SECTIONS: [&str; 7] = [
@@ -31,11 +32,12 @@ const SECTIONS: [&str; 7] = [
     "limits",
 ];
 /// Every key the environment may set, as key paths.
-const KEYS: [&str; 20] = [
+const KEYS: [&str; 21] = [
     "database_url",
     "master_key",
     "cors_origins",
-    "bootstrap_key",
+    "public_url",
+    "ui_url",
     "api.bind",
     "worker.id",
     "worker.concurrency",
@@ -54,15 +56,17 @@ const KEYS: [&str; 20] = [
     "limits.max_output_bytes",
 ];
 
-// No `Debug`: the database URL usually carries a password, and `bootstrap_key` is a credential.
+// No `Debug`: the database URL usually carries a password, and `master_key` is a credential.
 #[derive(Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct Config {
     database_url: Option<String>,
     /// Browser origins allowed to call the API.
     cors_origins: Origins,
-    /// Lets `bia token create --bootstrap` mint the first admin Token.
-    bootstrap_key: Option<String>,
+    /// The URL people reach the API at; defaults to `http://<api.bind>` (ADR-0063).
+    public_url: Option<String>,
+    /// The URL the UI is served at; defaults to `public_url`.
+    ui_url: Option<String>,
     /// Encrypts Secrets: 64 hex digits.
     master_key: Option<String>,
     /// Read by the API commands (`ClientConfig`), which share this file.
@@ -307,6 +311,8 @@ impl Config {
             )
         })?;
         self.api_config()?;
+        self.public_url()?;
+        self.ui_url()?;
         Ok(())
     }
 
@@ -315,16 +321,10 @@ impl Config {
             .context("invalid configuration: `cors_origins`")?;
         // The message never echoes the key.
         let master_key = self.master_key()?;
-        let bootstrap_key = self
-            .bootstrap_key
-            .as_deref()
-            .map(BootstrapKey::new)
-            .transpose()
-            .context("invalid configuration: `bootstrap_key`")?;
         Ok(ApiConfig {
             cors_origins,
-            bootstrap_key,
             master_key,
+            ..ApiConfig::default()
         })
     }
 
@@ -386,6 +386,70 @@ impl Config {
             },
             ..InterpreterConfig::default()
         }
+    }
+
+    /// `public_url`, or `http://<api.bind>`.
+    pub(crate) fn public_url(&self) -> anyhow::Result<Url> {
+        self.public_url_on(self.api.bind)
+    }
+
+    /// `ui_url`, or the `public_url`, where the embedded UI is served.
+    pub(crate) fn ui_url(&self) -> anyhow::Result<Url> {
+        self.ui_url_on(self.api.bind)
+    }
+
+    /// `{ui_url}/setup?code=<code>`, the page that sets up the User. `listening` is the
+    /// address the API listens on, which the default URLs name instead of a `:0` port.
+    pub(crate) fn setup_link(&self, code: &str, listening: SocketAddr) -> anyhow::Result<String> {
+        let ui_url = self.ui_url_on(listening)?;
+        Ok(format!(
+            "{}/setup?code={code}",
+            ui_url.as_str().trim_end_matches('/')
+        ))
+    }
+
+    /// `public_url`, or `http://<listening>` with a loopback or unspecified address written
+    /// `localhost`: a browser treats `localhost` as a secure context, and nobody can open a
+    /// link to `0.0.0.0`.
+    fn public_url_on(&self, listening: SocketAddr) -> anyhow::Result<Url> {
+        if let Some(url) = &self.public_url {
+            return parse_url("public_url", url);
+        }
+        let host = match listening.ip() {
+            ip if ip.is_loopback() || ip.is_unspecified() => "localhost".to_owned(),
+            IpAddr::V4(ip) => ip.to_string(),
+            IpAddr::V6(ip) => format!("[{ip}]"),
+        };
+        parse_url("public_url", &format!("http://{host}:{}", listening.port()))
+    }
+
+    fn ui_url_on(&self, listening: SocketAddr) -> anyhow::Result<Url> {
+        match &self.ui_url {
+            Some(url) => parse_url("ui_url", url),
+            None => self.public_url_on(listening),
+        }
+    }
+}
+
+/// An absolute `http` or `https` URL, which may have a path but no credentials, query or
+/// fragment, since bia appends its own paths to it.
+fn parse_url(key: &str, value: &str) -> anyhow::Result<Url> {
+    let invalid = || format!("invalid configuration: `{key}` `{value}`");
+    let url = Url::parse(value).with_context(invalid)?;
+    let problem = if !matches!(url.scheme(), "http" | "https") {
+        Some("must be http or https")
+    } else if !url.has_host() {
+        Some("needs a host")
+    } else if !url.username().is_empty() || url.password().is_some() {
+        Some("must not hold credentials")
+    } else if url.query().is_some() || url.fragment().is_some() {
+        Some("must not have a query or a fragment")
+    } else {
+        None
+    };
+    match problem {
+        Some(problem) => Err(anyhow!("{}: {problem}", invalid())),
+        None => Ok(url),
     }
 }
 
@@ -579,26 +643,99 @@ mod tests {
     }
 
     #[test]
-    fn a_short_bootstrap_key_is_refused_without_echoing_it() {
+    fn bootstrap_key_is_an_unknown_key() {
         Jail::expect_with(|jail| {
             jail.clear_env();
             jail.set_env("BIA_DATABASE_URL", URL);
-            jail.set_env("BIA_BOOTSTRAP_KEY", "hunter2");
+            jail.create_file("bia.toml", r#"bootstrap_key = "k""#)?;
 
-            let error = error(jail, None);
+            let error = error(jail, Some("bia.toml"));
 
-            assert!(error.contains("bootstrap_key"), "{error}");
-            assert!(!error.contains("hunter2"), "{error}");
-
-            jail.set_env("BIA_BOOTSTRAP_KEY", "k".repeat(32));
             assert!(
-                load(jail, None)
-                    .unwrap()
-                    .api_config()
-                    .unwrap()
-                    .bootstrap_key
-                    .is_some()
+                error.contains("unknown field: found `bootstrap_key`"),
+                "{error}"
             );
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn the_public_url_defaults_to_the_bind_address_with_localhost_for_loopback() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.set_env("BIA_DATABASE_URL", URL);
+            let public_url = |jail: &Jail| load(jail, None).unwrap().public_url().unwrap();
+            assert_eq!(public_url(jail).as_str(), "http://localhost:8080/");
+
+            jail.set_env("BIA_API_BIND", "0.0.0.0:9000");
+            assert_eq!(public_url(jail).as_str(), "http://localhost:9000/");
+
+            jail.set_env("BIA_API_BIND", "10.0.0.5:9000");
+            assert_eq!(public_url(jail).as_str(), "http://10.0.0.5:9000/");
+
+            jail.set_env("BIA_API_BIND", "[::1]:9000");
+            assert_eq!(public_url(jail).as_str(), "http://localhost:9000/");
+
+            jail.set_env("BIA_PUBLIC_URL", "https://bia.example.com");
+            assert_eq!(public_url(jail).as_str(), "https://bia.example.com/");
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn the_setup_link_is_on_the_ui_url_which_defaults_to_the_public_url() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.set_env("BIA_DATABASE_URL", URL);
+            jail.set_env("BIA_API_BIND", "127.0.0.1:0");
+            let config = load(jail, None).unwrap();
+            let link = config
+                .setup_link("abc", "127.0.0.1:53124".parse().unwrap())
+                .unwrap();
+            assert_eq!(
+                link, "http://localhost:53124/setup?code=abc",
+                "the bound port"
+            );
+
+            jail.set_env("BIA_PUBLIC_URL", "https://api.example.com");
+            let listening = "127.0.0.1:8080".parse().unwrap();
+            let link = |jail: &Jail| {
+                let config = load(jail, None).unwrap();
+                config.setup_link("abc", listening).unwrap()
+            };
+            assert_eq!(link(jail), "https://api.example.com/setup?code=abc");
+
+            jail.set_env("BIA_UI_URL", "https://example.com/bia/");
+            assert_eq!(link(jail), "https://example.com/bia/setup?code=abc");
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn an_invalid_public_or_ui_url_stops_startup() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.set_env("BIA_DATABASE_URL", URL);
+            for (key, value, problem) in [
+                ("BIA_PUBLIC_URL", "bia.example.com", "public_url"),
+                (
+                    "BIA_PUBLIC_URL",
+                    "ftp://bia.example.com",
+                    "must be http or https",
+                ),
+                ("BIA_PUBLIC_URL", "https://bia.example.com/?a=1", "query"),
+                (
+                    "BIA_PUBLIC_URL",
+                    "https://me:pw@bia.example.com",
+                    "credentials",
+                ),
+                ("BIA_UI_URL", "https://ui.example.com/#x", "ui_url"),
+            ] {
+                jail.set_env(key, value);
+                let error = error(jail, None);
+                assert!(error.contains(problem), "{value}: {error}");
+                jail.set_env(key, "https://ok.example.com");
+            }
             Ok(())
         });
     }

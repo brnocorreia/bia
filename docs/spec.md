@@ -142,7 +142,7 @@ The first milestone that proves the idea end to end is the **anchor scenario**: 
 
 ### Auth and Secrets
 
-85. As an operator, I want to bootstrap the first admin Token from the CLI, so that a fresh install is usable and secure.
+85. As an operator, I want to set up the first admin from a one-time Setup Link or the CLI, so that a fresh install is usable and secure.
 86. As an operator, I want Tokens with `admin`, `agent` and `webhook` Scopes, so that each caller gets only what it needs.
 87. As an operator, I want to manage Secrets via API, CLI and UI without ever being able to read their values back, so that leaks through the interface are impossible.
 88. As an operator, I want Secrets encrypted at rest with a master key from the environment, so that a database dump doesn't expose them.

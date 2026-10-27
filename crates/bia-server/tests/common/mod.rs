@@ -14,7 +14,7 @@ use bia_core::action::{
     Action, ActionExample, ActionRegistry, CancellationToken, Effect, InMemoryRegistry,
 };
 use bia_core::clock::ManualClock;
-use bia_server::{ApiConfig, ApiState, BootstrapKey};
+use bia_server::{ApiConfig, ApiState, SetupCode};
 use chrono::{DateTime, Utc};
 use schemars::json_schema;
 use serde_json::json;
@@ -24,8 +24,8 @@ use tokio::task::JoinHandle;
 
 pub mod webhook;
 
-/// The bootstrap key every test server is started with.
-pub const BOOTSTRAP_KEY: &str = "test-bootstrap-key-0123456789abcdef";
+/// The password every test server's User is set up with.
+pub const PASSWORD: &str = "test-password-0123456789";
 
 /// The instant every test server's Clock starts at.
 pub fn t0() -> DateTime<Utc> {
@@ -34,11 +34,13 @@ pub fn t0() -> DateTime<Utc> {
 
 /// Stops its server when dropped.
 pub struct TestServer {
-    /// Sends the admin Token bootstrapped at start, or no Token at all when the server was
-    /// started [`without_tokens`](Self::without_tokens).
+    /// Sends the admin Token setup returned, or no Token at all when the server was started
+    /// [`without_tokens`](Self::without_tokens).
     pub client: bia_client::Client,
     /// The admin Token's value, empty without one.
     pub admin_token: String,
+    /// The code of this server's Setup Link, empty when its state was built elsewhere.
+    pub setup_code: String,
     /// Where the server listens, e.g. `http://127.0.0.1:53124`.
     pub url: String,
     pub clock: ManualClock,
@@ -55,42 +57,40 @@ impl TestServer {
     /// [`start`](Self::start) with the Actions of `registry` instead of [`registry()`].
     pub async fn start_with_registry(pool: PgPool, registry: Arc<InMemoryRegistry>) -> Self {
         let clock = ManualClock::new(t0());
+        let (setup_code, code) = SetupCode::generate().unwrap();
         let config = ApiConfig {
-            bootstrap_key: Some(BootstrapKey::new(BOOTSTRAP_KEY).unwrap()),
+            setup_code: Some(setup_code),
             ..ApiConfig::default()
         };
         let state = ApiState::new(pool, registry, Arc::new(clock.clone())).with_config(config);
-        Self::bootstrapped(bia_server::router(state), clock).await
+        Self::set_up(bia_server::router(state), clock, code).await
     }
 
-    /// [`start`](Self::start) with `config`, whose bootstrap key is always [`BOOTSTRAP_KEY`].
+    /// [`start`](Self::start) with `config`, whose setup code is always a fresh one.
     pub async fn start_with(pool: PgPool, config: ApiConfig) -> Self {
         let clock = ManualClock::new(t0());
-        let router = bia_server::router(state(pool, &clock, config));
-        Self::bootstrapped(router, clock).await
+        let (state, code) = state(pool, &clock, config);
+        Self::set_up(bia_server::router(state), clock, code).await
     }
 
-    /// [`serve`](Self::serve), then bootstraps the admin Token `client` sends.
-    pub async fn bootstrapped(router: Router, clock: ManualClock) -> Self {
+    /// [`serve`](Self::serve), then sets up the User with `code` and [`PASSWORD`], keeping the
+    /// admin Token setup returns for `client`.
+    pub async fn set_up(router: Router, clock: ManualClock, code: String) -> Self {
         let mut server = Self::serve(router, clock).await;
-        let admin = server
-            .client
-            .bootstrap_token(BOOTSTRAP_KEY, "test-admin")
-            .await
-            .unwrap();
-        server.client = server.anonymous().with_token(&admin.value);
-        server.admin_token = admin.value;
+        let done = server.client.set_up(&code, PASSWORD).await.unwrap();
+        server.client = server.anonymous().with_token(&done.token.value);
+        server.admin_token = done.token.value;
+        server.setup_code = code;
         server
     }
 
-    /// A server no Token was bootstrapped on, whose `client` sends none.
+    /// A server whose User is not set up yet, so its `client` sends no Token.
     pub async fn without_tokens(pool: PgPool) -> Self {
         let clock = ManualClock::new(t0());
-        Self::serve(
-            bia_server::router(state(pool, &clock, ApiConfig::default())),
-            clock,
-        )
-        .await
+        let (state, code) = state(pool, &clock, ApiConfig::default());
+        let mut server = Self::serve(bia_server::router(state), clock).await;
+        server.setup_code = code;
+        server
     }
 
     /// Serves `router`, e.g. [`bia_server::router`] with routes a test adds, whose state was
@@ -103,6 +103,7 @@ impl TestServer {
         Self {
             client: bia_client::Client::new(&url).unwrap(),
             admin_token: String::new(),
+            setup_code: String::new(),
             url,
             clock,
             shutdown,
@@ -160,13 +161,16 @@ impl Drop for TestServer {
     }
 }
 
-/// The state of a test server on `clock`, with [`BOOTSTRAP_KEY`].
-pub fn state(pool: PgPool, clock: &ManualClock, config: ApiConfig) -> ApiState {
+/// The state of a test server on `clock` with a fresh setup code, and that code.
+pub fn state(pool: PgPool, clock: &ManualClock, config: ApiConfig) -> (ApiState, String) {
+    let (setup_code, code) = SetupCode::generate().unwrap();
     let config = ApiConfig {
-        bootstrap_key: Some(BootstrapKey::new(BOOTSTRAP_KEY).unwrap()),
+        setup_code: Some(setup_code),
         ..config
     };
-    ApiState::new(pool, Arc::new(registry()), Arc::new(clock.clone())).with_config(config)
+    let state =
+        ApiState::new(pool, Arc::new(registry()), Arc::new(clock.clone())).with_config(config);
+    (state, code)
 }
 
 /// The flow and queue Actions, `test.echo` with schemas and an example, and a disabled

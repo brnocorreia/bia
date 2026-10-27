@@ -373,6 +373,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sets the password of the install's User, creating it on a fresh install, with the code
+         *     from the Setup Link that `bia serve` logs. Public, since no one can sign in yet. Refuses
+         *     once a User has a password; `bia serve --reset-admin` clears it and logs a new link.
+         */
+        post: operations["set_up"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/tokens": {
         parameters: {
             query?: never;
@@ -385,27 +406,6 @@ export interface paths {
         put?: never;
         /** Creates a Token and returns its value, once. Needs an `admin` Token. */
         post: operations["create_token"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/tokens/bootstrap": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Mints the first admin Token of a fresh install, authenticated with the server's bootstrap
-         *     key (`BIA_BOOTSTRAP_KEY`) instead of a Token. It refuses once an unrevoked admin Token
-         *     exists, so the key cannot mint a second one; `bia token create --bootstrap` calls it.
-         */
-        post: operations["bootstrap_token"];
         delete?: never;
         options?: never;
         head?: never;
@@ -443,7 +443,7 @@ export interface paths {
         put?: never;
         /**
          * Revokes a Token at once; revoking it again changes nothing. Needs an `admin` Token, which
-         *     may revoke itself. With every admin Token revoked, only bootstrapping can mint another.
+         *     may revoke itself.
          */
         post: operations["revoke_token"];
         delete?: never;
@@ -719,13 +719,6 @@ export interface components {
         };
         /** @enum {string} */
         AttemptStatusName: "succeeded" | "failed" | "skipped" | "cancelled";
-        BootstrapRequest: {
-            /**
-             * @description What the Token is for, e.g. `admin`.
-             * @example admin
-             */
-            name: string;
-        };
         /** @description A Token just created, with its value. */
         CreatedToken: {
             token: components["schemas"]["TokenInfo"];
@@ -818,7 +811,7 @@ export interface components {
          *     added, but renaming or removing one needs an ADR (ADR-0042).
          * @enum {string}
          */
-        ErrorCode: "route_not_found" | "method_not_allowed" | "malformed_request" | "request_too_large" | "invalid_definition" | "missing_token" | "invalid_token" | "insufficient_scope" | "token_not_found" | "bootstrap_disabled" | "already_bootstrapped" | "workflow_not_found" | "version_not_found" | "version_published" | "version_not_published" | "version_changed" | "workflow_id_mismatch" | "no_active_version" | "no_manual_trigger" | "invalid_run_input" | "invalid_mock" | "dry_run_too_long" | "run_not_found" | "run_finished" | "run_not_finished" | "run_not_resumable" | "webhook_not_found" | "missing_signature" | "invalid_signature" | "hmac_secret_unavailable" | "secret_not_found" | "master_key_missing" | "queue_not_found" | "dead_letter_queue_not_found" | "queue_in_use" | "not_ready" | "internal_error";
+        ErrorCode: "route_not_found" | "method_not_allowed" | "malformed_request" | "request_too_large" | "invalid_definition" | "missing_token" | "invalid_token" | "insufficient_scope" | "token_not_found" | "invalid_setup_code" | "setup_code_expired" | "already_set_up" | "password_too_short" | "workflow_not_found" | "version_not_found" | "version_published" | "version_not_published" | "version_changed" | "workflow_id_mismatch" | "no_active_version" | "no_manual_trigger" | "invalid_run_input" | "invalid_mock" | "dry_run_too_long" | "run_not_found" | "run_finished" | "run_not_finished" | "run_not_resumable" | "webhook_not_found" | "missing_signature" | "invalid_signature" | "hmac_secret_unavailable" | "secret_not_found" | "master_key_missing" | "queue_not_found" | "dead_letter_queue_not_found" | "queue_in_use" | "not_ready" | "internal_error";
         /** @description A failed Run and the entry that failed it. */
         FailedRun: components["schemas"]["RunSummary"] & {
             failure?: components["schemas"]["TimelineEntryInfo"] | null;
@@ -1102,6 +1095,21 @@ export interface components {
             /** @description Every Secret by name. */
             secrets: components["schemas"]["SecretInfo"][];
         };
+        /** @description The User setup created, and an admin Token for it. */
+        SetupDone: {
+            /** @description An admin Token to call the API with until sign-in exists. Shown only in this response. */
+            token: components["schemas"]["CreatedToken"];
+            user: components["schemas"]["UserInfo"];
+        };
+        SetupRequest: {
+            /**
+             * @description The `code` in the Setup Link that `bia serve` logs.
+             * @example 1f2e3d4c-00112233445566778899aabbccddeeff
+             */
+            code: string;
+            /** @description At least 12 characters. */
+            password: string;
+        };
         /**
          * @description Only errors block publishing.
          * @enum {string}
@@ -1190,6 +1198,12 @@ export interface components {
              *     Version.
              */
             trigger_id?: string | null;
+        };
+        UserInfo: {
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uuid */
+            id: string;
         };
         ValidationReport: {
             diagnostics: components["schemas"]["Diagnostic"][];
@@ -2447,6 +2461,65 @@ export interface operations {
             };
         };
     };
+    set_up: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetupRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupDone"];
+                };
+            };
+            /** @description `malformed_request`: the body is not `{code, password}`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `invalid_setup_code`: the code is wrong; `setup_code_expired`: it is from before the server last started, so use the link it logged since. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `already_set_up`: a User has a password. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `password_too_short`: the password has fewer than 12 characters. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     list_tokens: {
         parameters: {
             query?: never;
@@ -2531,56 +2604,6 @@ export interface operations {
             };
             /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
             403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    bootstrap_token: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BootstrapRequest"];
-            };
-        };
-        responses: {
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CreatedToken"];
-                };
-            };
-            /** @description No bootstrap key, or the wrong one; `code` is `missing_token` or `invalid_token`. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            /** @description `bootstrap_disabled`: the server has no bootstrap key. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            /** @description `already_bootstrapped`: an unrevoked admin Token exists. */
-            409: {
                 headers: {
                     [name: string]: unknown;
                 };
