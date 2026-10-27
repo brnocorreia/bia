@@ -21,6 +21,7 @@ bia-engine.workspace = true
 chrono = { version = "0.4.45", default-features = false, features = ["serde"] }
 getrandom = "0.4.3"
 hex = "0.4.3"
+hmac = "0.13.0"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.11.1"
@@ -46,6 +47,7 @@ rmcp = { version = "3.7.0", default-features = false, features = ["client", "tra
 schemars = "1.2.3"
 tokio = { version = "1.53.3", features = ["macros", "rt", "net", "time"] }
 wiremock = "0.6.5"
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["fmt", "json"] }
 
 [lints]
 workspace = true
