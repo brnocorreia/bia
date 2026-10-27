@@ -530,6 +530,178 @@
         ]
       }
     },
+    "/v1/queues/{name}/dead-letters/purge": {
+      "post": {
+        "tags": [
+          "queues"
+        ],
+        "summary": "Deletes the selected dead letters of this Queue for good. Ids that are not dead letters of\nthis Queue are skipped. Needs an `admin` Token.",
+        "operationId": "purge_dead_letters",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "The Queue holding the dead letters.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeadLetterSelection"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeadLettersPurged"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_request`: no ids, or more than 200.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`queue_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/v1/queues/{name}/dead-letters/replay": {
+      "post": {
+        "tags": [
+          "queues"
+        ],
+        "summary": "Makes the selected dead letters of this Queue deliverable again, from now, in the Queue each\nwas dead-lettered from, as new Messages whose delivery count starts again at 0; their body,\n`published_at` and `last_error` are kept. Skips ids that are not dead letters of this Queue,\ndead letters a consumer holds right now, and those whose source Queue was deleted. Needs an\n`admin` Token.",
+        "operationId": "replay_dead_letters",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "The Queue holding the dead letters.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeadLetterSelection"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeadLettersReplayed"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_request`: no ids, or more than 200.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown or revoked; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route; `code` is `insufficient_scope`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`queue_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
     "/v1/queues/{name}/messages": {
       "get": {
         "tags": [
@@ -2901,6 +3073,54 @@
           }
         }
       },
+      "DeadLetterSelection": {
+        "type": "object",
+        "description": "Dead letters of the Queue to act on.",
+        "required": [
+          "ids"
+        ],
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "Message ids, 1 to 200. Ids that are not dead letters of this Queue are skipped."
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeadLettersPurged": {
+        "type": "object",
+        "required": [
+          "purged"
+        ],
+        "properties": {
+          "purged": {
+            "type": "integer",
+            "format": "int64",
+            "description": "How many dead letters were deleted.",
+            "minimum": 0
+          }
+        }
+      },
+      "DeadLettersReplayed": {
+        "type": "object",
+        "required": [
+          "replayed"
+        ],
+        "properties": {
+          "replayed": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "The new ids of the replayed Messages in the Queues they were dead-lettered from, in the\norder of their old ids. Fewer than selected when some were skipped."
+          }
+        }
+      },
       "DefinitionDryRunRequest": {
         "type": "object",
         "description": "What a Dry Run of a Definition that need not be stored takes.",
@@ -3132,6 +3352,42 @@
           }
         }
       },
+      "MessageCountsInfo": {
+        "type": "object",
+        "description": "How many Messages the Queue holds, by state, when it was read. The four counts do not\noverlap and add up to the Queue's depth.",
+        "required": [
+          "ready",
+          "in_flight",
+          "delayed",
+          "dead_lettered"
+        ],
+        "properties": {
+          "dead_lettered": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Dead letters, whether kept in this Queue or moved here as its Dead-Letter Queue. Only\ncounted here, even when a consumer of a Dead-Letter Queue receives them.",
+            "minimum": 0
+          },
+          "delayed": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Waiting out a publish delay or a retry backoff.",
+            "minimum": 0
+          },
+          "in_flight": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Held by a consumer within its visibility timeout.",
+            "minimum": 0
+          },
+          "ready": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Deliverable now.",
+            "minimum": 0
+          }
+        }
+      },
       "MessageInfo": {
         "type": "object",
         "description": "One Message of a Queue.",
@@ -3344,7 +3600,8 @@
           "visibility_timeout",
           "batch_size",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "messages"
         ],
         "properties": {
           "batch_size": {
@@ -3366,6 +3623,9 @@
             "type": "integer",
             "format": "int32",
             "minimum": 0
+          },
+          "messages": {
+            "$ref": "#/components/schemas/MessageCountsInfo"
           },
           "name": {
             "type": "string",

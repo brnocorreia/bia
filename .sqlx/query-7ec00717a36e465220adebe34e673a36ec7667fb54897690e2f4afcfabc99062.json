@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Moves dead letters of a Queue back to the Queue they were dead-lettered from as new rows, so\n-- they start their deliveries afresh and no Lease on the old row can touch them. Skips dead\n-- letters a consumer holds right now and those whose source Queue no longer exists.\n-- $1: queue, $2: message ids, $3: now\nWITH chosen AS (\n    SELECT messages.id\n    FROM messages\n    JOIN queues ON queues.name = messages.dead_lettered_from\n    WHERE messages.queue = $1\n      AND messages.id = ANY($2)\n      AND messages.dead_lettered_at IS NOT NULL\n      AND NOT (messages.claimed_by IS NOT NULL AND messages.visible_at > $3)\n    -- Holding the source Queue's row keeps it from being deleted before the insert.\n    FOR UPDATE OF messages FOR KEY SHARE OF queues\n),\nreplayed AS (\n    DELETE FROM messages\n    USING chosen\n    WHERE messages.id = chosen.id\n    RETURNING messages.id, messages.dead_lettered_from, messages.body, messages.published_at,\n              messages.last_error\n)\nINSERT INTO messages (queue, body, published_at, visible_at, last_error)\nSELECT dead_lettered_from, body, published_at, $3, last_error\nFROM replayed\nORDER BY id\nRETURNING id\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8Array",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7ec00717a36e465220adebe34e673a36ec7667fb54897690e2f4afcfabc99062"
+}

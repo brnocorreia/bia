@@ -142,6 +142,8 @@ fn documented() -> OpenApiRouter<ApiState> {
             routes::queue::delete_queue
         ))
         .routes(routes!(routes::queue::list_messages))
+        .routes(routes!(routes::queue::replay_dead_letters))
+        .routes(routes!(routes::queue::purge_dead_letters))
         .routes(routes!(routes::workflow::list_workflows))
         .routes(routes!(routes::workflow::get_workflow))
         .routes(routes!(

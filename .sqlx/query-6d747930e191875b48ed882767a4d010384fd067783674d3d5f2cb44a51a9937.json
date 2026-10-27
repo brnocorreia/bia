@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- $1: queue, $2: message ids\nDELETE FROM messages\nWHERE queue = $1 AND id = ANY($2) AND dead_lettered_at IS NOT NULL\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6d747930e191875b48ed882767a4d010384fd067783674d3d5f2cb44a51a9937"
+}

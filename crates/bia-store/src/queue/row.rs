@@ -69,6 +69,6 @@ impl TryFrom<MessageRow> for Message {
     }
 }
 
-fn queue_name(name: String) -> Result<QueueName, StoreError> {
+pub(super) fn queue_name(name: String) -> Result<QueueName, StoreError> {
     QueueName::new(name).map_err(|e| StoreError::invalid("queue name", e))
 }

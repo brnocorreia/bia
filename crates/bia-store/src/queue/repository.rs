@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::future::Future;
 
 use bia_core::dsl::QueueName;
@@ -5,9 +6,10 @@ use chrono::{DateTime, TimeDelta, Utc};
 use serde_json::Value;
 use sqlx::{Acquire, PgConnection};
 
-use super::row::{MessageRow, QueueRow};
+use super::row::{MessageRow, QueueRow, queue_name};
 use super::{
-    Delivery, Message, MessageFilter, MessageId, MessageLease, Nacked, Queue, QueueSettings,
+    Delivery, Message, MessageCounts, MessageFilter, MessageId, MessageLease, Nacked, Queue,
+    QueueSettings,
 };
 use crate::StoreError;
 use crate::job::Backoff;
@@ -106,6 +108,35 @@ pub trait QueueRepository {
         conn: &mut PgConnection,
         filter: &MessageFilter,
     ) -> impl Future<Output = Result<Vec<Message>, StoreError>> + Send;
+
+    /// Message counts of `queue`, or of every Queue with `None`, as of `now`. A Queue holding
+    /// no Messages has no entry.
+    fn count_messages(
+        &self,
+        conn: &mut PgConnection,
+        queue: Option<&QueueName>,
+        now: DateTime<Utc>,
+    ) -> impl Future<Output = Result<HashMap<QueueName, MessageCounts>, StoreError>> + Send;
+
+    /// Makes the dead letters among `ids` in `queue` deliverable again from `now` in the Queue
+    /// they were dead-lettered from, with their delivery count reset, and returns their new
+    /// ids. Skips ids that are not dead letters of `queue`, dead letters a consumer holds
+    /// right now, and those whose source Queue was deleted.
+    fn replay_dead_letters(
+        &self,
+        conn: &mut PgConnection,
+        queue: &QueueName,
+        ids: &[MessageId],
+        now: DateTime<Utc>,
+    ) -> impl Future<Output = Result<Vec<MessageId>, StoreError>> + Send;
+
+    /// Deletes the dead letters among `ids` in `queue` and returns how many went.
+    fn purge_dead_letters(
+        &self,
+        conn: &mut PgConnection,
+        queue: &QueueName,
+        ids: &[MessageId],
+    ) -> impl Future<Output = Result<u64, StoreError>> + Send;
 
     /// Deletes up to `limit` dead letters dead-lettered before `before`, oldest first, and
     /// returns how many went.
@@ -370,6 +401,72 @@ impl QueueRepository for PgQueueRepository {
         .into_iter()
         .map(Message::try_from)
         .collect()
+    }
+
+    async fn count_messages(
+        &self,
+        conn: &mut PgConnection,
+        queue: Option<&QueueName>,
+        now: DateTime<Utc>,
+    ) -> Result<HashMap<QueueName, MessageCounts>, StoreError> {
+        let count =
+            |what, value: i64| u64::try_from(value).map_err(|e| StoreError::invalid(what, e));
+        sqlx::query_file!(
+            "src/queue/queries/count.sql",
+            now,
+            queue.map(QueueName::as_str),
+        )
+        .fetch_all(&mut *conn)
+        .await?
+        .into_iter()
+        .map(|row| {
+            let name = queue_name(row.queue)?;
+            let counts = MessageCounts {
+                ready: count("ready count", row.ready)?,
+                in_flight: count("in-flight count", row.in_flight)?,
+                delayed: count("delayed count", row.delayed)?,
+                dead_lettered: count("dead-lettered count", row.dead_lettered)?,
+            };
+            Ok((name, counts))
+        })
+        .collect()
+    }
+
+    async fn replay_dead_letters(
+        &self,
+        conn: &mut PgConnection,
+        queue: &QueueName,
+        ids: &[MessageId],
+        now: DateTime<Utc>,
+    ) -> Result<Vec<MessageId>, StoreError> {
+        let ids: Vec<i64> = ids.iter().map(|id| id.get()).collect();
+        let replayed = sqlx::query_file_scalar!(
+            "src/queue/queries/replay_dead_letters.sql",
+            queue.as_str(),
+            &ids,
+            now,
+        )
+        .fetch_all(&mut *conn)
+        .await?;
+        Ok(replayed.into_iter().map(MessageId::new).collect())
+    }
+
+    async fn purge_dead_letters(
+        &self,
+        conn: &mut PgConnection,
+        queue: &QueueName,
+        ids: &[MessageId],
+    ) -> Result<u64, StoreError> {
+        let ids: Vec<i64> = ids.iter().map(|id| id.get()).collect();
+        let purged = sqlx::query_file!(
+            "src/queue/queries/purge_dead_letters.sql",
+            queue.as_str(),
+            &ids,
+        )
+        .execute(&mut *conn)
+        .await?
+        .rows_affected();
+        Ok(purged)
     }
 
     async fn delete_dead_letters(
