@@ -35,7 +35,7 @@ async fn server_with_a_validating_route(pool: PgPool) -> TestServer {
         Ok(Json(json!({ "valid": true })))
     }
     let clock = ManualClock::new(common::t0());
-    let state = common::state(pool, &clock, ApiConfig::default());
+    let (state, _) = common::state(pool, &clock, ApiConfig::default());
     let router = bia_server::router(state).route("/test/validate", post(validate));
     TestServer::serve(router, clock).await
 }

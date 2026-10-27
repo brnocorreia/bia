@@ -3,21 +3,22 @@
 //! A handler declares what it requires by taking [`Admin`], [`Agent`] or [`Webhook`] as its
 //! first argument, before anything that reads the request, so an unauthenticated caller gets
 //! 401 rather than a validation error. A handler that takes none is public; a test checks that
-//! only the probes and bootstrapping are. The webhook route takes `Option<Webhook>`, since a
+//! only the probes and setup are. The webhook route takes `Option<Webhook>`, since a
 //! Trigger with `hmac` is authenticated by its signature instead (ADR-0058).
-
-use std::fmt;
 
 use axum::extract::{FromRequestParts, OptionalFromRequestParts, RawPathParams};
 use axum::http::request::Parts;
 use axum::http::{HeaderMap, StatusCode, header};
-use bia_store::token::{PgTokenRepository, Scope, Token, TokenHash, TokenRepository};
+use bia_store::token::{PgTokenRepository, Scope, Token, TokenRepository};
 use utoipa::IntoResponses;
 
 use crate::{ApiError, ApiState, ErrorBody, ErrorCode};
 
+mod setup;
 mod value;
 
+pub(crate) use setup::CodeCheck;
+pub use setup::SetupCode;
 pub(crate) use value::TokenValue;
 
 /// A request made with an `admin` Token.
@@ -178,39 +179,6 @@ fn insufficient_scope(token: &Token, needed: &str) -> ApiError {
             token.scope.as_str()
         ),
     )
-}
-
-/// The key that lets `POST /v1/tokens/bootstrap` mint the first admin Token. Only its hash is
-/// kept in memory.
-#[derive(Clone)]
-pub struct BootstrapKey(TokenHash);
-
-/// Shorter keys are refused, so the key cannot be guessed.
-pub const MIN_BOOTSTRAP_KEY_LEN: usize = 32;
-
-#[derive(Debug, thiserror::Error)]
-#[error("the bootstrap key must be at least {MIN_BOOTSTRAP_KEY_LEN} characters")]
-pub struct BootstrapKeyTooShort;
-
-impl BootstrapKey {
-    pub fn new(key: &str) -> Result<Self, BootstrapKeyTooShort> {
-        if key.chars().count() < MIN_BOOTSTRAP_KEY_LEN {
-            return Err(BootstrapKeyTooShort);
-        }
-        Ok(Self(value::hash(key)))
-    }
-
-    /// Comparing hashes keeps the comparison's timing independent of how much of the key a
-    /// caller guessed right.
-    pub(crate) fn matches(&self, presented: &str) -> bool {
-        value::hash(presented) == self.0
-    }
-}
-
-impl fmt::Debug for BootstrapKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("BootstrapKey(..)")
-    }
 }
 
 /// The failures every route that needs a Token can answer with.

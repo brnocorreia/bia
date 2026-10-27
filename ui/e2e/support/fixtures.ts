@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { test as base, expect, type Page } from "@playwright/test";
 import createClient from "openapi-fetch";
 import type { paths } from "../../src/api/schema.gen";
@@ -45,9 +46,7 @@ export function uniqueName(prefix: string) {
 
 export const test = base.extend<Fixtures>({
   adminToken: async ({}, use) => {
-    const token = process.env.BIA_E2E_ADMIN_TOKEN;
-    if (!token) throw new Error("global setup did not provide BIA_E2E_ADMIN_TOKEN");
-    await use(token);
+    await use(readFileSync(e2eEnv().adminTokenFile, "utf8").trim());
   },
   api: async ({ adminToken }, use) => {
     await use(apiClient(adminToken));

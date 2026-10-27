@@ -33,3 +33,8 @@ todo = "warn"
 unimplemented = "warn"
 unwrap_used = "warn"
 disallowed_methods = "warn"
+
+# Password hashing is slow on purpose; unoptimised, it makes every test that sets up a server
+# take seconds.
+[profile.dev.package.argon2]
+opt-level = 3

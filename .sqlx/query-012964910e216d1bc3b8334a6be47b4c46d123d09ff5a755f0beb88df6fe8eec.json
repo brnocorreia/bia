@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Creates the first User; returns no row once one exists. Run under lock.sql, or two callers\n-- could both see none.\n-- $1: password hash, $2: now\nINSERT INTO users (password_hash, created_at)\nSELECT $1, $2\nWHERE NOT EXISTS (SELECT 1 FROM users)\nRETURNING id, created_at\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "012964910e216d1bc3b8334a6be47b4c46d123d09ff5a755f0beb88df6fe8eec"
+}

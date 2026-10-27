@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import path from "node:path";
 
 export interface E2eEnv {
   /** Port of the `bia serve` the tests start. */
@@ -11,7 +12,8 @@ export interface E2eEnv {
   databaseUrl: string;
   /** The `bia` binary; when unset the setup builds `bia-cli` and uses `target/debug/bia`. */
   binary: string | undefined;
-  bootstrapKey: string;
+  /** Where the setup project leaves the admin Token setup returned, for the other tests. */
+  adminTokenFile: string;
   /** The Secrets master key the server seals values under: fresh per call, since the database is recreated each run and nothing must outlive it. */
   masterKey: string;
   /** Test the UI embedded in `bia` (built with `--features ui`) instead of the static bundle. */
@@ -30,7 +32,7 @@ export function e2eEnv(): E2eEnv {
     uiUrl: embedded ? `http://127.0.0.1:${apiPort}` : `http://127.0.0.1:${uiPort}`,
     databaseUrl: process.env.BIA_E2E_DATABASE_URL ?? "postgres://bia:bia@localhost:5432/bia_e2e",
     binary: process.env.BIA_E2E_BIN,
-    bootstrapKey: "e2e-bootstrap-key-0123456789abcdef0123456789",
+    adminTokenFile: path.resolve(import.meta.dirname, "../.auth/admin-token"),
     masterKey: randomBytes(32).toString("hex"),
   };
 }

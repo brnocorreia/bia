@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "-- $1: hash\nSELECT id, name, scope, workflow_id, trigger_id, created_at, last_used_at, revoked_at\nFROM tokens\nWHERE hash = $1 AND revoked_at IS NULL\n",
+  "query": "SELECT id, name, scope, workflow_id, trigger_id, user_id, created_at, last_used_at, revoked_at\nFROM tokens\nORDER BY created_at, id\n",
   "describe": {
     "columns": [
       {
@@ -60,6 +60,17 @@
       },
       {
         "ordinal": 5,
+        "name": "user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "tokens",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -70,7 +81,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "last_used_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -81,7 +92,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "revoked_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -93,9 +104,7 @@
       }
     ],
     "parameters": {
-      "Left": [
-        "Bytea"
-      ]
+      "Left": []
     },
     "nullable": [
       false,
@@ -104,9 +113,10 @@
       true,
       true,
       false,
+      false,
       true,
       true
     ]
   },
-  "hash": "dbe5e0acbd21709abca48092661169f18552629dc6951ebafb4f59a98ab9295b"
+  "hash": "67c950b2054b62c5c46a6f8d8af2a066b9199428337295f10d32c9e71bd17f58"
 }

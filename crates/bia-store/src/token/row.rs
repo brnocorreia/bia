@@ -4,6 +4,7 @@ use uuid::Uuid;
 
 use super::{Scope, Token, TokenId};
 use crate::StoreError;
+use crate::user::UserId;
 use crate::workflow::workflow_id;
 
 #[derive(Debug)]
@@ -13,6 +14,7 @@ pub(crate) struct TokenRow {
     pub(crate) scope: String,
     pub(crate) workflow_id: Option<String>,
     pub(crate) trigger_id: Option<String>,
+    pub(crate) user_id: Uuid,
     pub(crate) created_at: DateTime<Utc>,
     pub(crate) last_used_at: Option<DateTime<Utc>>,
     pub(crate) revoked_at: Option<DateTime<Utc>>,
@@ -36,6 +38,7 @@ impl TryFrom<TokenRow> for Token {
             id: TokenId::from_uuid(row.id),
             name: row.name,
             scope,
+            user_id: UserId::from_uuid(row.user_id),
             created_at: row.created_at,
             last_used_at: row.last_used_at,
             revoked_at: row.revoked_at,

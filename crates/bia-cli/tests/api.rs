@@ -12,7 +12,7 @@ use std::time::Duration;
 use bia_client::{Client, NewToken, Scope, VersionState};
 use bia_core::action::CancellationToken;
 use bia_engine::{Interpreter, Worker, WorkerConfig};
-use bia_server::{ApiConfig, ApiState, BootstrapKey};
+use bia_server::{ApiConfig, ApiState, SetupCode};
 use bia_store::SystemClock;
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -21,7 +21,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
 use tokio::process::Command;
 
-const BOOTSTRAP_KEY: &str = "cli-test-bootstrap-key-0123456789abcdef";
+const PASSWORD: &str = "cli-test-password";
 
 struct Harness {
     url: String,
@@ -40,8 +40,9 @@ impl Drop for Harness {
 
 async fn start(pool: PgPool) -> Harness {
     let registry = Arc::new(bia_actions::builtin_registry().unwrap());
+    let (setup_code, code) = SetupCode::generate().unwrap();
     let config = ApiConfig {
-        bootstrap_key: Some(BootstrapKey::new(BOOTSTRAP_KEY).unwrap()),
+        setup_code: Some(setup_code),
         ..ApiConfig::default()
     };
     let state =
@@ -60,11 +61,7 @@ async fn start(pool: PgPool) -> Harness {
     tokio::spawn(async move { worker.run(stop).await.unwrap() });
 
     let anonymous = Client::new(&url).unwrap();
-    let admin = anonymous
-        .bootstrap_token(BOOTSTRAP_KEY, "admin")
-        .await
-        .unwrap()
-        .value;
+    let admin = anonymous.set_up(&code, PASSWORD).await.unwrap().token.value;
     let client = anonymous.with_token(&admin);
     let agent = client
         .create_token(&NewToken {

@@ -1,14 +1,11 @@
 use std::future::Future;
 
 use chrono::{DateTime, TimeDelta, Utc};
-use sqlx::{Connection, PgConnection};
+use sqlx::PgConnection;
 
 use super::row::TokenRow;
 use super::{NewToken, Scope, Token, TokenHash, TokenId};
 use crate::StoreError;
-
-/// The advisory lock key, `bia_tokn` in ASCII.
-const ADMINS_KEY: i64 = 0x6269_615f_746f_6b6e;
 
 /// How stale `last_used_at` may get before a use records it again.
 const LAST_USED_RESOLUTION: TimeDelta = TimeDelta::minutes(1);
@@ -19,17 +16,6 @@ pub trait TokenRepository {
         conn: &mut PgConnection,
         token: &NewToken,
     ) -> impl Future<Output = Result<Token, StoreError>> + Send;
-
-    /// Creates an admin Token named `name` only while no unrevoked admin Token exists, and
-    /// returns `None` otherwise. Concurrent callers serialise, so at most one of them gets a
-    /// Token.
-    fn create_first_admin(
-        &self,
-        conn: &mut PgConnection,
-        name: &str,
-        hash: TokenHash,
-        now: DateTime<Utc>,
-    ) -> impl Future<Output = Result<Option<Token>, StoreError>> + Send;
 
     /// Every Token, revoked ones included, oldest first.
     fn list(
@@ -75,37 +61,12 @@ impl TokenRepository for PgTokenRepository {
             token.scope.as_str(),
             workflow_id,
             trigger_id,
+            token.user_id.as_uuid(),
             token.created_at,
         )
         .fetch_one(&mut *conn)
         .await?
         .try_into()
-    }
-
-    async fn create_first_admin(
-        &self,
-        conn: &mut PgConnection,
-        name: &str,
-        hash: TokenHash,
-        now: DateTime<Utc>,
-    ) -> Result<Option<Token>, StoreError> {
-        let mut tx = conn.begin().await?;
-        sqlx::query_file!("src/token/queries/lock_admins.sql", ADMINS_KEY)
-            .execute(&mut *tx)
-            .await?;
-        let token = sqlx::query_file_as!(
-            TokenRow,
-            "src/token/queries/insert_first_admin.sql",
-            name,
-            &hash.0[..],
-            now,
-        )
-        .fetch_optional(&mut *tx)
-        .await?
-        .map(Token::try_from)
-        .transpose()?;
-        tx.commit().await?;
-        Ok(token)
     }
 
     async fn list(&self, conn: &mut PgConnection) -> Result<Vec<Token>, StoreError> {

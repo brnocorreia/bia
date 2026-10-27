@@ -126,6 +126,28 @@ impl fmt::Debug for CreatedToken {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct User {
+    pub id: Uuid,
+    pub created_at: DateTime<Utc>,
+}
+
+/// What setup answers: the User and an admin Token for it.
+#[derive(Clone, Deserialize)]
+pub struct SetupDone {
+    pub user: User,
+    pub token: CreatedToken,
+}
+
+impl fmt::Debug for SetupDone {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SetupDone")
+            .field("user", &self.user)
+            .field("token", &self.token)
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct TokenList {
     tokens: Vec<Token>,
 }
@@ -527,24 +549,15 @@ impl Client {
         .await
     }
 
-    /// Mints the first admin Token of a fresh install with the server's bootstrap key, which
-    /// is sent instead of this client's Token.
-    pub async fn bootstrap_token(
-        &self,
-        bootstrap_key: &str,
-        name: &str,
-    ) -> Result<CreatedToken, Error> {
+    /// Sets the install's User's password with the code from the Setup Link, which is all a
+    /// fresh install accepts. Returns an admin Token, shown only this once.
+    pub async fn set_up(&self, code: &str, password: &str) -> Result<SetupDone, Error> {
         #[derive(Serialize)]
         struct Request<'a> {
-            name: &'a str,
+            code: &'a str,
+            password: &'a str,
         }
-        let client = self.clone().with_token(bootstrap_key);
-        client
-            .send(
-                Method::POST,
-                "/v1/tokens/bootstrap",
-                Some(&Request { name }),
-            )
+        self.send(Method::POST, "/v1/setup", Some(&Request { code, password }))
             .await
     }
 

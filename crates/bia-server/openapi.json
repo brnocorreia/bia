@@ -1569,6 +1569,76 @@
         ]
       }
     },
+    "/v1/setup": {
+      "post": {
+        "tags": [
+          "setup"
+        ],
+        "summary": "Sets the password of the install's User, creating it on a fresh install, with the code\nfrom the Setup Link that `bia serve` logs. Public, since no one can sign in yet. Refuses\nonce a User has a password; `bia serve --reset-admin` clears it and logs a new link.",
+        "operationId": "set_up",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupDone"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_request`: the body is not `{code, password}`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`invalid_setup_code`: the code is wrong; `setup_code_expired`: it is from before the server last started, so use the link it logged since.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`already_set_up`: a User has a password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`password_too_short`: the password has fewer than 12 characters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/tokens": {
       "get": {
         "tags": [
@@ -1677,71 +1747,6 @@
         ]
       }
     },
-    "/v1/tokens/bootstrap": {
-      "post": {
-        "tags": [
-          "tokens"
-        ],
-        "summary": "Mints the first admin Token of a fresh install, authenticated with the server's bootstrap\nkey (`BIA_BOOTSTRAP_KEY`) instead of a Token. It refuses once an unrevoked admin Token\nexists, so the key cannot mint a second one; `bia token create --bootstrap` calls it.",
-        "operationId": "bootstrap_token",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/BootstrapRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CreatedToken"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No bootstrap key, or the wrong one; `code` is `missing_token` or `invalid_token`.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "`bootstrap_disabled`: the server has no bootstrap key.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "`already_bootstrapped`: an unrevoked admin Token exists.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bootstrap_key": []
-          }
-        ]
-      }
-    },
     "/v1/tokens/me": {
       "get": {
         "tags": [
@@ -1792,7 +1797,7 @@
         "tags": [
           "tokens"
         ],
-        "summary": "Revokes a Token at once; revoking it again changes nothing. Needs an `admin` Token, which\nmay revoke itself. With every admin Token revoked, only bootstrapping can mint another.",
+        "summary": "Revokes a Token at once; revoking it again changes nothing. Needs an `admin` Token, which\nmay revoke itself.",
         "operationId": "revoke_token",
         "parameters": [
           {
@@ -3041,20 +3046,6 @@
           "cancelled"
         ]
       },
-      "BootstrapRequest": {
-        "type": "object",
-        "required": [
-          "name"
-        ],
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "What the Token is for, e.g. `admin`.",
-            "example": "admin"
-          }
-        },
-        "additionalProperties": false
-      },
       "CreatedToken": {
         "type": "object",
         "description": "A Token just created, with its value.",
@@ -3275,8 +3266,10 @@
           "invalid_token",
           "insufficient_scope",
           "token_not_found",
-          "bootstrap_disabled",
-          "already_bootstrapped",
+          "invalid_setup_code",
+          "setup_code_expired",
+          "already_set_up",
+          "password_too_short",
           "workflow_not_found",
           "version_not_found",
           "version_published",
@@ -3889,6 +3882,42 @@
           }
         }
       },
+      "SetupDone": {
+        "type": "object",
+        "description": "The User setup created, and an admin Token for it.",
+        "required": [
+          "user",
+          "token"
+        ],
+        "properties": {
+          "token": {
+            "$ref": "#/components/schemas/CreatedToken",
+            "description": "An admin Token to call the API with until sign-in exists. Shown only in this response."
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserInfo"
+          }
+        }
+      },
+      "SetupRequest": {
+        "type": "object",
+        "required": [
+          "code",
+          "password"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "The `code` in the Setup Link that `bia serve` logs.",
+            "example": "1f2e3d4c-00112233445566778899aabbccddeeff"
+          },
+          "password": {
+            "type": "string",
+            "description": "At least 12 characters."
+          }
+        },
+        "additionalProperties": false
+      },
       "Severity": {
         "type": "string",
         "description": "Only errors block publishing.",
@@ -4075,6 +4104,23 @@
           }
         },
         "additionalProperties": false
+      },
+      "UserInfo": {
+        "type": "object",
+        "required": [
+          "id",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
       },
       "ValidationReport": {
         "type": "object",
@@ -4269,11 +4315,6 @@
       }
     },
     "securitySchemes": {
-      "bootstrap_key": {
-        "type": "http",
-        "scheme": "bearer",
-        "description": "The key the server was started with in `BIA_BOOTSTRAP_KEY`."
-      },
       "token": {
         "type": "http",
         "scheme": "bearer",

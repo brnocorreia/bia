@@ -5,7 +5,7 @@
 //! OpenAPI document is generated from the handlers and committed as `openapi.json` next to
 //! this crate's manifest; a test fails when the two drift (`just openapi` rewrites it).
 //!
-//! Every route but the probes and bootstrapping needs a Token, whose Scope the handler checks
+//! Every route but the probes and first-run setup needs a Token, whose Scope the handler checks
 //! through the extractors in [`auth`] (ADR-0043). The one exception is a webhook Trigger with
 //! `hmac`, whose callers sign the body instead (ADR-0058).
 
@@ -35,7 +35,7 @@ mod routes;
 #[cfg(feature = "ui")]
 mod ui;
 
-pub use auth::BootstrapKey;
+pub use auth::SetupCode;
 pub use cors::{CorsOrigins, InvalidOrigin};
 pub use error::{ApiError, ErrorBody, ErrorCode};
 pub use extract::{Json, Path, Query};
@@ -52,8 +52,9 @@ pub struct ApiState {
 #[derive(Debug, Clone, Default)]
 pub struct ApiConfig {
     pub cors_origins: CorsOrigins,
-    /// Turns on `POST /v1/tokens/bootstrap`, which mints the first admin Token.
-    pub bootstrap_key: Option<BootstrapKey>,
+    /// The code `POST /v1/setup` takes, from the Setup Link. Without one, setup refuses every
+    /// code.
+    pub setup_code: Option<SetupCode>,
     /// Encrypts Secrets. Without it, the Secret routes that write answer `master_key_missing`.
     pub master_key: Option<MasterKey>,
 }
@@ -111,10 +112,6 @@ impl Modify for SecuritySchemes {
                  administration, `webhook` only its own webhook Trigger.",
             ),
         );
-        components.add_security_scheme(
-            "bootstrap_key",
-            bearer("The key the server was started with in `BIA_BOOTSTRAP_KEY`."),
-        );
     }
 }
 
@@ -129,7 +126,7 @@ fn documented() -> OpenApiRouter<ApiState> {
         ))
         .routes(routes!(routes::token::current_token))
         .routes(routes!(routes::token::revoke_token))
-        .routes(routes!(routes::token::bootstrap_token))
+        .routes(routes!(routes::setup::set_up))
         .routes(routes!(routes::secret::list_secrets))
         .routes(routes!(
             routes::secret::put_secret,

@@ -31,11 +31,15 @@ pub enum ErrorCode {
     InsufficientScope,
     /// No Token has this id.
     TokenNotFound,
-    /// Bootstrapping is off because the server has no bootstrap key configured.
-    BootstrapDisabled,
-    /// An unrevoked admin Token exists, so bootstrapping refuses to mint another; create
-    /// Tokens with it instead.
-    AlreadyBootstrapped,
+    /// The setup code is not the one in the Setup Link the server logged.
+    InvalidSetupCode,
+    /// The setup code is from before the server last started; use the Setup Link it logged
+    /// since.
+    SetupCodeExpired,
+    /// A User has a password, so setup refuses; `bia serve --reset-admin` starts it again.
+    AlreadySetUp,
+    /// The password has fewer than 12 characters.
+    PasswordTooShort,
     /// No Workflow has this id.
     WorkflowNotFound,
     /// The Workflow has no Version with this number.

@@ -9,10 +9,12 @@ use std::sync::Arc;
 use anyhow::{Context, bail};
 use bia_client::{NewToken, Scope, WebhookBinding};
 use bia_core::action::CancellationToken;
+use bia_core::clock::Clock;
 use bia_engine::{InternalSecrets, Interpreter, Retention, Scheduler, Worker};
-use bia_server::ApiState;
+use bia_server::{ApiState, SetupCode};
 use bia_store::SystemClock;
 use bia_store::secret::{PgSecretRepository, SecretRepository};
+use bia_store::user::{PgUserRepository, UserRepository};
 use clap::{Parser, Subcommand, ValueEnum};
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
@@ -22,6 +24,7 @@ mod api;
 mod client_config;
 mod config;
 mod mcp;
+mod setup;
 
 use client_config::ClientConfig;
 use config::{Config, LogFormat};
@@ -50,9 +53,16 @@ enum Command {
         /// Which Roles this process takes on, comma-separated.
         #[arg(long, value_enum, value_delimiter = ',', default_value = "all")]
         role: Vec<Role>,
+        /// Clears the User's password and revokes all their Tokens before serving, then logs
+        /// a new Setup Link. For a lost password; needs the `api` Role.
+        #[arg(long)]
+        reset_admin: bool,
     },
     /// Applies the database migrations this release needs.
     Migrate,
+    /// Sets up the User with the code from the Setup Link that `bia serve` logs, prompting for
+    /// it and a password, and prints an admin Token.
+    Setup,
     /// Saves, checks, dry-runs, publishes and activates Workflows.
     Workflow {
         #[command(subcommand)]
@@ -86,17 +96,12 @@ enum Command {
 #[derive(Debug, Subcommand)]
 enum TokenCommand {
     /// Creates a Token and prints its value, which is shown only this once. Needs an admin
-    /// Token in BIA_TOKEN, or `--bootstrap` on a fresh install.
+    /// Token in BIA_TOKEN.
     Create {
         /// What the Token is for, e.g. `claude-desktop`.
         #[arg(long)]
         name: String,
-        #[arg(
-            long,
-            value_enum,
-            default_value = "agent",
-            conflicts_with = "bootstrap"
-        )]
+        #[arg(long, value_enum, default_value = "agent")]
         scope: ScopeArg,
         /// The Workflow a `webhook` Token may start Runs of.
         #[arg(long, required_if_eq("scope", "webhook"))]
@@ -104,10 +109,6 @@ enum TokenCommand {
         /// The webhook Trigger a `webhook` Token may start Runs from.
         #[arg(long, required_if_eq("scope", "webhook"))]
         trigger: Option<String>,
-        /// Mints the first admin Token with the server's bootstrap key, read from
-        /// BIA_BOOTSTRAP_KEY. The server refuses once an unrevoked admin Token exists.
-        #[arg(long)]
-        bootstrap: bool,
     },
 }
 
@@ -135,8 +136,11 @@ async fn main() -> anyhow::Result<ExitCode> {
         Ok(config)
     };
     let success = match cli.command {
-        Command::Serve { ref role } => {
-            serve(&server(&cli)?, &roles(role)).await?;
+        Command::Serve {
+            ref role,
+            reset_admin,
+        } => {
+            serve(&server(&cli)?, &roles(role), reset_admin).await?;
             true
         }
         Command::Migrate => {
@@ -146,6 +150,11 @@ async fn main() -> anyhow::Result<ExitCode> {
         Command::Mcp => {
             let config = ClientConfig::load(cli.config.as_deref())?;
             mcp::proxy(config.url(cli.url.as_deref()), config.token()).await?;
+            true
+        }
+        Command::Setup => {
+            let config = ClientConfig::load(cli.config.as_deref())?;
+            setup::run(&config.client(cli.url.as_deref())?).await?;
             true
         }
         Command::Token { ref command } => {
@@ -190,43 +199,33 @@ async fn token(cli: &Cli, command: &TokenCommand) -> anyhow::Result<()> {
         scope,
         workflow,
         trigger,
-        bootstrap,
     } = command;
     let config = ClientConfig::load(cli.config.as_deref())?;
     let client = config.client(cli.url.as_deref())?;
-    // Credentials come from the environment or the config file only, never argv, which other
-    // users can read.
-    let created = if *bootstrap {
-        let Ok(key) = std::env::var("BIA_BOOTSTRAP_KEY") else {
-            bail!("set BIA_BOOTSTRAP_KEY to the key the server was started with");
-        };
-        client.bootstrap_token(&key, name).await?
-    } else {
-        if config.token().is_none() {
-            bail!(
-                "set BIA_TOKEN (or `token` in the config file) to an admin Token, or pass \
-                 --bootstrap on a fresh install"
-            );
-        }
-        let (scope, webhook) = match (scope, workflow, trigger) {
-            (ScopeArg::Admin, ..) => (Scope::Admin, None),
-            (ScopeArg::Agent, ..) => (Scope::Agent, None),
-            (ScopeArg::Webhook, Some(workflow_id), Some(trigger_id)) => (
-                Scope::Webhook,
-                Some(WebhookBinding {
-                    workflow_id: workflow_id.clone(),
-                    trigger_id: trigger_id.clone(),
-                }),
-            ),
-            (ScopeArg::Webhook, ..) => bail!("a `webhook` Token needs --workflow and --trigger"),
-        };
-        let new = NewToken {
-            name: name.clone(),
-            scope,
-            webhook,
-        };
-        client.create_token(&new).await?
+    if config.token().is_none() {
+        bail!(
+            "set BIA_TOKEN (or `token` in the config file) to an admin Token; on a fresh \
+             install, `bia setup` prints one"
+        );
+    }
+    let (scope, webhook) = match (scope, workflow, trigger) {
+        (ScopeArg::Admin, ..) => (Scope::Admin, None),
+        (ScopeArg::Agent, ..) => (Scope::Agent, None),
+        (ScopeArg::Webhook, Some(workflow_id), Some(trigger_id)) => (
+            Scope::Webhook,
+            Some(WebhookBinding {
+                workflow_id: workflow_id.clone(),
+                trigger_id: trigger_id.clone(),
+            }),
+        ),
+        (ScopeArg::Webhook, ..) => bail!("a `webhook` Token needs --workflow and --trigger"),
     };
+    let new = NewToken {
+        name: name.clone(),
+        scope,
+        webhook,
+    };
+    let created = client.create_token(&new).await?;
     eprintln!(
         "created {:?} Token `{}` ({}); its value is shown only now",
         created.token.scope, created.token.name, created.token.id
@@ -269,7 +268,10 @@ async fn migrate(config: &Config) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn serve(config: &Config, roles: &BTreeSet<Role>) -> anyhow::Result<()> {
+async fn serve(config: &Config, roles: &BTreeSet<Role>, reset_admin: bool) -> anyhow::Result<()> {
+    if reset_admin && !roles.contains(&Role::Api) {
+        bail!("--reset-admin needs the `api` Role, which serves the new Setup Link");
+    }
     // Each in-flight Job can hold a connection for its transition and one for its heartbeat,
     // and the Worker loop needs one to claim; the listener has its own. The scheduler fires
     // one Schedule at a time and holds its leader lock on a connection of its own. The API
@@ -278,6 +280,9 @@ async fn serve(config: &Config, roles: &BTreeSet<Role>) -> anyhow::Result<()> {
     let pool = connect(config, concurrency.saturating_mul(2).saturating_add(6)).await?;
     let master_key = config.master_key()?;
     require_master_key_for_secrets(&pool, master_key.is_some()).await?;
+    if reset_admin {
+        reset_admin_password(&pool).await?;
+    }
     let shutdown = CancellationToken::new();
     tokio::spawn(stop_on_signal(shutdown.clone()));
     let actions = Arc::new(bia_actions::builtin_registry().context("cannot build the Actions")?);
@@ -290,9 +295,16 @@ async fn serve(config: &Config, roles: &BTreeSet<Role>) -> anyhow::Result<()> {
         let listener = TcpListener::bind(bind)
             .await
             .with_context(|| format!("cannot listen on {bind}"))?;
-        tracing::info!(address = %listener.local_addr()?, "api listening");
+        let listening = listener.local_addr()?;
+        tracing::info!(address = %listening, "api listening");
+        let (setup_code, code) = SetupCode::generate().context("cannot make a setup code")?;
+        log_setup_link(&pool, &config.setup_link(&code, listening)?).await?;
+        let api_config = bia_server::ApiConfig {
+            setup_code: Some(setup_code),
+            ..config.api_config()?
+        };
         let state = ApiState::new(pool.clone(), actions.clone(), Arc::new(SystemClock))
-            .with_config(config.api_config()?);
+            .with_config(api_config);
         let router = bia_server::router(state);
         bia_server::serve(listener, router, shutdown.clone())
             .await
@@ -354,6 +366,39 @@ async fn require_master_key_for_secrets(pool: &PgPool, has_key: bool) -> anyhow:
         bail!(
             "invalid configuration: Secrets exist but `master_key` is not set; set BIA_MASTER_KEY \
              to the key they were stored under"
+        );
+    }
+    Ok(())
+}
+
+/// Clears the User's password and revokes their Tokens, so the Setup Link this start logs is
+/// the way back in. `serve` does it itself so only `serve` and `migrate` touch Postgres
+/// (ADR-0007).
+async fn reset_admin_password(pool: &PgPool) -> anyhow::Result<()> {
+    let mut conn = pool
+        .acquire()
+        .await
+        .context("cannot connect to the database")?;
+    match PgUserRepository.reset(&mut conn, SystemClock.now()).await? {
+        Some(revoked) => {
+            tracing::warn!(revoked_tokens = revoked, "admin reset: password cleared");
+        }
+        None => tracing::info!("admin reset: no User exists yet"),
+    }
+    Ok(())
+}
+
+/// Logs the Setup Link while no User can sign in. The link carries the setup code: logging it
+/// is the point, since the operator reading the logs is who it is for.
+async fn log_setup_link(pool: &PgPool, link: &str) -> anyhow::Result<()> {
+    let mut conn = pool
+        .acquire()
+        .await
+        .context("cannot connect to the database")?;
+    if PgUserRepository.needs_setup(&mut conn).await? {
+        tracing::warn!(
+            setup_link = link,
+            "no User can sign in yet; open the Setup Link, or run `bia setup` with its code"
         );
     }
     Ok(())
