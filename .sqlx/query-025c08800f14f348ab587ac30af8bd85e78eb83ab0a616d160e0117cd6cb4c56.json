@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "-- The delivery a Lease holds, locked; none once the Message was claimed again, acked or\n-- dead-lettered.\n-- $1: message id, $2: the Lease's delivery\nSELECT messages.deliveries, queues.max_retries\nFROM messages\nJOIN queues ON queues.name = messages.queue\nWHERE messages.id = $1 AND messages.deliveries = $2 AND messages.claimed_by IS NOT NULL\nFOR UPDATE OF messages\n",
+  "query": "-- The delivery a Lease holds, locked; none once the Message was claimed again, handed to a\n-- Run, acked or dead-lettered.\n-- $1: message id, $2: the Lease's delivery\nSELECT messages.deliveries, queues.max_retries\nFROM messages\nJOIN queues ON queues.name = messages.queue\nWHERE messages.id = $1 AND messages.deliveries = $2 AND messages.claimed_by IS NOT NULL\n  AND messages.run_id IS NULL\nFOR UPDATE OF messages\n",
   "describe": {
     "columns": [
       {
@@ -37,5 +37,5 @@
       false
     ]
   },
-  "hash": "2cdc885d96b26a62b85f7eea7548a4d79747e7fec5c943b3cc4bcb69b1eabc5c"
+  "hash": "025c08800f14f348ab587ac30af8bd85e78eb83ab0a616d160e0117cd6cb4c56"
 }

@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Messages whose last delivery's visibility timeout ran out and that have no retries left. A\n-- Message held by a Run has no timeout.\n-- $1: queue, $2: now, $3: max retries\nSELECT id\nFROM messages\nWHERE queue = $1 AND claimed_by IS NOT NULL AND run_id IS NULL AND visible_at <= $2\n  AND deliveries > $3\nORDER BY visible_at, id\nLIMIT 500\nFOR UPDATE SKIP LOCKED\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Timestamptz",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e1725b31d975daaea16225e38bf14572a92ebb9b41a34e1b69d2ba69055a4cb3"
+}

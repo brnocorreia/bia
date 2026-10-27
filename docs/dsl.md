@@ -118,7 +118,7 @@ A loop's `max_iterations` lowers the global `max_iterations` (default 10,000) fo
 | `type` | Fields |
 |---|---|
 | `cron` | **`expr`**, `tz`, `jitter` (Duration), `overlap: skip\|queue\|allow`, `catch_up: none\|latest\|all` |
-| `queue` | **`queue`**, `batch_size` |
+| `queue` | **`queue`**, `batch_size` (1 to 100, default: the Queue's) |
 | `webhook` | `hmac: { header, secret }` (optional). Served at `/hooks/{workflow_id}/{trigger_id}` (ADR-0015). |
 | `manual` | — |
 | `event` | **`event`**, optional `match` Correlation Key |
@@ -136,6 +136,18 @@ Only the cron Triggers of the Active Version fire. Activating another Version re
 - `overlap` decides what happens while the previous Run this Trigger started is still active: `skip` (default) drops the occurrence, `queue` starts it once that Run finishes, holding at most 100 and skipping further ones, and `allow` starts it at once.
 - `catch_up` decides what happens to occurrences missed while no scheduler ran, meaning reached more than a minute after they were due: `none` drops them, `latest` (default) fires the newest one, and `all` fires each, up to the 100 most recent. The fired occurrences then go through `overlap`, so `all` with `skip` fires only the first.
 - A cron Run's input is `{}`, and its `trigger` is `{ "type": "cron", "id": "<trigger id>", "scheduled_at": "<occurrence, RFC 3339 UTC>" }`. `scheduled_at` is the occurrence before jitter, even when the Run started later from the queue or after downtime.
+
+### Queue
+
+Only the queue Triggers of the Active Version consume. Activating another Version switches the consumer within a second, and a Version that drops the Trigger stops consuming; Messages wait in the Queue meanwhile. Semantics: ADR-0061.
+
+- Each poll, the scheduler starts a Run for every batch of up to `batch_size` claimable Messages, oldest first. It does not wait for a full batch. Several Workflows consuming one Queue take batches in turn, and each Message goes to one of them.
+- A Run's `input` is `{ "messages": [<body>, …] }`, checked against `input_schema` like any input. Its `trigger` is `{ "type": "queue", "id": "<trigger id>", "queue": "<name>", "messages": [{ "id", "deliveries", "published_at" }, …] }`, in the same order as `input.messages`. `deliveries` is 1 on the first delivery.
+- The Run holds its Messages until it finishes, however long it sleeps or waits. The Queue's `visibility_timeout` does not apply, and no other Run receives them meanwhile.
+- When the Run **succeeds**, its Messages are acked and never delivered again.
+- When it **fails**, including on input that breaks `input_schema`, each Message goes back to the Queue after a backoff of 1s, doubling with each delivery up to 1h. Once it has used the Queue's `max_retries`, it is dead-lettered instead, and its `last_error` names the Run that failed.
+- When it is **cancelled**, its Messages are dead-lettered at once.
+- Resuming or retrying a failed Run does not take its Messages back, because they already returned to the Queue. Delivery is at least once (ADR-0010), so Steps with side effects should forward the Idempotency Key.
 
 ### Webhook
 
@@ -162,7 +174,7 @@ dead_letter: emails-dlq
 | Field | Default | Meaning |
 |---|---|---|
 | `max_retries` | `3` | Deliveries after the first before a Message is dead-lettered, so a Message is delivered at most `max_retries + 1` times. |
-| `visibility_timeout` | `30s` | How long a delivered Message stays hidden from other consumers. One not acked by then is delivered again. |
+| `visibility_timeout` | `30s` | How long a delivered Message stays hidden from other consumers. One not acked by then is delivered again. A queue Trigger's Run holds its Messages until it finishes instead. |
 | `batch_size` | `10` | Messages a consumer receives at once, 1 to 100. |
 | `dead_letter` | none | The Dead-Letter Queue: an existing Queue that receives Messages which exhausted their retries. Without one, they stay in this Queue as dead letters and are not delivered again. |
 

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Hands claimed Messages to the Run a queue Trigger started with them.\n-- $1: message ids, $2: run id\nUPDATE messages\nSET run_id = $2\nWHERE id = ANY($1)\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8Array",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6598168fbe7871b37396d2a77b5508d706d65dac1816068db8062df9d1df767b"
+}

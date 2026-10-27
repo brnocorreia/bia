@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- $1: workflow id, $2: trigger id, $3: version, $4: queue, $5: batch size, NULL for the Queue's\nINSERT INTO queue_triggers (workflow_id, trigger_id, version, queue, batch_size)\nVALUES ($1, $2, $3, $4, $5)\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int4",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e550f9704aedf0c62c179f50a19eaf84e1a8783acb4bb6f433003ed0f3783434"
+}

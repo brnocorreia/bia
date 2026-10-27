@@ -1,4 +1,4 @@
-use bia_core::dsl::{CronTrigger, TriggerId, WorkflowId};
+use bia_core::dsl::{CronTrigger, QueueName, TriggerId, WorkflowId};
 use chrono::{DateTime, Utc};
 
 use crate::run::RunId;
@@ -38,4 +38,24 @@ pub struct DueSchedule {
 pub struct SyncState {
     pub active: Option<VersionNumber>,
     pub scheduled: Option<VersionNumber>,
+}
+
+/// A queue Trigger of an Active Version, which the scheduler starts Runs from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QueueConsumer {
+    pub workflow_id: WorkflowId,
+    pub trigger_id: TriggerId,
+    /// The Version the Trigger comes from, which Runs it starts are pinned to.
+    pub version: VersionNumber,
+    pub queue: QueueName,
+    /// Messages per Run; `None` takes the Queue's `batch_size`.
+    pub batch_size: Option<u32>,
+}
+
+/// A [`QueueConsumer`] whose Queue has a Message to claim.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReadyConsumer {
+    pub consumer: QueueConsumer,
+    /// The Trigger's `batch_size`, or else its Queue's.
+    pub batch_size: u32,
 }

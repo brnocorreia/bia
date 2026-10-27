@@ -589,11 +589,12 @@ expression: definition_schema()
         },
         {
           "additionalProperties": false,
-          "description": "`type: queue`: starts Runs from the Messages of a Queue.",
+          "description": "`type: queue`: starts Runs from batches of a Queue's Messages, as `input.messages`. A\nRun's Messages are acked when it succeeds, delivered again when it fails (until the\nQueue's `max_retries`, then dead-lettered), and dead-lettered when it is cancelled.",
           "properties": {
             "batch_size": {
-              "description": "How many Messages one Run receives.",
+              "description": "The most Messages one Run receives, at most 100. Defaults to the Queue's\n`batch_size`. A Run starts with whatever is there, without waiting for a full batch.",
               "format": "uint32",
+              "maximum": 100,
               "minimum": 1,
               "type": "integer"
             },
@@ -602,7 +603,8 @@ expression: definition_schema()
               "description": "Unique within the Definition. Webhook Triggers are served at\n`/hooks/{workflow_id}/{trigger_id}`."
             },
             "queue": {
-              "$ref": "#/$defs/QueueName"
+              "$ref": "#/$defs/QueueName",
+              "description": "The Queue to consume. It must exist before the Version is published."
             },
             "type": {
               "const": "queue"

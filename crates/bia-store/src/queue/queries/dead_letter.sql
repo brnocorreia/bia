@@ -12,6 +12,7 @@ kept AS (
     UPDATE messages
     SET visible_at = NULL,
         claimed_by = NULL,
+        run_id = NULL,
         last_error = coalesce($3, messages.last_error),
         dead_lettered_at = $2,
         dead_lettered_from = messages.queue

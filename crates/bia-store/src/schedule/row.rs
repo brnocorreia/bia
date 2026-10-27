@@ -1,8 +1,8 @@
-use bia_core::dsl::{CatchUpPolicy, CronTrigger, OverlapPolicy, TriggerId};
+use bia_core::dsl::{CatchUpPolicy, CronTrigger, OverlapPolicy, QueueName, TriggerId};
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use super::Schedule;
+use super::{QueueConsumer, Schedule};
 use crate::StoreError;
 use crate::run::RunId;
 use crate::version::version_number;
@@ -61,6 +61,35 @@ impl TryFrom<ScheduleRow> for Schedule {
             due_at: row.due_at,
             queued: row.queued,
             last_run: row.last_run_id.map(RunId::from_uuid),
+        })
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct ConsumerRow {
+    pub(crate) workflow_id: String,
+    pub(crate) trigger_id: String,
+    pub(crate) version: i32,
+    pub(crate) queue: String,
+    pub(crate) batch_size: Option<i32>,
+}
+
+impl TryFrom<ConsumerRow> for QueueConsumer {
+    type Error = StoreError;
+
+    fn try_from(row: ConsumerRow) -> Result<Self, StoreError> {
+        Ok(Self {
+            workflow_id: workflow_id(row.workflow_id)?,
+            trigger_id: TriggerId::new(row.trigger_id)
+                .map_err(|err| StoreError::invalid("trigger id", err))?,
+            version: version_number(row.version)?,
+            queue: QueueName::new(row.queue)
+                .map_err(|err| StoreError::invalid("queue name", err))?,
+            batch_size: row
+                .batch_size
+                .map(u32::try_from)
+                .transpose()
+                .map_err(|err| StoreError::invalid("batch size", err))?,
         })
     }
 }

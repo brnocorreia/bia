@@ -1,11 +1,14 @@
 -- How many Messages each Queue holds, by state. `ready`, `in_flight` and `delayed` split the
 -- Messages that are not dead letters, so the four counts add up to the Queue's depth. A
--- Message whose delivery's visibility timeout ran out is ready: the next claim takes it.
+-- Message whose delivery's visibility timeout ran out is ready: the next claim takes it. One a
+-- Run holds stays in flight until the Run finishes.
 -- $1: now, $2: only this Queue, or NULL for every Queue
 SELECT queue AS "queue!",
-       count(*) FILTER (WHERE dead_lettered_at IS NULL AND visible_at <= $1) AS "ready!",
-       count(*) FILTER (WHERE dead_lettered_at IS NULL AND visible_at > $1
-                          AND claimed_by IS NOT NULL) AS "in_flight!",
+       count(*) FILTER (WHERE dead_lettered_at IS NULL AND run_id IS NULL
+                          AND visible_at <= $1) AS "ready!",
+       count(*) FILTER (WHERE dead_lettered_at IS NULL
+                          AND (run_id IS NOT NULL
+                               OR (visible_at > $1 AND claimed_by IS NOT NULL))) AS "in_flight!",
        count(*) FILTER (WHERE dead_lettered_at IS NULL AND visible_at > $1
                           AND claimed_by IS NULL) AS "delayed!",
        count(*) FILTER (WHERE dead_lettered_at IS NOT NULL) AS "dead_lettered!"

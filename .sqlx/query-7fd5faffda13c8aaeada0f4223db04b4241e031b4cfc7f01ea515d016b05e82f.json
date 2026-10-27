@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Gives Messages back to their Queue, each claimable again from its own time.\n-- $1: message ids, $2: when each is claimable again, $3: error\nUPDATE messages\nSET run_id = NULL, claimed_by = NULL, visible_at = retry.visible_at, last_error = $3\nFROM unnest($1::bigint[], $2::timestamptz[]) AS retry (id, visible_at)\nWHERE messages.id = retry.id\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8Array",
+        "TimestamptzArray",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7fd5faffda13c8aaeada0f4223db04b4241e031b4cfc7f01ea515d016b05e82f"
+}

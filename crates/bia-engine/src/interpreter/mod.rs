@@ -10,6 +10,10 @@
 //! A Run flagged for cancellation ends `cancelled` at its next transition, and the Worker
 //! cancels the Attempt in flight through the token it passes to
 //! [`Interpreter::advance_cancellable`] (ADR-0036).
+//!
+//! The transition that finishes a Run also settles the Messages a queue Trigger delivered to
+//! it: acked when it succeeded, given back to their Queue when it failed, dead-lettered when
+//! it was cancelled (ADR-0061).
 
 use std::collections::BTreeSet;
 use std::fmt;
@@ -27,8 +31,8 @@ use bia_core::dsl::{
 };
 use bia_core::expression::{self, Scope, Template, resolve_params};
 use bia_core::validation::schema_violations;
-use bia_store::job::{Claimed, JobRepository, Lease, NewJob, PgJobRepository};
-use bia_store::queue::{PgQueueRepository, QueueRepository};
+use bia_store::job::{Backoff, Claimed, JobRepository, Lease, NewJob, PgJobRepository};
+use bia_store::queue::{PgQueueRepository, QueueRepository, Settlement};
 use bia_store::run::{Checkpoint, NewRun, PgRunRepository, Run, RunId, RunRepository, RunStatus};
 use bia_store::timeline::{
     AttemptStatus, NewTimelineEntry, PgTimelineRepository, StepAttempt, TimelineRepository,
@@ -1014,8 +1018,39 @@ impl Interpreter {
                 )
                 .await?;
         }
+        if let Some(settlement) = settlement(run, &transition) {
+            PgQueueRepository
+                .settle(&mut tx, run, &settlement, transition.at)
+                .await?;
+        }
         tx.commit().await?;
         Ok(())
+    }
+}
+
+/// What a transition that finishes the Run does with the Messages it holds.
+fn settlement(run: RunId, transition: &Transition) -> Option<Settlement> {
+    match transition.status {
+        RunStatus::Succeeded => Some(Settlement::Ack),
+        RunStatus::Failed => {
+            let message = transition
+                .entry
+                .as_ref()
+                .and_then(|entry| entry.error.as_ref())
+                .and_then(|error| error["message"].as_str());
+            let error = match message {
+                Some(message) => format!("Run {run} failed: {message}"),
+                None => format!("Run {run} failed"),
+            };
+            Some(Settlement::Retry {
+                error,
+                backoff: Backoff::default(),
+            })
+        }
+        RunStatus::Cancelled => Some(Settlement::DeadLetter {
+            error: format!("Run {run} was cancelled"),
+        }),
+        RunStatus::Pending | RunStatus::Running | RunStatus::Sleeping | RunStatus::Waiting => None,
     }
 }
 
