@@ -1,5 +1,9 @@
 import type { Page } from "@playwright/test";
-import { expect, test } from "./support/fixtures";
+import { expect, test, uniqueName } from "./support/fixtures";
+import { authorizeUrl, catchCallback, issuer, pkce, registerApp } from "./support/oauth";
+
+// One User means one set of passkeys, so these tests must not overlap.
+test.describe.configure({ mode: "serial" });
 
 /** A CDP virtual authenticator, which answers the browser's WebAuthn prompts without a person. */
 async function addVirtualAuthenticator(page: Page) {
@@ -70,4 +74,35 @@ test("on a page that is not a secure context, the sign-in screen and the menu ex
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page.getByRole("note")).toContainText("HTTPS");
   await expect(page.getByRole("button", { name: "Sign in with a passkey" })).toHaveCount(0);
+});
+
+test("someone who signs in with a passkey comes back to the request as well", async ({
+  signedInPage: page,
+}) => {
+  await addVirtualAuthenticator(page);
+  const passkeyName = uniqueName("e2e-return");
+  let dialog = await openPasskeys(page);
+  await dialog.getByLabel("Name for a new passkey").fill(passkeyName);
+  await dialog.getByRole("button", { name: "Add passkey" }).click();
+  await expect(dialog.getByText(passkeyName)).toBeVisible();
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await page.getByText("Account").click();
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(/\/login$/);
+
+  const app = await registerApp(page.request);
+  const resource = await issuer(page.request);
+  await catchCallback(page);
+  await page.goto(authorizeUrl(app.clientId, resource, pkce().challenge, "agent"));
+  await expect(page).toHaveURL(/\/login\?redirect=/);
+  await page.getByRole("button", { name: "Sign in with a passkey" }).click();
+  await expect(page.getByRole("heading", { name: `Let ${app.name} use bia?` })).toBeVisible();
+
+  // Leave no passkey behind for the specs that expect none.
+  await page.getByRole("button", { name: "Deny" }).click();
+  await page.goto("/");
+  dialog = await openPasskeys(page);
+  await dialog.getByRole("button", { name: `Remove ${passkeyName}` }).click();
+  await dialog.getByRole("button", { name: `Confirm removing ${passkeyName}` }).click();
+  await expect(dialog.getByText("No passkeys yet.")).toBeVisible();
 });
