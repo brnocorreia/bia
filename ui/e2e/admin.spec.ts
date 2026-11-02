@@ -3,11 +3,18 @@ import { expect, actAsAgent, test, uniqueName } from "./support/fixtures";
 import { e2eEnv } from "./support/env";
 
 // Collects every response body the page receives, so a test can prove a value never came back.
+// Only finished requests are read: a request that a navigation cancels has no body, and asking
+// Playwright for it never settles.
 function recordBodies(page: Page) {
   const bodies: Promise<string>[] = [];
-  page.on("response", (response) => {
-    if (response.url().startsWith(e2eEnv().apiUrl)) {
-      bodies.push(response.text().catch(() => ""));
+  page.on("requestfinished", (request) => {
+    if (request.url().startsWith(e2eEnv().apiUrl)) {
+      bodies.push(
+        request
+          .response()
+          .then((response) => response?.text() ?? "")
+          .catch(() => ""),
+      );
     }
   });
   return async () => (await Promise.all(bodies)).join("\n");
