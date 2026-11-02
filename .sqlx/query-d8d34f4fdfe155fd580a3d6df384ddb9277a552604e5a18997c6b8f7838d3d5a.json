@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "-- Revoking twice keeps the first revocation time.\n-- $1: token id, $2: now\nUPDATE tokens SET revoked_at = coalesce(revoked_at, $2)\nWHERE id = $1\nRETURNING id, name, scope, workflow_id, trigger_id, user_id, created_at, last_used_at, revoked_at\n",
+  "query": "-- $1: name, $2: hash, $3: scope, $4: workflow id, $5: trigger id, $6: user id, $7: now, $8: origin\nINSERT INTO tokens (name, hash, scope, workflow_id, trigger_id, user_id, created_at, origin)\nVALUES ($1, $2, $3, $4, $5, $6, $7, $8)\nRETURNING id, name, scope, origin, workflow_id, trigger_id, user_id, created_at, last_used_at, revoked_at\n",
   "describe": {
     "columns": [
       {
@@ -38,6 +38,17 @@
       },
       {
         "ordinal": 3,
+        "name": "origin",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tokens",
+            "name": "origin"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
         "name": "workflow_id",
         "type_info": "Text",
         "origin": {
@@ -48,7 +59,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "trigger_id",
         "type_info": "Text",
         "origin": {
@@ -59,7 +70,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "user_id",
         "type_info": "Uuid",
         "origin": {
@@ -70,7 +81,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -81,7 +92,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "last_used_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -92,7 +103,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "revoked_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -105,11 +116,18 @@
     ],
     "parameters": {
       "Left": [
+        "Text",
+        "Bytea",
+        "Text",
+        "Text",
+        "Text",
         "Uuid",
-        "Timestamptz"
+        "Timestamptz",
+        "Text"
       ]
     },
     "nullable": [
+      false,
       false,
       false,
       false,
@@ -121,5 +139,5 @@
       true
     ]
   },
-  "hash": "b1b0a55ace948d0d1d77d406b39335e82967c82f8fb70b4e0fab76829f01adca"
+  "hash": "d8d34f4fdfe155fd580a3d6df384ddb9277a552604e5a18997c6b8f7838d3d5a"
 }

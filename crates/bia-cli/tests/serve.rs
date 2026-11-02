@@ -349,9 +349,10 @@ async fn bia_serve_logs_a_setup_link_that_bia_setup_uses_then_serves_and_stops_o
 
     let set_up = bia_setup(&url, &format!("{link}\n{PASSWORD}\n")).await;
     assert!(set_up.status.success(), "{set_up:?}");
-    let token = String::from_utf8(set_up.stdout).unwrap();
-    let token = token.trim().to_owned();
-    assert!(token.starts_with("bia_"), "{token}");
+    assert!(
+        set_up.stdout.is_empty(),
+        "setup prints no credential: {set_up:?}"
+    );
     let again = bia_setup(&url, &format!("{code}\n{PASSWORD}\n")).await;
     assert!(!again.status.success(), "{again:?}");
     let stderr = String::from_utf8_lossy(&again.stderr);
@@ -360,6 +361,20 @@ async fn bia_serve_logs_a_setup_link_that_bia_setup_uses_then_serves_and_stops_o
     let client = bia_client::Client::new(&url).unwrap();
     assert_eq!(client.ready().await.unwrap().status, "ready");
     assert!(client.schema().await.is_err(), "the schema needs a Token");
+    // `public_url` defaults to the listening address with `localhost` for loopback.
+    let session = client.sign_in(PASSWORD).await.unwrap();
+    let token = client
+        .clone()
+        .with_session(session.session)
+        .with_origin(format!("http://localhost:{port}"))
+        .create_token(&bia_client::NewToken {
+            name: "serve-test".into(),
+            scope: bia_client::Scope::Admin,
+            webhook: None,
+        })
+        .await
+        .unwrap()
+        .value;
     let schema = client.with_token(&token).schema().await.unwrap();
     assert!(
         schema
@@ -399,7 +414,8 @@ async fn bia_serve_logs_a_setup_link_that_bia_setup_uses_then_serves_and_stops_o
     assert!(set_up.status.success(), "{set_up:?}");
     let logs = api.stop().await;
     assert!(logs.contains("admin reset"), "{logs}");
-    assert!(logs.contains(r#""revoked_tokens":1"#), "{logs}");
+    // The Session setup started and the Token made through it.
+    assert!(logs.contains(r#""revoked_tokens":3"#), "{logs}");
 }
 
 #[sqlx::test(migrator = "bia_store::MIGRATOR")]

@@ -5,5 +5,7 @@ mod model;
 mod repository;
 mod row;
 
-pub use model::{NewToken, Scope, Token, TokenHash, TokenId};
+pub use model::{
+    NewToken, Origin, SESSION_IDLE_LIFETIME, SESSION_MAX_LIFETIME, Scope, Token, TokenHash, TokenId,
+};
 pub use repository::{PgTokenRepository, TokenRepository};

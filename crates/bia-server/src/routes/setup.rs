@@ -1,24 +1,17 @@
-//! First-run setup: the Setup Link's code and a password create the install's User (ADR-0062).
-//! Until sign-in exists, setup also returns an admin Token, so the API stays usable.
+//! First-run setup: the Setup Link's code and a password create the install's User and start
+//! its first Session (ADR-0062, ADR-0064).
 
-use argon2::{Argon2, PasswordHasher};
 use axum::extract::State;
 use axum::extract::rejection::JsonRejection;
-use axum::http::StatusCode;
-use bia_store::token::{NewToken, PgTokenRepository, Scope, TokenRepository};
-use bia_store::user::{PasswordHash, PgUserRepository, UserRepository};
-use chrono::{DateTime, Utc};
+use axum::http::{HeaderValue, StatusCode, header};
+use bia_store::user::{PgUserRepository, UserRepository};
 use serde::{Deserialize, Serialize};
 use sqlx::Acquire;
 use utoipa::ToSchema;
-use uuid::Uuid;
 
-use crate::auth::{CodeCheck, TokenValue};
-use crate::routes::token::{CreatedToken, created};
+use crate::auth::{CodeCheck, password, session};
+use crate::routes::user::UserInfo;
 use crate::{ApiError, ApiState, ErrorBody, ErrorCode, Json};
-
-/// Counted in characters. No other rule: length is what makes a password hard to guess.
-const MIN_PASSWORD_LEN: usize = 12;
 
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
@@ -30,31 +23,23 @@ pub(crate) struct SetupRequest {
     password: String,
 }
 
-/// The User setup created, and an admin Token for it.
-// No `Debug`, so the Token's value cannot reach a log through one.
-#[derive(Serialize, ToSchema)]
+/// The User setup created. The Session it started is in the `Set-Cookie` header.
+#[derive(Debug, Serialize, ToSchema)]
 pub(crate) struct SetupDone {
     user: UserInfo,
-    /// An admin Token to call the API with until sign-in exists. Shown only in this response.
-    token: CreatedToken,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-pub(crate) struct UserInfo {
-    id: Uuid,
-    created_at: DateTime<Utc>,
 }
 
 /// Sets the password of the install's User, creating it on a fresh install, with the code
-/// from the Setup Link that `bia serve` logs. Public, since no one can sign in yet. Refuses
-/// once a User has a password; `bia serve --reset-admin` clears it and logs a new link.
+/// from the Setup Link that `bia serve` logs, and signs that User in: the response sets the
+/// `bia_session` cookie, as `POST /v1/session` does. Public, since no one can sign in yet.
+/// Refuses once a User has a password; `bia serve --reset-admin` clears it and logs a new link.
 #[utoipa::path(
     post,
     path = "/v1/setup",
     tag = "setup",
     request_body = SetupRequest,
     responses(
-        (status = CREATED, body = SetupDone),
+        (status = CREATED, body = SetupDone, headers(("Set-Cookie" = String, description = "`bia_session=<value>`"))),
         (status = BAD_REQUEST, description = "`malformed_request`: the body is not `{code, password}`.", body = ErrorBody),
         (status = FORBIDDEN, description = "`invalid_setup_code`: the code is wrong; `setup_code_expired`: it is from before the server last started, so use the link it logged since.", body = ErrorBody),
         (status = CONFLICT, description = "`already_set_up`: a User has a password.", body = ErrorBody),
@@ -64,7 +49,14 @@ pub(crate) struct UserInfo {
 pub(crate) async fn set_up(
     State(state): State<ApiState>,
     request: Result<axum::Json<SetupRequest>, JsonRejection>,
-) -> Result<(StatusCode, Json<SetupDone>), ApiError> {
+) -> Result<
+    (
+        StatusCode,
+        [(header::HeaderName, HeaderValue); 1],
+        Json<SetupDone>,
+    ),
+    ApiError,
+> {
     // axum's rejection text can quote the body, which holds the password.
     let axum::Json(request) = request.map_err(|rejection| {
         ApiError::new(
@@ -96,15 +88,10 @@ pub(crate) async fn set_up(
             ));
         }
     }
-    if request.password.chars().count() < MIN_PASSWORD_LEN {
-        return Err(ApiError::new(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            ErrorCode::PasswordTooShort,
-            format!("the password must be at least {MIN_PASSWORD_LEN} characters"),
-        ));
+    if request.password.chars().count() < password::MIN_LEN {
+        return Err(password::too_short());
     }
-    let password = hash_password(request.password).await?;
-    let (value, hash) = TokenValue::generate().map_err(|e| ApiError::internal(&e))?;
+    let password = password::hash(request.password).await?;
     let now = state.clock.now();
     let mut conn = state
         .pool
@@ -123,43 +110,15 @@ pub(crate) async fn set_up(
                 "setup is done; `bia serve --reset-admin` starts it again",
             )
         })?;
-    let token = PgTokenRepository
-        .create(
-            &mut tx,
-            &NewToken {
-                name: "setup".to_owned(),
-                hash,
-                scope: Scope::Admin,
-                user_id: user.id,
-                created_at: now,
-            },
-        )
-        .await
-        .map_err(|e| ApiError::internal(&e))?;
+    let (token, value) = session::start(&state, &mut tx, user.id).await?;
     tx.commit().await.map_err(|e| ApiError::internal(&e))?;
-    tracing::warn!(user_id = %user.id, token_id = %token.id, "setup done");
-    let (status, Json(token)) = created(token, value);
+    tracing::warn!(user_id = %user.id, session_id = %token.id, "setup done");
     Ok((
-        status,
-        Json(SetupDone {
-            user: UserInfo {
-                id: user.id.as_uuid(),
-                created_at: user.created_at,
-            },
-            token,
-        }),
+        StatusCode::CREATED,
+        [(
+            header::SET_COOKIE,
+            session::set_cookie(&value, state.config.secure_cookies()),
+        )],
+        Json(SetupDone { user: user.into() }),
     ))
-}
-
-/// argon2id with the crate's defaults, which follow OWASP's recommendation, off the async
-/// runtime since it is slow on purpose.
-async fn hash_password(password: String) -> Result<PasswordHash, ApiError> {
-    tokio::task::spawn_blocking(move || {
-        Argon2::default()
-            .hash_password(password.as_bytes())
-            .map(|hash| PasswordHash(hash.to_string()))
-    })
-    .await
-    .map_err(|e| ApiError::internal(&e))?
-    .map_err(|e| ApiError::internal(&e))
 }

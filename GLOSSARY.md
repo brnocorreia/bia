@@ -179,8 +179,12 @@ A person who signs in to bia and on whose behalf Tokens act. An install has one,
 _Avoid_: account, admin (for the row; "admin" is a Scope)
 
 **Token**:
-A credential for the API with a Scope, belonging to a User, shown once when created and stored only as a hash.
+A credential for the API with a Scope and an origin (`session`, `oauth` or `manual`), belonging to a User, shown once when created and stored only as a hash.
 _Avoid_: API key
+
+**Session**:
+A User's browser sign-in: a Token with origin `session` and the `admin` Scope, held in the `HttpOnly` `bia_session` cookie. It expires after 14 days without use, or 90 days after it started, and signing out or changing the password revokes it.
+_Avoid_: login, cookie (for the Token behind it)
 
 **Setup Link**:
 `{ui_url}/setup?code=<code>`, which `bia serve` logs while no User can sign in; its one-time code sets the User's password. A new code is made on every start.

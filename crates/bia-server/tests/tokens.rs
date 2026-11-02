@@ -84,7 +84,8 @@ async fn an_agent_token_is_forbidden_on_admin_routes_and_an_admin_token_passes(p
     );
 
     server.client.schema().await.unwrap();
-    assert_eq!(server.client.list_tokens().await.unwrap().len(), 2);
+    // The setup Session, the admin Token and the agent Token.
+    assert_eq!(server.client.list_tokens().await.unwrap().len(), 3);
 }
 
 #[sqlx::test(migrator = "bia_store::MIGRATOR")]
@@ -271,7 +272,15 @@ async fn every_route_but_the_probes_and_setup_needs_a_token(pool: PgPool) {
         }
     }
     public.sort();
-    assert_eq!(public, ["get /health", "get /ready", "post /v1/setup"]);
+    assert_eq!(
+        public,
+        [
+            "get /health",
+            "get /ready",
+            "post /v1/session",
+            "post /v1/setup"
+        ]
+    );
 }
 
 #[sqlx::test(migrator = "bia_store::MIGRATOR")]

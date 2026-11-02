@@ -6,6 +6,7 @@ use sqlx::PgConnection;
 use super::row::TokenRow;
 use super::{NewToken, Scope, Token, TokenHash, TokenId};
 use crate::StoreError;
+use crate::user::UserId;
 
 /// How stale `last_used_at` may get before a use records it again.
 const LAST_USED_RESOLUTION: TimeDelta = TimeDelta::minutes(1);
@@ -32,7 +33,16 @@ pub trait TokenRepository {
         now: DateTime<Utc>,
     ) -> impl Future<Output = Result<Option<Token>, StoreError>> + Send;
 
-    /// The unrevoked Token with this hash, recording that it was used at `now`.
+    /// Revokes every Session of the User but `keep`, returning how many it revoked.
+    fn revoke_sessions_except(
+        &self,
+        conn: &mut PgConnection,
+        user: UserId,
+        keep: Option<TokenId>,
+        now: DateTime<Utc>,
+    ) -> impl Future<Output = Result<u64, StoreError>> + Send;
+
+    /// The unrevoked, unexpired Token with this hash, recording that it was used at `now`.
     fn authenticate(
         &self,
         conn: &mut PgConnection,
@@ -63,6 +73,7 @@ impl TokenRepository for PgTokenRepository {
             trigger_id,
             token.user_id.as_uuid(),
             token.created_at,
+            token.origin.as_str(),
         )
         .fetch_one(&mut *conn)
         .await?
@@ -91,6 +102,24 @@ impl TokenRepository for PgTokenRepository {
             .transpose()
     }
 
+    async fn revoke_sessions_except(
+        &self,
+        conn: &mut PgConnection,
+        user: UserId,
+        keep: Option<TokenId>,
+        now: DateTime<Utc>,
+    ) -> Result<u64, StoreError> {
+        Ok(sqlx::query_file!(
+            "src/token/queries/revoke_sessions.sql",
+            user.as_uuid(),
+            keep.map(TokenId::as_uuid),
+            now
+        )
+        .execute(&mut *conn)
+        .await?
+        .rows_affected())
+    }
+
     async fn authenticate(
         &self,
         conn: &mut PgConnection,
@@ -105,6 +134,9 @@ impl TokenRepository for PgTokenRepository {
             return Ok(None);
         };
         let mut token = Token::try_from(row)?;
+        if token.is_expired(now) {
+            return Ok(None);
+        }
         if token
             .last_used_at
             .is_none_or(|used| used <= now - LAST_USED_RESOLUTION)

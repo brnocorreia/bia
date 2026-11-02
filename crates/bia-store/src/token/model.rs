@@ -59,11 +59,33 @@ impl Scope {
     }
 }
 
+/// Where a Token came from (ADR-0064).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Origin {
+    /// A browser sign-in. The only origin that expires.
+    Session,
+    /// Granted to an OAuth client.
+    OAuth,
+    /// Created by hand, for CI and scripts.
+    Manual,
+}
+
+impl Origin {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Session => "session",
+            Self::OAuth => "oauth",
+            Self::Manual => "manual",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Token {
     pub id: TokenId,
     pub name: String,
     pub scope: Scope,
+    pub origin: Origin,
     pub user_id: UserId,
     pub created_at: DateTime<Utc>,
     /// When the Token last authenticated a request, to the minute: recording every use would
@@ -77,7 +99,23 @@ pub struct NewToken {
     pub name: String,
     pub hash: TokenHash,
     pub scope: Scope,
+    pub origin: Origin,
     /// Who the Token acts for.
     pub user_id: UserId,
     pub created_at: DateTime<Utc>,
+}
+
+/// A Session unused for this long stops authenticating.
+pub const SESSION_IDLE_LIFETIME: chrono::TimeDelta = chrono::TimeDelta::days(14);
+/// A Session older than this stops authenticating, however often it is used.
+pub const SESSION_MAX_LIFETIME: chrono::TimeDelta = chrono::TimeDelta::days(90);
+
+impl Token {
+    /// Whether a Session has outlived its lifetime at `now`. Tokens of other origins never
+    /// expire. Use is recorded to the minute, so the idle limit is judged to the minute too.
+    pub fn is_expired(&self, now: DateTime<Utc>) -> bool {
+        self.origin == Origin::Session
+            && (now >= self.created_at + SESSION_MAX_LIFETIME
+                || now >= self.last_used_at.unwrap_or(self.created_at) + SESSION_IDLE_LIFETIME)
+    }
 }

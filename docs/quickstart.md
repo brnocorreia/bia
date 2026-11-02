@@ -21,14 +21,13 @@ bia serve --role all
 
 ## 2. Create the Tokens
 
-In the second terminal, `BIA_URL` defaults to `http://127.0.0.1:8080`. `bia setup` asks for the Setup Link (or just its code) and a password of at least 12 characters, and prints the admin Token:
+Open the Setup Link in a browser and choose a password of at least 12 characters; setup signs you in. (Without a browser, `bia setup` asks for the link or its code and the password, but returns no credential.) In the Tokens screen create an `admin` Token and an `agent` Token, and copy each value, which is shown once. In the second terminal, `BIA_URL` defaults to `http://127.0.0.1:8080`:
 
 ```sh
-export BIA_TOKEN="$(bia setup)"                    # the admin Token
-bia token create --name claude --scope agent       # prints the agent Token once
+export BIA_TOKEN=<admin token>
 ```
 
-Keep the admin Token for yourself. Copy the agent Token's value (it starts with `bia_`) for the MCP client. An `agent` Token can author Drafts, validate, dry-run, trigger and read, but cannot publish or activate (ADR-0008).
+Keep the admin Token for yourself. Give the agent Token's value (it starts with `bia_`) to the MCP client. An `agent` Token can author Drafts, validate, dry-run, trigger and read, but cannot publish or activate (ADR-0008).
 
 ## 3. Set the Secret and start a target
 

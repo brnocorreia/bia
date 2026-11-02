@@ -1,9 +1,9 @@
 //! First-run setup: the code from the Setup Link and a password create the install's User,
-//! once. Until sign-in exists, setup also returns an admin Token.
+//! once, and start its first Session.
 
 #![allow(clippy::unwrap_used)]
 
-use bia_client::{Error, Scope};
+use bia_client::{Error, Origin, Scope};
 use bia_store::user::{PgUserRepository, UserRepository};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -33,7 +33,7 @@ async fn post_setup(server: &TestServer, body: Value) -> (StatusCode, String) {
 }
 
 #[sqlx::test(migrator = "bia_store::MIGRATOR")]
-async fn setup_creates_the_user_and_returns_an_admin_token(pool: PgPool) {
+async fn setup_creates_the_user_and_starts_an_admin_session(pool: PgPool) {
     let server = TestServer::without_tokens(pool.clone()).await;
     let mut conn = pool.acquire().await.unwrap();
     assert!(PgUserRepository.needs_setup(&mut conn).await.unwrap());
@@ -45,15 +45,33 @@ async fn setup_creates_the_user_and_returns_an_admin_token(pool: PgPool) {
         .unwrap();
 
     assert_eq!(done.user.created_at, common::t0());
-    assert_eq!(done.token.token.scope, Scope::Admin);
-    let tokens = server
-        .client_with(&done.token.value)
-        .list_tokens()
+    let me = server
+        .client_with_session(&done.session)
+        .current_token()
         .await
         .unwrap();
-    let ids: Vec<_> = tokens.iter().map(|token| token.id).collect();
-    assert_eq!(ids, [done.token.token.id]);
+    assert_eq!(me.scope, Scope::Admin);
+    assert_eq!(me.origin, Origin::Session);
     assert!(!PgUserRepository.needs_setup(&mut conn).await.unwrap());
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn setup_returns_no_token_and_sets_only_the_session_cookie(pool: PgPool) {
+    let server = TestServer::without_tokens(pool).await;
+
+    let (status, text) = post_setup(
+        &server,
+        json!({ "code": server.setup_code, "password": PASSWORD }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CREATED);
+    let body: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(
+        body.as_object().unwrap().keys().collect::<Vec<_>>(),
+        ["user"]
+    );
+    assert!(!text.contains("bia_"), "{text}");
 }
 
 #[sqlx::test(migrator = "bia_store::MIGRATOR")]
@@ -161,6 +179,7 @@ async fn resetting_the_admin_revokes_every_token_and_a_new_setup_link_works(pool
     let server = TestServer::start(pool.clone()).await;
     let agent = server.token(Scope::Agent).await;
     let hook = server.webhook_token("onboarding-email", "signup").await;
+    let session = server.session.clone();
     drop(server);
 
     // What `bia serve --reset-admin` does before it serves.
@@ -169,7 +188,8 @@ async fn resetting_the_admin_revokes_every_token_and_a_new_setup_link_works(pool
         .reset(&mut conn, common::t0())
         .await
         .unwrap();
-    assert_eq!(revoked, Some(3));
+    // The setup Session, the admin Token and the two made after.
+    assert_eq!(revoked, Some(4));
     assert!(PgUserRepository.needs_setup(&mut conn).await.unwrap());
 
     let restarted = TestServer::without_tokens(pool).await;
@@ -179,17 +199,26 @@ async fn resetting_the_admin_revokes_every_token_and_a_new_setup_link_works(pool
             (StatusCode::UNAUTHORIZED, "invalid_token".into())
         );
     }
+    assert_eq!(
+        failure(
+            restarted
+                .client_with_session(&session)
+                .current_token()
+                .await
+        ),
+        (StatusCode::UNAUTHORIZED, "invalid_token".into())
+    );
     let done = restarted
         .anonymous()
         .set_up(&restarted.setup_code, "a-brand-new-password")
         .await
         .unwrap();
     let tokens = restarted
-        .client_with(&done.token.value)
+        .client_with_session(&done.session)
         .list_tokens()
         .await
         .unwrap();
-    assert_eq!(tokens.len(), 4);
+    assert_eq!(tokens.len(), 5);
     assert_eq!(
         tokens.iter().filter(|t| t.revoked_at.is_none()).count(),
         1,

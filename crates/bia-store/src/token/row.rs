@@ -2,7 +2,7 @@ use bia_core::dsl::TriggerId;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use super::{Scope, Token, TokenId};
+use super::{Origin, Scope, Token, TokenId};
 use crate::StoreError;
 use crate::user::UserId;
 use crate::workflow::workflow_id;
@@ -12,6 +12,7 @@ pub(crate) struct TokenRow {
     pub(crate) id: Uuid,
     pub(crate) name: String,
     pub(crate) scope: String,
+    pub(crate) origin: String,
     pub(crate) workflow_id: Option<String>,
     pub(crate) trigger_id: Option<String>,
     pub(crate) user_id: Uuid,
@@ -34,10 +35,17 @@ impl TryFrom<TokenRow> for Token {
             },
             (other, _, _) => return Err(StoreError::invalid("token scope", other)),
         };
+        let origin = match row.origin.as_str() {
+            "session" => Origin::Session,
+            "oauth" => Origin::OAuth,
+            "manual" => Origin::Manual,
+            other => return Err(StoreError::invalid("token origin", other)),
+        };
         Ok(Self {
             id: TokenId::from_uuid(row.id),
             name: row.name,
             scope,
+            origin,
             user_id: UserId::from_uuid(row.user_id),
             created_at: row.created_at,
             last_used_at: row.last_used_at,

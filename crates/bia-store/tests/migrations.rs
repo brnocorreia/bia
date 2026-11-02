@@ -55,6 +55,10 @@ const RELEASED: &[(i64, &str)] = &[
         11,
         "9b4b92c2d0e3862dbfccc357227d36b7acd5edfe947a7d701505d3c490a3198c3a96bd98a260899843bb29ff8705e36f",
     ),
+    (
+        12,
+        "87f96ce270b0051fb0c3dac093186ae7ad5e9808819675f42420ef811b65e2388ad3e2cd95e376661afd3aeb344758c8",
+    ),
 ];
 
 #[sqlx::test(migrations = false)]
@@ -84,6 +88,32 @@ async fn migrations_apply_to_an_empty_database(pool: PgPool) {
         .create(&mut conn, &common::workflow_id("onboarding-email"))
         .await
         .unwrap();
+}
+
+#[sqlx::test(migrations = false)]
+async fn tokens_that_existed_before_origins_become_manual(pool: PgPool) {
+    MIGRATOR.run_to(11, &pool).await.unwrap();
+    let user: uuid::Uuid =
+        sqlx::query_scalar("INSERT INTO users (created_at) VALUES (now()) RETURNING id")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    sqlx::query(
+        "INSERT INTO tokens (name, hash, scope, user_id, created_at) \
+         VALUES ('ci', decode(repeat('ab', 32), 'hex'), 'admin', $1, now())",
+    )
+    .bind(user)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    migrate(&pool).await.unwrap();
+
+    let origin: String = sqlx::query_scalar("SELECT origin FROM tokens")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(origin, "manual");
 }
 
 #[test]

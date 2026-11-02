@@ -301,7 +301,7 @@ async fn serve(config: &Config, roles: &BTreeSet<Role>, reset_admin: bool) -> an
         log_setup_link(&pool, &config.setup_link(&code, listening)?).await?;
         let api_config = bia_server::ApiConfig {
             setup_code: Some(setup_code),
-            ..config.api_config()?
+            ..config.api_config(listening)?
         };
         let state = ApiState::new(pool.clone(), actions.clone(), Arc::new(SystemClock))
             .with_config(api_config);

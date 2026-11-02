@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use axum::http::{HeaderValue, Method, header};
-use tower_http::cors::{AllowOrigin, CorsLayer};
+use tower_http::cors::{AllowCredentials, AllowOrigin, CorsLayer};
 
 /// Origins allowed to call the API from a browser. A preflight from any other origin gets no
 /// CORS headers, so the browser refuses the request.
@@ -12,8 +12,9 @@ pub enum CorsOrigins {
     /// No browser origin; non-browser callers are unaffected.
     #[default]
     None,
-    /// `*`: any origin. Tokens travel in a header the page must set, never in cookies, so a
-    /// page cannot borrow a caller's credentials.
+    /// `*`: any origin, without credentials. Tokens travel in a header the page must set, so
+    /// a page cannot borrow a caller's credentials; only the UI's origin may send the
+    /// Session cookie (ADR-0064).
     Any,
     List(Vec<HeaderValue>),
 }
@@ -55,14 +56,26 @@ impl CorsOrigins {
             .map(Self::List)
     }
 
-    pub(crate) fn layer(&self) -> CorsLayer {
-        let allow = match self {
-            Self::None => AllowOrigin::list([]),
-            Self::Any => AllowOrigin::any(),
-            Self::List(origins) => AllowOrigin::list(origins.iter().cloned()),
+    /// `ui` is the origin of `ui_url`: always allowed, and the only one that may send the
+    /// Session cookie.
+    pub(crate) fn layer(&self, ui: Option<HeaderValue>) -> CorsLayer {
+        let allow = match (self, ui.clone()) {
+            (Self::Any, None) => AllowOrigin::any(),
+            // Mirrors the caller's origin, which says the same as `*` but may carry credentials.
+            (Self::Any, Some(_)) => AllowOrigin::predicate(|_, _| true),
+            (Self::None, None) => AllowOrigin::list([]),
+            (Self::None, Some(ui)) => AllowOrigin::exact(ui),
+            (Self::List(origins), ui) => {
+                let origins = origins.clone();
+                AllowOrigin::predicate(move |origin, _| {
+                    origins.contains(origin) || ui.as_ref() == Some(origin)
+                })
+            }
         };
+        let credentials = AllowCredentials::predicate(move |origin, _| ui.as_ref() == Some(origin));
         CorsLayer::new()
             .allow_origin(allow)
+            .allow_credentials(credentials)
             .allow_methods([
                 Method::GET,
                 Method::POST,

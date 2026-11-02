@@ -15,12 +15,9 @@ pub(crate) async fn run(client: &Client) -> anyhow::Result<()> {
     } else {
         read_lines(&mut std::io::stdin().lock())?
     };
-    let done = client.set_up(&code, &password).await?;
-    eprintln!(
-        "Setup complete. This admin Token ({}) is shown only now; send it as BIA_TOKEN:",
-        done.token.token.id
-    );
-    println!("{}", done.token.value);
+    client.set_up(&code, &password).await?;
+    // The Session setup starts belongs to a browser; a terminal has no use for it.
+    eprintln!("Setup complete. Sign in to the UI with the password you just set.");
     Ok(())
 }
 

@@ -17,3 +17,10 @@ impl From<UserRow> for User {
         }
     }
 }
+
+#[derive(Debug)]
+pub(crate) struct CredentialsRow {
+    pub(crate) id: Uuid,
+    pub(crate) created_at: DateTime<Utc>,
+    pub(crate) password_hash: String,
+}

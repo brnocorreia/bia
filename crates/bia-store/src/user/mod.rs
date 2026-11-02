@@ -6,5 +6,5 @@ mod model;
 mod repository;
 mod row;
 
-pub use model::{PasswordHash, User, UserId};
+pub use model::{Credentials, PasswordHash, User, UserId};
 pub use repository::{PgUserRepository, UserRepository};

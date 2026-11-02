@@ -65,5 +65,5 @@ The UI is served from `/` by the `api` Role, with unknown paths such as `/runs/1
 
 ## Checks
 
-- Open the site, sign in with a Token. A failure that names `Cannot reach the API` means `apiUrl` is wrong or the API is down; a browser console CORS error means the origin is missing from `BIA_CORS_ORIGINS` (see `docs/configuration.md`).
+- Open the site, sign in with the admin password. A failure that names `Cannot reach the API` means `apiUrl` is wrong or the API is down; a browser console CORS error means the origin is missing from `BIA_CORS_ORIGINS` (see `docs/configuration.md`). If sign-in succeeds but the UI returns to the sign-in screen, the browser dropped the Session cookie: the UI and the API must be same-site, for example `ui.example.com` with `api.example.com`, and `BIA_UI_URL` must be the UI's URL (ADR-0064).
 - Reload on a deep link such as `/runs`: it must show the app, not a 403 or 404.
