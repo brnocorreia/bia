@@ -96,6 +96,10 @@ pub struct Token {
     pub user_agent: Option<String>,
     /// The OAuth Grant an `oauth` Token belongs to.
     pub grant_id: Option<Uuid>,
+    /// When an access token stops authenticating; `None` for Tokens that end by other rules.
+    pub expires_at: Option<DateTime<Utc>>,
+    /// The resource the Token may be used at, copied from its Grant. `None` is unrestricted.
+    pub audience: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -109,6 +113,8 @@ pub struct NewToken {
     pub created_at: DateTime<Utc>,
     pub user_agent: Option<String>,
     pub grant_id: Option<Uuid>,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub audience: Option<String>,
 }
 
 /// A Session unused for this long stops authenticating.
@@ -117,11 +123,13 @@ pub const SESSION_IDLE_LIFETIME: chrono::TimeDelta = chrono::TimeDelta::days(14)
 pub const SESSION_MAX_LIFETIME: chrono::TimeDelta = chrono::TimeDelta::days(90);
 
 impl Token {
-    /// Whether a Session has outlived its lifetime at `now`. Tokens of other origins never
-    /// expire. Use is recorded to the minute, so the idle limit is judged to the minute too.
+    /// Whether the Token has outlived its lifetime at `now`: a Session after its idle or maximum
+    /// lifetime, any Token at its `expires_at`. Manual Tokens never expire. Use is recorded to
+    /// the minute, so the idle limit is judged to the minute too.
     pub fn is_expired(&self, now: DateTime<Utc>) -> bool {
-        self.origin == Origin::Session
-            && (now >= self.created_at + SESSION_MAX_LIFETIME
-                || now >= self.last_used_at.unwrap_or(self.created_at) + SESSION_IDLE_LIFETIME)
+        self.expires_at.is_some_and(|at| now >= at)
+            || (self.origin == Origin::Session
+                && (now >= self.created_at + SESSION_MAX_LIFETIME
+                    || now >= self.last_used_at.unwrap_or(self.created_at) + SESSION_IDLE_LIFETIME))
     }
 }

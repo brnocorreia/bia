@@ -76,6 +76,8 @@ impl TokenRepository for PgTokenRepository {
             token.origin.as_str(),
             token.user_agent,
             token.grant_id,
+            token.expires_at,
+            token.audience,
         )
         .fetch_one(&mut *conn)
         .await?
@@ -146,6 +148,11 @@ impl TokenRepository for PgTokenRepository {
             sqlx::query_file!("src/token/queries/touch.sql", token.id.as_uuid(), now)
                 .execute(&mut *conn)
                 .await?;
+            if let Some(grant) = token.grant_id {
+                sqlx::query_file!("src/token/queries/touch_grant.sql", grant, now)
+                    .execute(&mut *conn)
+                    .await?;
+            }
             token.last_used_at = Some(now);
         }
         Ok(Some(token))

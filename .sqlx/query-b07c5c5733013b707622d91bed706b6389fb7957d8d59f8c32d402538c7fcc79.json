@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- $1: client id\nSELECT client_id, client_name, redirect_uris, created_at FROM oauth_clients WHERE client_id = $1\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "client_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oauth_clients",
+            "name": "client_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "client_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oauth_clients",
+            "name": "client_name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "redirect_uris",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "oauth_clients",
+            "name": "redirect_uris"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "oauth_clients",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "b07c5c5733013b707622d91bed706b6389fb7957d8d59f8c32d402538c7fcc79"
+}

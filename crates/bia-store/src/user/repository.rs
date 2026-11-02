@@ -140,6 +140,12 @@ impl UserRepository for PgUserRepository {
         }
         let mut revoked = 0;
         for user in users {
+            sqlx::query_file!("src/user/queries/revoke_grants_for_user.sql", user, now)
+                .execute(&mut *tx)
+                .await?;
+            sqlx::query_file!("src/user/queries/close_authorizations.sql", now)
+                .execute(&mut *tx)
+                .await?;
             revoked += sqlx::query_file!("src/user/queries/revoke_for_user.sql", user, now)
                 .execute(&mut *tx)
                 .await?
