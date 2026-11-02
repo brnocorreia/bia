@@ -2,7 +2,7 @@ import type { TokenInfo } from "@/api/tokens";
 
 export type Credentials = {
   sessions: TokenInfo[];
-  /** `oauth` Tokens, which Grants will group by `grant_id` (BIA-95). */
+  /** `oauth` Tokens; the Access screen lists their Grants instead (`GET /v1/grants`). */
   oauth: TokenInfo[];
   manual: TokenInfo[];
 };

@@ -4,6 +4,57 @@
  */
 
 export interface paths {
+    "/.well-known/oauth-authorization-server": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The authorization server's endpoints and what it supports. Public. */
+        get: operations["authorization_server_metadata"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/.well-known/oauth-protected-resource": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The API's metadata, for tokens issued for the whole API. Public. */
+        get: operations["api_resource_metadata"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/.well-known/oauth-protected-resource/mcp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The MCP endpoint's metadata: which authorization server issues tokens for `/mcp`. Public. */
+        get: operations["mcp_resource_metadata"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -45,6 +96,149 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/oauth/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Starts an authorization: redirects to the UI's consent screen at
+         *     `{ui_url}/oauth/consent?request=<id>`, where a signed-in person approves or denies. Needs no
+         *     credential. A problem with the client or its redirect URI is a 400 error body; any other
+         *     problem redirects to the client's `redirect_uri` with `error`, `error_description`, `state`
+         *     and `iss`.
+         */
+        get: operations["authorize"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/consent/{request_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The authorization request a person is asked about. Needs a Session. */
+        get: operations["get_consent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/consent/{request_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approves the request with the Scope given or less, and returns where to send the person:
+         *     the client's `redirect_uri` with a single-use `code` (valid for a minute), `state` and
+         *     `iss`. Answering twice fails. Needs a Session.
+         */
+        post: operations["approve"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/consent/{request_id}/deny": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Denies the request and returns where to send the person: the client's `redirect_uri` with
+         *     `error=access_denied`, `state` and `iss`. Needs a Session.
+         */
+        post: operations["deny"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registers a client. Open to anyone, since a client has to register before it can ask; the
+         *     person who approves it is told it registered itself and is unverified. At most 20 per
+         *     address per hour.
+         */
+        post: operations["register"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revokes the Grant the token belongs to, and with it every access token and refresh token it
+         *     issued: a client that is done wants all of it gone. Answers 200 whether or not the token
+         *     was known. Needs no credential, since holding the token is the proof.
+         */
+        post: operations["revoke"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issues an access token and a refresh token. Needs no credential: the code, its PKCE
+         *     verifier and the client id are the proof.
+         */
+        post: operations["token"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ready": {
         parameters: {
             query?: never;
@@ -73,6 +267,43 @@ export interface paths {
         put?: never;
         /** [`dry_run_version`] for a Definition in the request body, which need not be stored. */
         post: operations["dry_run_definition"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every Grant, revoked ones included. Needs an `admin` Token. */
+        get: operations["list_grants"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/grants/{grant_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revokes the Grant at once, with every access token and refresh token it issued; revoking it
+         *     again changes nothing. Needs an `admin` Token.
+         */
+        post: operations["revoke_grant"];
         delete?: never;
         options?: never;
         head?: never;
@@ -785,13 +1016,61 @@ export interface components {
             output: unknown;
             params: Record<string, never>;
         };
+        Approval: {
+            scope?: components["schemas"]["GrantScopeName"] | null;
+        };
         /** @enum {string} */
         AttemptStatusName: "succeeded" | "failed" | "skipped" | "cancelled";
+        /** @description OAuth 2.0 Authorization Server Metadata (RFC 8414). */
+        AuthorizationServerMetadata: {
+            authorization_endpoint: string;
+            /** @description `true`: every authorization response, errors included, carries `iss` (RFC 9207). */
+            authorization_response_iss_parameter_supported: boolean;
+            /** @description `true`: a `client_id` that is an `https` URL names a Client ID Metadata Document. */
+            client_id_metadata_document_supported: boolean;
+            /** @description `S256` only. */
+            code_challenge_methods_supported: string[];
+            grant_types_supported: string[];
+            issuer: string;
+            registration_endpoint: string;
+            response_types_supported: string[];
+            revocation_endpoint: string;
+            revocation_endpoint_auth_methods_supported: string[];
+            scopes_supported: string[];
+            token_endpoint: string;
+            /** @description `none`: clients are public and prove themselves with PKCE. */
+            token_endpoint_auth_methods_supported: string[];
+        };
         ChangePasswordRequest: {
             /** @description The password being replaced. */
             current: string;
             /** @description The new password: at least 12 characters. */
             new: string;
+        };
+        /** @description The client asking for access. */
+        ConsentClient: {
+            /** @description For `cimd`: the host the client's metadata was fetched from. */
+            host?: string | null;
+            id: string;
+            /** @description The name the client gave itself. */
+            name: string;
+            provenance: components["schemas"]["ProvenanceName"];
+            /** @description `false` for a client that registered itself: its name is unchecked. */
+            verified: boolean;
+        };
+        /** @description What a person is asked to approve. */
+        ConsentRequest: {
+            client: components["schemas"]["ConsentClient"];
+            /** Format: date-time */
+            expires_at: string;
+            /** Format: uuid */
+            id: string;
+            /** @description Where the person is sent back to, with the result. */
+            redirect_uri: string;
+            /** @description What the client asked for; the person may approve less. */
+            requested_scope: components["schemas"]["GrantScopeName"];
+            /** @description What the tokens will be good for: the API, or the MCP endpoint only. */
+            resource: string;
         };
         /** @description A Token just created, with its value. */
         CreatedToken: {
@@ -821,6 +1100,10 @@ export interface components {
              *     order of their old ids. Fewer than selected when some were skipped.
              */
             replayed: number[];
+        };
+        /** @description Where to send the person: the client's redirect URI with the result. */
+        Decision: {
+            redirect_to: string;
         };
         /** @description What a Dry Run of a Definition that need not be stored takes. */
         DefinitionDryRunRequest: {
@@ -885,7 +1168,7 @@ export interface components {
          *     added, but renaming or removing one needs an ADR (ADR-0042).
          * @enum {string}
          */
-        ErrorCode: "route_not_found" | "method_not_allowed" | "malformed_request" | "request_too_large" | "invalid_definition" | "missing_token" | "invalid_token" | "insufficient_scope" | "token_not_found" | "origin_mismatch" | "invalid_credentials" | "not_a_session" | "invalid_setup_code" | "setup_code_expired" | "already_set_up" | "password_too_short" | "workflow_not_found" | "version_not_found" | "version_published" | "version_not_published" | "version_changed" | "workflow_id_mismatch" | "no_active_version" | "no_manual_trigger" | "invalid_run_input" | "invalid_mock" | "dry_run_too_long" | "run_not_found" | "run_finished" | "run_not_finished" | "run_not_resumable" | "webhook_not_found" | "missing_signature" | "invalid_signature" | "hmac_secret_unavailable" | "secret_not_found" | "master_key_missing" | "queue_not_found" | "dead_letter_queue_not_found" | "queue_in_use" | "not_ready" | "internal_error";
+        ErrorCode: "route_not_found" | "method_not_allowed" | "malformed_request" | "request_too_large" | "invalid_definition" | "missing_token" | "invalid_token" | "insufficient_scope" | "wrong_audience" | "token_not_found" | "origin_mismatch" | "invalid_credentials" | "public_url_missing" | "invalid_client" | "invalid_redirect_uri" | "client_metadata_blocked" | "client_metadata_unreachable" | "client_metadata_too_large" | "client_metadata_redirected" | "client_metadata_invalid" | "client_metadata_mismatch" | "authorization_not_found" | "scope_exceeds_request" | "grant_not_found" | "rate_limited" | "not_a_session" | "invalid_setup_code" | "setup_code_expired" | "already_set_up" | "password_too_short" | "workflow_not_found" | "version_not_found" | "version_published" | "version_not_published" | "version_changed" | "workflow_id_mismatch" | "no_active_version" | "no_manual_trigger" | "invalid_run_input" | "invalid_mock" | "dry_run_too_long" | "run_not_found" | "run_finished" | "run_not_finished" | "run_not_resumable" | "webhook_not_found" | "missing_signature" | "invalid_signature" | "hmac_secret_unavailable" | "secret_not_found" | "master_key_missing" | "queue_not_found" | "dead_letter_queue_not_found" | "queue_in_use" | "not_ready" | "internal_error";
         /** @description A failed Run and the entry that failed it. */
         FailedRun: components["schemas"]["RunSummary"] & {
             failure?: components["schemas"]["TimelineEntryInfo"] | null;
@@ -898,6 +1181,58 @@ export interface components {
             next_after?: string | null;
             /** @description Failed Runs, newest first. */
             runs: components["schemas"]["FailedRun"][];
+        };
+        /** @description What a person approved for an OAuth client. */
+        GrantInfo: {
+            /** @description For `cimd`: the host the client's metadata came from. */
+            client_host?: string | null;
+            client_id: string;
+            client_name: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: date-time
+             * @description When one of its access tokens last authenticated a request, to the minute.
+             */
+            last_used_at?: string | null;
+            provenance: components["schemas"]["ProvenanceName"];
+            /** @description The audience of its tokens: the API's `public_url`, or `{public_url}/mcp`. */
+            resource: string;
+            /**
+             * Format: date-time
+             * @description Once set, none of its tokens authenticates anything.
+             */
+            revoked_at?: string | null;
+            scope: components["schemas"]["GrantScopeName"];
+        };
+        GrantList: {
+            /** @description Every Grant, revoked ones included, oldest first. */
+            grants: components["schemas"]["GrantInfo"][];
+        };
+        /**
+         * @description Which scope a person can grant.
+         * @enum {string}
+         */
+        GrantScopeName: "agent" | "admin";
+        /** @description A token response (RFC 6749 section 5.1). */
+        IssuedTokens: {
+            /** @description An `oauth` Token for the Grant's `resource`, valid for `expires_in` seconds. */
+            access_token: string;
+            /**
+             * Format: int64
+             * @description Seconds: 3600.
+             */
+            expires_in: number;
+            /**
+             * @description Single-use: exchanging it returns a new one. Presenting an old one again revokes the
+             *     Grant. Unused for 90 days it stops working.
+             */
+            refresh_token: string;
+            /** @description The Scope granted: `agent` or `admin`. */
+            scope: string;
+            token_type: string;
         };
         /**
          * @description How many Messages the Queue holds, by state, when it was read. The four counts do not
@@ -1000,6 +1335,16 @@ export interface components {
             scope: components["schemas"]["ScopeName"];
             webhook?: components["schemas"]["WebhookBinding"] | null;
         };
+        /** @description An OAuth error response. */
+        OAuthErrorBody: {
+            /**
+             * @description An OAuth error code such as `invalid_grant`, `invalid_request`, `invalid_scope`,
+             *     `invalid_target` or `unsupported_grant_type`.
+             */
+            error: string;
+            /** @description Human-readable explanation. Its wording may change; match on `error`. */
+            error_description: string;
+        };
         /**
          * @description Where a Token came from.
          * @enum {string}
@@ -1021,6 +1366,21 @@ export interface components {
              */
             revoked_sessions: number;
         };
+        /** @description OAuth 2.0 Protected Resource Metadata (RFC 9728). */
+        ProtectedResourceMetadata: {
+            /** @description The one authorization server: this one. */
+            authorization_servers: string[];
+            bearer_methods_supported: string[];
+            /** @description The resource these tokens are for: the MCP endpoint, or the whole API. */
+            resource: string;
+            /** @description `agent`: what an MCP client needs; `admin` is only granted if the person approves it. */
+            scopes_supported: string[];
+        };
+        /**
+         * @description Where a client's identity comes from.
+         * @enum {string}
+         */
+        ProvenanceName: "cimd" | "dynamic" | "builtin";
         /**
          * @description A Queue's settings. Every field is optional and a field left out takes its default, so
          *     putting a Queue again replaces all of its settings.
@@ -1084,6 +1444,38 @@ export interface components {
         QueueList: {
             /** @description Every Queue, ordered by name. */
             queues: components["schemas"]["QueueInfo"][];
+        };
+        /** @description A registered client. */
+        Registered: {
+            /** @description Use it as `client_id` in authorization and token requests. */
+            client_id: string;
+            /** Format: int64 */
+            client_id_issued_at: number;
+            client_name: string;
+            grant_types: string[];
+            redirect_uris: string[];
+            response_types: string[];
+            token_endpoint_auth_method: string;
+        };
+        /** @description Client metadata (RFC 7591). Other members are ignored. */
+        Registration: {
+            /** @description Shown to the person when they approve; unverified, since anyone can claim any name. */
+            client_name?: string | null;
+            /**
+             * @description Where the client may be sent back to: `https`, `http` on loopback (any port), or a
+             *     native app's own scheme. One to ten, exactly as the client will send them.
+             */
+            redirect_uris: string[];
+            /** @description Only `none`: clients are public and use PKCE. */
+            token_endpoint_auth_method?: string | null;
+        };
+        RevokeRequest: {
+            /** @description The client's id; a token is only revoked for the client it was issued to. */
+            client_id?: string | null;
+            /** @description An access token or a refresh token the client was issued. */
+            token?: string | null;
+            /** @description Ignored: either kind is recognised. */
+            token_type_hint?: string | null;
         };
         /** @description A Run with its input and its Timeline. */
         RunInfo: components["schemas"]["RunSummary"] & {
@@ -1300,6 +1692,25 @@ export interface components {
             /** @description Every credential, revoked ones included, oldest first. */
             tokens: components["schemas"]["TokenInfo"][];
         };
+        /** @description The form a client posts. Each grant type needs its own fields. */
+        TokenRequest: {
+            /** @description The client's id, as in the authorization request. */
+            client_id?: string | null;
+            /** @description `authorization_code`: the code the redirect carried. */
+            code?: string | null;
+            /** @description `authorization_code`: the PKCE verifier whose SHA-256 is the `code_challenge`. */
+            code_verifier?: string | null;
+            /** @description `authorization_code` or `refresh_token`. */
+            grant_type?: string | null;
+            /** @description `authorization_code`: the `redirect_uri` of the authorization request, exactly. */
+            redirect_uri?: string | null;
+            /** @description `refresh_token`: the refresh token. It is spent by this request. */
+            refresh_token?: string | null;
+            /** @description The `resource` of the authorization request; refused if it is a different one. */
+            resource?: string | null;
+            /** @description `refresh_token`: a Scope no broader than the Grant's. */
+            scope?: string | null;
+        };
         TriggerRequest: {
             /** @description The Run input. Defaults to `{}`. Checked against the Active Version's `input_schema`. */
             input?: unknown;
@@ -1397,6 +1808,90 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    authorization_server_metadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthorizationServerMetadata"];
+                };
+            };
+            /** @description `public_url_missing`. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    api_resource_metadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProtectedResourceMetadata"];
+                };
+            };
+            /** @description `public_url_missing`. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    mcp_resource_metadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProtectedResourceMetadata"];
+                };
+            };
+            /** @description `public_url_missing`. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     health: {
         parameters: {
             query?: never;
@@ -1514,6 +2009,342 @@ export interface operations {
             };
         };
     };
+    authorize: {
+        parameters: {
+            query?: {
+                /** @description Must be `code`. */
+                response_type?: string;
+                /** @description A Client ID Metadata Document URL (`https`), or an id from `POST /oauth/register`. */
+                client_id?: string;
+                /** @description Exactly one of the client's registered redirect URIs; a loopback one may use any port. */
+                redirect_uri?: string;
+                /** @description The PKCE challenge: the base64url SHA-256 of the code verifier. */
+                code_challenge?: string;
+                /** @description Must be `S256`. */
+                code_challenge_method?: string;
+                /** @description The audience (RFC 8707): the server's `public_url`, or `{public_url}/mcp`. */
+                resource?: string;
+                /** @description `agent` (default) or `admin`; the person may approve less than is asked. */
+                scope?: string;
+                /** @description Returned unchanged. */
+                state?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description To the consent screen, or to the client's `redirect_uri` with an OAuth `error`. */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `invalid_client`, `invalid_redirect_uri`, `client_metadata_blocked`, `client_metadata_unreachable`, `client_metadata_too_large`, `client_metadata_redirected`, `client_metadata_invalid`, `client_metadata_mismatch`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `public_url_missing`, or, as plain text, a build without a UI and `ui_url`. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_consent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The `request` in the consent screen's URL. */
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsentRequest"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `authorization_not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    approve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The `request` in the consent screen's URL. */
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Approval"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Decision"];
+                };
+            };
+            /** @description `scope_exceeds_request`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `authorization_not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    deny: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The `request` in the consent screen's URL. */
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Decision"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `authorization_not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    register: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Registration"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Registered"];
+                };
+            };
+            /** @description `invalid_redirect_uri` or `invalid_client_metadata`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthErrorBody"];
+                };
+            };
+            /** @description `rate_limited`. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthErrorBody"];
+                };
+            };
+        };
+    };
+    revoke: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/x-www-form-urlencoded": components["schemas"]["RevokeRequest"];
+            };
+        };
+        responses: {
+            /** @description Revoked, or unknown. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `invalid_request`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthErrorBody"];
+                };
+            };
+        };
+    };
+    token: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/x-www-form-urlencoded": components["schemas"]["TokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Sent with `Cache-Control: no-store`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedTokens"];
+                };
+            };
+            /** @description An OAuth error: `invalid_request`, `invalid_grant`, `invalid_scope`, `invalid_target` or `unsupported_grant_type`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthErrorBody"];
+                };
+            };
+        };
+    };
     ready: {
         parameters: {
             query?: never;
@@ -1598,6 +2429,104 @@ export interface operations {
             };
             /** @description `invalid_definition`, `invalid_mock` or `dry_run_too_long`. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_grants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GrantList"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    revoke_grant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The Grant's `id`. */
+                grant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GrantInfo"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `grant_not_found`. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
