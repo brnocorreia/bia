@@ -9,10 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ConfirmDialog } from "./confirm-dialog";
+import { PasskeysDialog } from "./passkeys-dialog";
 
-/** The signed-in user's menu: change the password, sign out. */
+/** The signed-in user's menu: change the password, manage passkeys, sign out. */
 export function UserMenu() {
   const [changing, setChanging] = useState(false);
+  const [managingPasskeys, setManagingPasskeys] = useState(false);
   const menu = useRef<HTMLDetailsElement>(null);
   const token = useQuery({
     ...currentTokenQuery,
@@ -36,6 +38,16 @@ export function UserMenu() {
           >
             Change password
           </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              menu.current?.removeAttribute("open");
+              setManagingPasskeys(true);
+            }}
+          >
+            Passkeys
+          </Button>
           <Button variant="ghost" size="sm" onClick={() => void signOut()}>
             Sign out
           </Button>
@@ -43,6 +55,7 @@ export function UserMenu() {
       </details>
       {/* Outside the `<details>`, whose closed content is not rendered. */}
       <ChangePasswordDialog open={changing} onClose={() => setChanging(false)} />
+      <PasskeysDialog open={managingPasskeys} onClose={() => setManagingPasskeys(false)} />
     </>
   );
 }

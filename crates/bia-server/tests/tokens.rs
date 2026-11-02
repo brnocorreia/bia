@@ -255,7 +255,9 @@ async fn every_route_but_the_probes_and_setup_needs_a_token(pool: PgPool) {
                 public.push(format!("{method} {path}"));
                 continue;
             }
-            let concrete = path.replace("{token_id}", &uuid::Uuid::nil().to_string());
+            let concrete = path
+                .replace("{token_id}", &uuid::Uuid::nil().to_string())
+                .replace("{passkey_id}", &uuid::Uuid::nil().to_string());
             let response = http
                 .request(
                     method.to_uppercase().parse().unwrap(),
@@ -278,6 +280,8 @@ async fn every_route_but_the_probes_and_setup_needs_a_token(pool: PgPool) {
             "get /health",
             "get /ready",
             "post /v1/session",
+            "post /v1/session/passkey/begin",
+            "post /v1/session/passkey/finish",
             "post /v1/setup"
         ]
     );

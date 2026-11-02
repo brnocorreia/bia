@@ -186,6 +186,10 @@ _Avoid_: API key
 A User's browser sign-in: a Token with origin `session` and the `admin` Scope, held in the `HttpOnly` `bia_session` cookie. It expires after 14 days without use, or 90 days after it started, and signing out or changing the password revokes it.
 _Avoid_: login, cookie (for the Token behind it)
 
+**Passkey**:
+A WebAuthn credential the User signs in with instead of the password, never as a second factor. The User can register several and names each one; removing one needs a Session that signed in within the last 10 minutes.
+_Avoid_: security key, 2FA, biometric login
+
 **Setup Link**:
 `{ui_url}/setup?code=<code>`, which `bia serve` logs while no User can sign in; its one-time code sets the User's password. A new code is made on every start.
 _Avoid_: invite, bootstrap link
