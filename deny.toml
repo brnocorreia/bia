@@ -6,6 +6,10 @@ all-features = true
 [advisories]
 version = 2
 yanked = "deny"
+# `rsa` has no patched release. It arrives only through `webauthn-rs` (crypto-glue) and bia only
+# uses it to verify passkey signatures with public keys. The Marvin attack needs private-key
+# operations (decryption or signing), which bia never performs with it.
+ignore = [{ id = "RUSTSEC-2023-0071", reason = "rsa only verifies passkey signatures; no private-key operation" }]
 
 [licenses]
 version = 2
@@ -25,9 +29,18 @@ allow = [
     "Zlib",
 ]
 confidence-threshold = 0.9
-# MPL-2.0 is file-level copyleft; this crate is unmodified and only runs inside the
+# MPL-2.0 is file-level copyleft. `option-ext` is unmodified and only runs inside the
 # `rust-embed` proc macro (via `shellexpand`) at compile time, so it is not in the binary.
-exceptions = [{ crate = "option-ext", allow = ["MPL-2.0"] }]
+# The `webauthn-rs` family and `crypto-glue` are unmodified dependencies; MPL-2.0 only obliges
+# sharing changes to those files, and bia changes none.
+exceptions = [
+    { crate = "option-ext", allow = ["MPL-2.0"] },
+    { crate = "webauthn-rs", allow = ["MPL-2.0"] },
+    { crate = "webauthn-rs-core", allow = ["MPL-2.0"] },
+    { crate = "webauthn-rs-proto", allow = ["MPL-2.0"] },
+    { crate = "webauthn-attestation-ca", allow = ["MPL-2.0"] },
+    { crate = "crypto-glue", allow = ["MPL-2.0"] },
+]
 
 [licenses.private]
 ignore = true

@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- $1: user id, $2: kind, $3: state, $4: expires at\nINSERT INTO passkey_ceremonies (user_id, kind, state, expires_at)\nVALUES ($1, $2, $3, $4)\nRETURNING id\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "passkey_ceremonies",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Jsonb",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3f5260173314610b29297d6afe05581b432e64d03d1406d8bd8c10b6d5df76fb"
+}

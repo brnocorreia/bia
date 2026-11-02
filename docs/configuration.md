@@ -57,17 +57,21 @@ Open it and choose a password of at least 12 characters, or run `bia setup` on a
 
 The code changes every time `bia serve` starts, so only a link from the current start works (`setup_code_expired` otherwise; a wrong code is `invalid_setup_code`), and once a User has a password setup refuses with `already_set_up`. The Setup Link is the one credential bia logs on purpose; the password is never logged. With several API processes, each logs its own link, which works only on that process.
 
-To regain access after losing the password and the Tokens, restart with `bia serve --reset-admin`: it clears the User's password, revokes every Token of the User, webhook Tokens included, and logs a new Setup Link.
+To regain access after losing the password and the Tokens, restart with `bia serve --reset-admin`: it clears the User's password, deletes their passkeys, revokes every Token of the User, webhook Tokens included, and logs a new Setup Link.
 
 ## Signing in and Sessions
 
 The UI signs in with the password (`POST /v1/session`) and keeps a Session in the `bia_session` cookie: `HttpOnly`, `SameSite=Lax`, `Secure` when `public_url` is HTTPS, never readable by scripts. A Session lasts 14 days without use and 90 days at most; signing out, `bia serve --reset-admin` or changing the password (`POST /v1/user/password`, which signs every other Session out) ends it. After five failed sign-ins, each further attempt waits longer, up to a minute; nothing locks.
 
+### Passkeys
+
+Where the browser offers WebAuthn (HTTPS, or `localhost`), the user menu's Passkeys section registers passkeys, renames and removes them, and the sign-in screen offers "Sign in with a passkey". A passkey is an alternative to the password, not a second factor, and the password stays required to set up and recover the account. The WebAuthn RP ID is `public_url`'s host and the accepted origins are `public_url`'s and `ui_url`'s, so `public_url` must name a domain or `localhost` (not an IP address), and the UI must be served from the same host; a response from any other origin or RP ID is refused. Removing a passkey needs a Session that signed in within the last 10 minutes (`reauthentication_required` otherwise), and failed passkey sign-ins count towards the same throttle as passwords (ADR-0065).
+
 A request made with the cookie and an unsafe method must carry an `Origin` equal to the origin of `public_url` or `ui_url`, or it fails with `origin_mismatch`. A UI hosted apart from the API must be same-site with it (`ui.example.com` with `api.example.com`), or the browser drops the cookie; credentials are allowed for `ui_url`'s origin only, and `cors_origins` stay credential-less (ADR-0064).
 
 ## Tokens
 
-Every API route except `GET /health`, `GET /ready`, `GET /openapi.json`, `POST /v1/setup` and `POST /v1/session` needs a Token, sent as `Authorization: Bearer <token>` (or, in a browser, the Session cookie). Its Scope decides what it may call: `admin` everything, `agent` everything but publishing, activation and administering Tokens, `webhook` only the webhook Trigger it is bound to (ADR-0008, ADR-0043). bia stores only a hash of each Token, so a lost value cannot be recovered, only replaced.
+Every API route except `GET /health`, `GET /ready`, `GET /openapi.json`, `POST /v1/setup`, `POST /v1/session` and the passkey sign-in routes `POST /v1/session/passkey/begin` and `/finish` needs a Token, sent as `Authorization: Bearer <token>` (or, in a browser, the Session cookie). Its Scope decides what it may call: `admin` everything, `agent` everything but publishing, activation and administering Tokens, `webhook` only the webhook Trigger it is bound to (ADR-0008, ADR-0043). bia stores only a hash of each Token, so a lost value cannot be recovered, only replaced.
 
 Create Tokens in the UI's Tokens screen, or with an existing admin Token, e.g. `bia token create --name claude-desktop --scope agent`. `bia token create` talks to the API at `BIA_URL` (default `http://127.0.0.1:8080`) and reads its Token only from `BIA_TOKEN` (or `token` in the config file), never from arguments. Token values are never logged.
 

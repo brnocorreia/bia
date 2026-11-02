@@ -1,4 +1,5 @@
 pub(crate) mod dry_run;
+pub(crate) mod passkey;
 pub(crate) mod probe;
 pub(crate) mod queue;
 pub(crate) mod run;
