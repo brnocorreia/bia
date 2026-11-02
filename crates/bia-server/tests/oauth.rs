@@ -13,6 +13,7 @@ use bia_server::{ApiConfig, ClientMetadataFetcher};
 use chrono::TimeDelta;
 use reqwest::StatusCode;
 use rmcp::ServiceExt;
+use rmcp::model::CallToolRequestParams;
 use rmcp::transport::StreamableHttpClientTransport;
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use serde_json::{Value, json};
@@ -727,6 +728,53 @@ async fn an_mcp_audience_token_is_refused_on_the_api_and_a_whole_api_one_works_o
             .0,
         StatusCode::OK
     );
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn an_oauth_agent_asks_for_approval_through_mcp_under_either_audience_and_is_named_by_its_client(
+    pool: PgPool,
+) {
+    let env = env(pool).await;
+    let client_id = env.publish_default_client().await;
+    let admin = env.server.client_with(&env.server.admin_token);
+    let definition = json!({
+        "schema_version": 1,
+        "id": "greeter",
+        "triggers": [{ "id": "by_hand", "type": "manual" }],
+        "steps": [{ "id": "only", "action": "test.echo", "params": { "greeting": "hi" } }],
+    });
+    admin.create_draft("greeter", &definition).await.unwrap();
+
+    for (resource, number) in [(MCP_RESOURCE, 1), (PUBLIC_URL, 1)] {
+        let tokens = env.sign_in(&client_id, resource, "agent").await;
+        let access = tokens["access_token"].as_str().unwrap();
+        let config = StreamableHttpClientTransportConfig::with_uri(env.server.url("/mcp"))
+            .auth_header(access.to_owned());
+        let mcp = ().serve(StreamableHttpClientTransport::from_config(config)).await.unwrap();
+        let arguments = json!({ "workflow_id": "greeter", "number": number, "action": "publish" });
+        let Value::Object(arguments) = arguments else {
+            unreachable!()
+        };
+        let result = mcp
+            .call_tool(
+                CallToolRequestParams::new("request_approval".to_owned()).with_arguments(arguments),
+            )
+            .await
+            .unwrap();
+        assert_ne!(result.is_error, Some(true), "{resource}: {result:?}");
+        let request = result.structured_content.unwrap();
+        assert_eq!(request["status"], "pending", "{resource}");
+        // The requester is the Grant's client, not an opaque Token name.
+        assert_eq!(request["requester_name"], "Test Client", "{resource}");
+    }
+
+    // The earlier pending request is withdrawn by the later one, so the list shows both.
+    let listed = admin
+        .list_approval_requests(None, Some("greeter"))
+        .await
+        .unwrap();
+    assert_eq!(listed.len(), 2);
+    assert!(listed.iter().all(|r| r.requester_name == "Test Client"));
 }
 
 #[sqlx::test(migrator = "bia_store::MIGRATOR")]
