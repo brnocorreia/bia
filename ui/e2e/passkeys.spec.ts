@@ -5,6 +5,14 @@ import { authorizeUrl, catchCallback, issuer, pkce, registerApp } from "./suppor
 // One User means one set of passkeys, so these tests must not overlap.
 test.describe.configure({ mode: "serial" });
 
+// A failed attempt can leave its passkey behind, and the retry would then never see an empty list.
+test.beforeEach(async ({ api }) => {
+  const { data } = await api.GET("/v1/passkeys");
+  for (const passkey of data?.passkeys ?? []) {
+    await api.DELETE("/v1/passkeys/{passkey_id}", { params: { path: { passkey_id: passkey.id } } });
+  }
+});
+
 /** A CDP virtual authenticator, which answers the browser's WebAuthn prompts without a person. */
 async function addVirtualAuthenticator(page: Page) {
   const cdp = await page.context().newCDPSession(page);
@@ -100,6 +108,8 @@ test("someone who signs in with a passkey comes back to the request as well", as
 
   // Leave no passkey behind for the specs that expect none.
   await page.getByRole("button", { name: "Deny" }).click();
+  // Navigating away before the app's callback loads would abort that navigation.
+  await page.waitForURL(/127\.0\.0\.1:49999\/callback\?/);
   await page.goto("/");
   dialog = await openPasskeys(page);
   await dialog.getByRole("button", { name: `Remove ${passkeyName}` }).click();
