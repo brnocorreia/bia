@@ -176,7 +176,7 @@ fn check(state: &ApiState, request: &Request<'_>) -> Result<Checked, Failure> {
 
 /// `admin` if it is asked for, else `agent`, which is also what no `scope` means. Scopes bia
 /// does not know are refused, but `offline_access` is ignored: refresh tokens are always issued.
-fn scope(requested: Option<&str>) -> Result<GrantScope, &'static str> {
+pub(super) fn scope(requested: Option<&str>) -> Result<GrantScope, &'static str> {
     let mut scope = GrantScope::Agent;
     for name in requested.unwrap_or_default().split_whitespace() {
         match name {

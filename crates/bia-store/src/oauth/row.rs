@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use super::{Authorization, Client, Grant, GrantScope, Provenance};
+use super::{Authorization, Client, DeviceAuthorization, Grant, GrantScope, Provenance};
 use crate::StoreError;
 use crate::user::UserId;
 
@@ -117,6 +117,45 @@ impl TryFrom<GrantRow> for Grant {
             created_at: row.created_at,
             last_used_at: row.last_used_at,
             revoked_at: row.revoked_at,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct DeviceAuthorizationRow {
+    pub(crate) id: Uuid,
+    pub(crate) client_id: String,
+    pub(crate) client_name: String,
+    pub(crate) client_host: Option<String>,
+    pub(crate) provenance: String,
+    pub(crate) requested_scope: String,
+    pub(crate) resource: String,
+    pub(crate) created_at: DateTime<Utc>,
+    pub(crate) expires_at: DateTime<Utc>,
+    pub(crate) interval_secs: i32,
+    pub(crate) user_id: Option<Uuid>,
+    pub(crate) granted_scope: Option<String>,
+    pub(crate) grant_id: Option<Uuid>,
+}
+
+impl TryFrom<DeviceAuthorizationRow> for DeviceAuthorization {
+    type Error = StoreError;
+
+    fn try_from(row: DeviceAuthorizationRow) -> Result<Self, StoreError> {
+        Ok(Self {
+            id: row.id,
+            client_id: row.client_id,
+            client_name: row.client_name,
+            client_host: row.client_host,
+            provenance: provenance(&row.provenance)?,
+            requested_scope: scope(&row.requested_scope)?,
+            resource: row.resource,
+            created_at: row.created_at,
+            expires_at: row.expires_at,
+            interval_secs: row.interval_secs,
+            user_id: row.user_id.map(UserId::from_uuid),
+            granted_scope: row.granted_scope.as_deref().map(scope).transpose()?,
+            grant_id: row.grant_id,
         })
     }
 }

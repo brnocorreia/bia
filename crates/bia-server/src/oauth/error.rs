@@ -34,6 +34,14 @@ impl OAuthError {
         }
     }
 
+    pub(crate) fn unavailable(description: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::SERVICE_UNAVAILABLE,
+            error: "temporarily_unavailable",
+            description: description.into(),
+        }
+    }
+
     pub(crate) fn invalid_request(description: impl Into<String>) -> Self {
         Self::new("invalid_request", description)
     }

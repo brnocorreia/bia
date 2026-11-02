@@ -585,6 +585,355 @@
         ]
       }
     },
+    "/oauth/device/lookup": {
+      "post": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "Finds the pending device authorization a user code names. Attempts are throttled like\nsign-ins, since a guess that lands would let someone approve their own request. Needs a\nSession.",
+        "operationId": "lookup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserCode"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceConsentRequest"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route (`insufficient_scope`), or a request made\nwith the Session cookie carries no acceptable `Origin` (`origin_mismatch`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`device_authorization_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/oauth/device/{id}": {
+      "get": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "The pending device authorization with this id. Needs a Session.",
+        "operationId": "get_device_consent",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The `id` that `POST /oauth/device/lookup` returned.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceConsentRequest"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route (`insufficient_scope`), or a request made\nwith the Session cookie carries no acceptable `Origin` (`origin_mismatch`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`device_authorization_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/oauth/device/{id}/approve": {
+      "post": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "Approves the device authorization with the Scope given or less. The device's next poll\nreceives its tokens. Answering twice fails. Needs a Session.",
+        "operationId": "approve_device",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The `id` that `POST /oauth/device/lookup` returned.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Approval"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceDecision"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`scope_exceeds_request`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route (`insufficient_scope`), or a request made\nwith the Session cookie carries no acceptable `Origin` (`origin_mismatch`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`device_authorization_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/oauth/device/{id}/deny": {
+      "post": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "Denies the device authorization; the device's next poll is answered `access_denied`. Needs\na Session.",
+        "operationId": "deny_device",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The `id` that `POST /oauth/device/lookup` returned.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceDecision"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route (`insufficient_scope`), or a request made\nwith the Session cookie carries no acceptable `Origin` (`origin_mismatch`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`device_authorization_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/oauth/device_authorization": {
+      "post": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "Starts a device authorization. Needs no credential; only the built-in `bia-cli` client may\nuse it, and a request from an address that asked too often is refused.",
+        "operationId": "device_authorization",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceAuthorizationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Sent with `Cache-Control: no-store`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceAuthorizationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "An OAuth error: `invalid_request`, `invalid_client`, `unauthorized_client`, `invalid_scope` or `invalid_target`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`temporarily_unavailable`: the server has no `ui_url` to send the person to.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/oauth/register": {
       "post": {
         "tags": [
@@ -4002,6 +4351,7 @@
           "token_endpoint",
           "revocation_endpoint",
           "registration_endpoint",
+          "device_authorization_endpoint",
           "scopes_supported",
           "response_types_supported",
           "grant_types_supported",
@@ -4029,6 +4379,10 @@
               "type": "string"
             },
             "description": "`S256` only."
+          },
+          "device_authorization_endpoint": {
+            "type": "string",
+            "description": "The device authorization grant (RFC 8628), which only the built-in `bia-cli` client may\nuse."
           },
           "grant_types_supported": {
             "type": "array",
@@ -4268,6 +4622,119 @@
         },
         "additionalProperties": false
       },
+      "DeviceAuthorizationRequest": {
+        "type": "object",
+        "description": "What a device posts.",
+        "properties": {
+          "client_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only `bia-cli`, the built-in client."
+          },
+          "resource": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The audience (RFC 8707): the server's `public_url`, or `{public_url}/mcp`."
+          },
+          "scope": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`agent` (default) or `admin`; the person may approve less than is asked."
+          }
+        }
+      },
+      "DeviceAuthorizationResponse": {
+        "type": "object",
+        "description": "What the device shows the person, and polls with (RFC 8628 section 3.2).",
+        "required": [
+          "device_code",
+          "user_code",
+          "verification_uri",
+          "verification_uri_complete",
+          "expires_in",
+          "interval"
+        ],
+        "properties": {
+          "device_code": {
+            "type": "string",
+            "description": "Secret: the device polls the token endpoint with it. Never shown to the person."
+          },
+          "expires_in": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Seconds until the codes stop working: 600."
+          },
+          "interval": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Seconds the device must leave between polls. Polling sooner is answered `slow_down`."
+          },
+          "user_code": {
+            "type": "string",
+            "description": "What the person types at `verification_uri`, e.g. `BCDF-GHJK`."
+          },
+          "verification_uri": {
+            "type": "string",
+            "description": "`{ui_url}/device`."
+          },
+          "verification_uri_complete": {
+            "type": "string",
+            "description": "`verification_uri` with the user code filled in."
+          }
+        }
+      },
+      "DeviceConsentRequest": {
+        "type": "object",
+        "description": "A device authorization a person is asked about.",
+        "required": [
+          "id",
+          "client",
+          "requested_scope",
+          "resource",
+          "expires_at"
+        ],
+        "properties": {
+          "client": {
+            "$ref": "#/components/schemas/ConsentClient"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Pass it to `GET /oauth/device/{id}` and the approve and deny routes."
+          },
+          "requested_scope": {
+            "$ref": "#/components/schemas/GrantScopeName",
+            "description": "What the client asked for; the person may approve less."
+          },
+          "resource": {
+            "type": "string",
+            "description": "What the tokens will be good for: the API, or the MCP endpoint only."
+          }
+        }
+      },
+      "DeviceDecision": {
+        "type": "object",
+        "description": "How a device authorization was answered. The device learns the result by polling.",
+        "required": [
+          "outcome"
+        ],
+        "properties": {
+          "outcome": {
+            "type": "string",
+            "description": "`approved` or `denied`."
+          }
+        }
+      },
       "Diagnostic": {
         "type": "object",
         "description": "One validation finding about a Definition.",
@@ -4408,6 +4875,7 @@
           "client_metadata_invalid",
           "client_metadata_mismatch",
           "authorization_not_found",
+          "device_authorization_not_found",
           "scope_exceeds_request",
           "grant_not_found",
           "rate_limited",
@@ -5625,12 +6093,19 @@
             ],
             "description": "`authorization_code`: the PKCE verifier whose SHA-256 is the `code_challenge`."
           },
+          "device_code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`urn:ietf:params:oauth:grant-type:device_code`: the `device_code` that\n`POST /oauth/device_authorization` returned. Polling before the `interval` is answered\n`slow_down`; `authorization_pending` means keep polling; `expired_token` and\n`access_denied` end the flow. It is spent when it returns tokens."
+          },
           "grant_type": {
             "type": [
               "string",
               "null"
             ],
-            "description": "`authorization_code` or `refresh_token`."
+            "description": "`authorization_code`, `refresh_token` or, for the built-in `bia-cli` client,\n`urn:ietf:params:oauth:grant-type:device_code`."
           },
           "redirect_uri": {
             "type": [
@@ -5674,6 +6149,19 @@
               "null"
             ],
             "description": "The manual Trigger to start from. Defaults to the first manual Trigger of the Active\nVersion."
+          }
+        },
+        "additionalProperties": false
+      },
+      "UserCode": {
+        "type": "object",
+        "required": [
+          "user_code"
+        ],
+        "properties": {
+          "user_code": {
+            "type": "string",
+            "description": "The code the device shows, in any case, with or without the hyphen."
           }
         },
         "additionalProperties": false

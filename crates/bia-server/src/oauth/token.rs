@@ -10,12 +10,14 @@ use axum::extract::rejection::FormRejection;
 use axum::response::{IntoResponse, Response};
 use axum::{Form, Json};
 use bia_store::oauth::{
-    CodeRedemption, GrantScope, NewGrant, OAuthRepository, PgOAuthRepository, RefreshRedemption,
+    CodeRedemption, DevicePoll, GrantScope, NewGrant, OAuthRepository, PgOAuthRepository,
+    RefreshRedemption,
 };
 use serde::Deserialize;
 use sqlx::Acquire;
 use utoipa::ToSchema;
 
+use super::device;
 use super::error::no_store;
 use super::issue::{IssuedTokens, issue_tokens};
 use super::{OAuthError, OAuthErrorBody, pkce};
@@ -25,7 +27,8 @@ use crate::auth::secret_hash;
 /// The form a client posts. Each grant type needs its own fields.
 #[derive(Debug, Deserialize, ToSchema)]
 pub(crate) struct TokenRequest {
-    /// `authorization_code` or `refresh_token`.
+    /// `authorization_code`, `refresh_token` or, for the built-in `bia-cli` client,
+    /// `urn:ietf:params:oauth:grant-type:device_code`.
     grant_type: Option<String>,
     /// The client's id, as in the authorization request.
     client_id: Option<String>,
@@ -37,6 +40,11 @@ pub(crate) struct TokenRequest {
     code_verifier: Option<String>,
     /// `refresh_token`: the refresh token. It is spent by this request.
     refresh_token: Option<String>,
+    /// `urn:ietf:params:oauth:grant-type:device_code`: the `device_code` that
+    /// `POST /oauth/device_authorization` returned. Polling before the `interval` is answered
+    /// `slow_down`; `authorization_pending` means keep polling; `expired_token` and
+    /// `access_denied` end the flow. It is spent when it returns tokens.
+    device_code: Option<String>,
     /// The `resource` of the authorization request; refused if it is a different one.
     resource: Option<String>,
     /// `refresh_token`: a Scope no broader than the Grant's.
@@ -68,10 +76,11 @@ pub(crate) async fn token(
     let issued = match request.grant_type.as_deref() {
         Some("authorization_code") => exchange_code(&state, &request).await?,
         Some("refresh_token") => exchange_refresh_token(&state, &request).await?,
+        Some(device::GRANT_TYPE) => exchange_device_code(&state, &request).await?,
         _ => {
             return Err(OAuthError::new(
                 "unsupported_grant_type",
-                "`grant_type` must be `authorization_code` or `refresh_token`",
+                "`grant_type` must be `authorization_code`, `refresh_token` or the device code grant",
             ));
         }
     };
@@ -271,4 +280,109 @@ async fn refresh(
         ));
     }
     Ok(issue_tokens(state, conn, grant, scope).await?)
+}
+
+async fn exchange_device_code(
+    state: &ApiState,
+    request: &TokenRequest,
+) -> Result<IssuedTokens, OAuthError> {
+    let device_code = required(&request.device_code, "device_code")?;
+    let client_id = required(&request.client_id, "client_id")?;
+    let now = state.clock.now();
+    let mut conn = state
+        .pool
+        .acquire()
+        .await
+        .map_err(|e| crate::ApiError::internal(&e))?;
+    // One transaction, so an approval is only spent if the Grant and its tokens are made.
+    let mut tx = conn
+        .begin()
+        .await
+        .map_err(|e| crate::ApiError::internal(&e))?;
+    let poll = PgOAuthRepository
+        .poll_device(&mut tx, secret_hash(device_code), now)
+        .await
+        .map_err(|e| crate::ApiError::internal(&e))?;
+    let authorization = match poll {
+        DevicePoll::Approved(authorization) => authorization,
+        other => {
+            // A poll that was too fast has recorded the new interval, so this commits too.
+            tx.commit()
+                .await
+                .map_err(|e| crate::ApiError::internal(&e))?;
+            return Err(match other {
+                DevicePoll::Pending => OAuthError::new(
+                    "authorization_pending",
+                    "the person has not answered yet; keep polling at the interval",
+                ),
+                DevicePoll::SlowDown { interval_secs } => OAuthError::new(
+                    "slow_down",
+                    format!("polling too fast; wait {interval_secs} seconds between polls"),
+                ),
+                DevicePoll::Expired => {
+                    OAuthError::new("expired_token", "the device code has expired; start again")
+                }
+                DevicePoll::Denied => {
+                    OAuthError::new("access_denied", "the person denied the request")
+                }
+                DevicePoll::Used => {
+                    tracing::warn!("device code used twice; its Grant is revoked");
+                    OAuthError::invalid_grant("the device code was already used")
+                }
+                DevicePoll::Unknown | DevicePoll::Approved(_) => {
+                    OAuthError::invalid_grant("the device code is unknown")
+                }
+            });
+        }
+    };
+    if authorization.client_id != client_id {
+        tx.commit()
+            .await
+            .map_err(|e| crate::ApiError::internal(&e))?;
+        return Err(OAuthError::invalid_grant(
+            "the device code was not issued to this `client_id`",
+        ));
+    }
+    if let Some(resource) = request.resource.as_deref()
+        && state.config.canonical_resource(resource)?.as_deref() != Some(&authorization.resource)
+    {
+        tx.commit()
+            .await
+            .map_err(|e| crate::ApiError::internal(&e))?;
+        return Err(OAuthError::new(
+            "invalid_target",
+            "`resource` is not the one the device code was issued for",
+        ));
+    }
+    let (Some(user_id), Some(scope)) = (authorization.user_id, authorization.granted_scope) else {
+        return Err(OAuthError::invalid_grant(
+            "the device code was never approved",
+        ));
+    };
+    let grant = PgOAuthRepository
+        .create_grant(
+            &mut tx,
+            &NewGrant {
+                user_id,
+                client_id: authorization.client_id,
+                client_name: authorization.client_name,
+                client_host: authorization.client_host,
+                provenance: authorization.provenance,
+                scope,
+                resource: authorization.resource,
+                created_at: now,
+            },
+        )
+        .await
+        .map_err(|e| crate::ApiError::internal(&e))?;
+    PgOAuthRepository
+        .link_device_grant(&mut tx, authorization.id, grant.id)
+        .await
+        .map_err(|e| crate::ApiError::internal(&e))?;
+    let issued = issue_tokens(state, &mut tx, &grant, scope).await?;
+    tx.commit()
+        .await
+        .map_err(|e| crate::ApiError::internal(&e))?;
+    tracing::info!(grant_id = %grant.id, client = %grant.client_name, scope = scope.as_str(), "grant created from a device code");
+    Ok(issued)
 }

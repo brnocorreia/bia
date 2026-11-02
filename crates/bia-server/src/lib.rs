@@ -53,6 +53,7 @@ pub struct ApiState {
     config: Arc<ApiConfig>,
     sign_ins: Arc<auth::SignInThrottle>,
     registrations: Arc<oauth::register::Limiter>,
+    device_requests: Arc<oauth::register::Limiter>,
     metadata: Arc<oauth::MetadataCache>,
 }
 
@@ -75,6 +76,9 @@ pub struct ApiConfig {
     /// default: HTTPS to public addresses only. Nothing configures it; only a test built with
     /// the `testing` feature can swap in a relaxed one (ADR-0067).
     pub client_metadata_fetcher: ClientMetadataFetcher,
+    /// How long a device must leave between polls of the token endpoint. Five seconds unless a
+    /// test says otherwise; nothing configures it.
+    pub device_poll_interval: Option<std::time::Duration>,
     /// Encrypts Secrets. Without it, the Secret routes that write answer `master_key_missing`.
     pub master_key: Option<MasterKey>,
 }
@@ -88,6 +92,7 @@ impl ApiState {
             config: Arc::default(),
             sign_ins: Arc::default(),
             registrations: Arc::default(),
+            device_requests: Arc::default(),
             metadata: Arc::default(),
         }
     }
@@ -203,6 +208,11 @@ fn documented() -> OpenApiRouter<ApiState> {
         .routes(routes!(oauth::consent::get_consent))
         .routes(routes!(oauth::consent::approve))
         .routes(routes!(oauth::consent::deny))
+        .routes(routes!(oauth::device::device_authorization))
+        .routes(routes!(oauth::device::lookup))
+        .routes(routes!(oauth::device::get_device_consent))
+        .routes(routes!(oauth::device::approve_device))
+        .routes(routes!(oauth::device::deny_device))
         .routes(routes!(routes::secret::list_secrets))
         .routes(routes!(
             routes::secret::put_secret,

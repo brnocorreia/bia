@@ -146,6 +146,9 @@ impl UserRepository for PgUserRepository {
             sqlx::query_file!("src/user/queries/close_authorizations.sql", now)
                 .execute(&mut *tx)
                 .await?;
+            sqlx::query_file!("src/user/queries/close_device_authorizations.sql", now)
+                .execute(&mut *tx)
+                .await?;
             revoked += sqlx::query_file!("src/user/queries/revoke_for_user.sql", user, now)
                 .execute(&mut *tx)
                 .await?

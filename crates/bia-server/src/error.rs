@@ -61,6 +61,9 @@ pub enum ErrorCode {
     ClientMetadataMismatch,
     /// No pending authorization has this id: it is unknown, decided already, or ran out.
     AuthorizationNotFound,
+    /// No pending device authorization has this user code or id: it is unknown, decided
+    /// already, or ran out; run `bia login --device` again.
+    DeviceAuthorizationNotFound,
     /// The approved Scope is broader than the client asked for.
     ScopeExceedsRequest,
     /// No Grant has this id.

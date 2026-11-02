@@ -74,14 +74,14 @@ impl From<Provenance> for ProvenanceName {
 /// The client asking for access.
 #[derive(Debug, Serialize, ToSchema)]
 pub(crate) struct ConsentClient {
-    id: String,
+    pub(super) id: String,
     /// The name the client gave itself.
-    name: String,
-    provenance: ProvenanceName,
+    pub(super) name: String,
+    pub(super) provenance: ProvenanceName,
     /// For `cimd`: the host the client's metadata was fetched from.
-    host: Option<String>,
+    pub(super) host: Option<String>,
     /// `false` for a client that registered itself: its name is unchecked.
-    verified: bool,
+    pub(super) verified: bool,
 }
 
 /// What a person is asked to approve.
@@ -123,7 +123,7 @@ pub(crate) struct Approval {
     /// The Scope to grant: what was requested, or `agent` to downgrade `admin`. Asking for more
     /// than was requested is refused. Defaults to what was requested.
     #[serde(default)]
-    scope: Option<GrantScopeName>,
+    pub(super) scope: Option<GrantScopeName>,
 }
 
 /// Where to send the person: the client's redirect URI with the result.
@@ -132,7 +132,7 @@ pub(crate) struct Decision {
     redirect_to: String,
 }
 
-fn require_session(caller: &Token) -> Result<(), ApiError> {
+pub(super) fn require_session(caller: &Token) -> Result<(), ApiError> {
     if caller.origin == Origin::Session {
         return Ok(());
     }

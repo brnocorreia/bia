@@ -26,6 +26,9 @@ pub(crate) struct AuthorizationServerMetadata {
     token_endpoint: String,
     revocation_endpoint: String,
     registration_endpoint: String,
+    /// The device authorization grant (RFC 8628), which only the built-in `bia-cli` client may
+    /// use.
+    device_authorization_endpoint: String,
     scopes_supported: Vec<&'static str>,
     response_types_supported: Vec<&'static str>,
     grant_types_supported: Vec<&'static str>,
@@ -103,10 +106,15 @@ pub(crate) async fn authorization_server_metadata(
         token_endpoint: format!("{issuer}/oauth/token"),
         revocation_endpoint: format!("{issuer}/oauth/revoke"),
         registration_endpoint: format!("{issuer}/oauth/register"),
+        device_authorization_endpoint: format!("{issuer}/oauth/device_authorization"),
         issuer,
         scopes_supported: vec!["agent", "admin"],
         response_types_supported: vec!["code"],
-        grant_types_supported: vec!["authorization_code", "refresh_token"],
+        grant_types_supported: vec![
+            "authorization_code",
+            "refresh_token",
+            super::device::GRANT_TYPE,
+        ],
         code_challenge_methods_supported: vec!["S256"],
         token_endpoint_auth_methods_supported: vec!["none"],
         revocation_endpoint_auth_methods_supported: vec!["none"],

@@ -182,3 +182,59 @@ pub struct NewApproval {
     pub now: DateTime<Utc>,
     pub code_expires_at: DateTime<Utc>,
 }
+
+/// A device authorization: a CLI waiting for a person to approve the user code it shows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeviceAuthorization {
+    pub id: Uuid,
+    pub client_id: String,
+    pub client_name: String,
+    pub client_host: Option<String>,
+    pub provenance: Provenance,
+    pub requested_scope: GrantScope,
+    pub resource: String,
+    pub created_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+    /// Seconds the client must leave between polls.
+    pub interval_secs: i32,
+    pub user_id: Option<UserId>,
+    pub granted_scope: Option<GrantScope>,
+    pub grant_id: Option<Uuid>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewDeviceAuthorization {
+    pub client_id: String,
+    pub client_name: String,
+    pub client_host: Option<String>,
+    pub provenance: Provenance,
+    pub requested_scope: GrantScope,
+    pub resource: String,
+    pub device_code: SecretHash,
+    /// The hash of the user code after normalisation.
+    pub user_code: SecretHash,
+    pub created_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+    pub interval_secs: i32,
+}
+
+/// What polling with a device code finds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DevicePoll {
+    /// Nobody has decided yet.
+    Pending,
+    /// The client polled before its interval was up. It must wait `interval_secs`, which is now
+    /// longer, from this poll.
+    SlowDown {
+        interval_secs: i32,
+    },
+    /// The authorization ran out before the person decided, or before it was collected.
+    Expired,
+    Denied,
+    /// First collection of an approved authorization; the device code is spent now.
+    Approved(Box<DeviceAuthorization>),
+    /// No device authorization has this device code.
+    Unknown,
+    /// The device code was spent before. The Grant it produced, if any, has been revoked.
+    Used,
+}

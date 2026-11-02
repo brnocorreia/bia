@@ -8,7 +8,8 @@ mod repository;
 mod row;
 
 pub use model::{
-    Authorization, Client, CodeRedemption, Grant, GrantScope, NewApproval, NewAuthorization,
-    NewClient, NewGrant, Provenance, RefreshRedemption, SecretHash,
+    Authorization, Client, CodeRedemption, DeviceAuthorization, DevicePoll, Grant, GrantScope,
+    NewApproval, NewAuthorization, NewClient, NewDeviceAuthorization, NewGrant, Provenance,
+    RefreshRedemption, SecretHash,
 };
 pub use repository::{OAuthRepository, PgOAuthRepository};

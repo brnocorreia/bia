@@ -1,13 +1,13 @@
 use std::future::Future;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeDelta, Utc};
 use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
-use super::row::{AuthorizationRow, ClientRow, GrantRow};
+use super::row::{AuthorizationRow, ClientRow, DeviceAuthorizationRow, GrantRow};
 use super::{
-    Authorization, Client, CodeRedemption, Grant, NewApproval, NewAuthorization, NewClient,
-    NewGrant, RefreshRedemption, SecretHash,
+    Authorization, Client, CodeRedemption, DeviceAuthorization, DevicePoll, Grant, NewApproval,
+    NewAuthorization, NewClient, NewDeviceAuthorization, NewGrant, RefreshRedemption, SecretHash,
 };
 use crate::StoreError;
 
@@ -123,6 +123,66 @@ pub trait OAuthRepository {
         conn: &mut PgConnection,
         hash: SecretHash,
     ) -> impl Future<Output = Result<Option<Grant>, StoreError>> + Send;
+
+    fn begin_device_authorization(
+        &self,
+        conn: &mut PgConnection,
+        request: &NewDeviceAuthorization,
+    ) -> impl Future<Output = Result<DeviceAuthorization, StoreError>> + Send;
+
+    /// The device authorization this user code names, if nobody decided it and it has not run
+    /// out at `now`. `user_code` is the hash of the normalised code.
+    fn pending_device_authorization_by_user_code(
+        &self,
+        conn: &mut PgConnection,
+        user_code: SecretHash,
+        now: DateTime<Utc>,
+    ) -> impl Future<Output = Result<Option<DeviceAuthorization>, StoreError>> + Send;
+
+    fn pending_device_authorization(
+        &self,
+        conn: &mut PgConnection,
+        id: Uuid,
+        now: DateTime<Utc>,
+    ) -> impl Future<Output = Result<Option<DeviceAuthorization>, StoreError>> + Send;
+
+    /// Approves a pending device authorization for `user` with `scope`. `None` when it is no
+    /// longer pending, so two answers to one request cannot both win.
+    fn approve_device(
+        &self,
+        conn: &mut PgConnection,
+        id: Uuid,
+        user: crate::user::UserId,
+        scope: super::GrantScope,
+        now: DateTime<Utc>,
+    ) -> impl Future<Output = Result<Option<DeviceAuthorization>, StoreError>> + Send;
+
+    /// Denies a pending device authorization; `None` when it is no longer pending.
+    fn deny_device(
+        &self,
+        conn: &mut PgConnection,
+        id: Uuid,
+        now: DateTime<Utc>,
+    ) -> impl Future<Output = Result<Option<DeviceAuthorization>, StoreError>> + Send;
+
+    /// Answers one poll with a device code, enforcing the interval and the expiry, and spends
+    /// the device code when it hands over an approval. Presenting a spent one again revokes the
+    /// Grant it produced. Run it in the transaction that creates that Grant, so a failure
+    /// there does not lose the approval.
+    fn poll_device(
+        &self,
+        conn: &mut PgConnection,
+        device_code: SecretHash,
+        now: DateTime<Utc>,
+    ) -> impl Future<Output = Result<DevicePoll, StoreError>> + Send;
+
+    /// Remembers the Grant a device authorization was exchanged for.
+    fn link_device_grant(
+        &self,
+        conn: &mut PgConnection,
+        id: Uuid,
+        grant: Uuid,
+    ) -> impl Future<Output = Result<(), StoreError>> + Send;
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -406,7 +466,190 @@ impl OAuthRepository for PgOAuthRepository {
         };
         fetch(conn, id).await
     }
+
+    async fn begin_device_authorization(
+        &self,
+        conn: &mut PgConnection,
+        request: &NewDeviceAuthorization,
+    ) -> Result<DeviceAuthorization, StoreError> {
+        sqlx::query_file_as!(
+            DeviceAuthorizationRow,
+            "src/oauth/queries/device_insert.sql",
+            request.client_id,
+            request.client_name,
+            request.client_host,
+            request.provenance.as_str(),
+            request.requested_scope.as_str(),
+            request.resource,
+            &request.device_code.0[..],
+            &request.user_code.0[..],
+            request.created_at,
+            request.expires_at,
+            request.interval_secs,
+        )
+        .fetch_one(&mut *conn)
+        .await?
+        .try_into()
+    }
+
+    async fn pending_device_authorization_by_user_code(
+        &self,
+        conn: &mut PgConnection,
+        user_code: SecretHash,
+        now: DateTime<Utc>,
+    ) -> Result<Option<DeviceAuthorization>, StoreError> {
+        sqlx::query_file_as!(
+            DeviceAuthorizationRow,
+            "src/oauth/queries/device_get_pending_by_user_code.sql",
+            &user_code.0[..],
+            now
+        )
+        .fetch_optional(&mut *conn)
+        .await?
+        .map(DeviceAuthorization::try_from)
+        .transpose()
+    }
+
+    async fn pending_device_authorization(
+        &self,
+        conn: &mut PgConnection,
+        id: Uuid,
+        now: DateTime<Utc>,
+    ) -> Result<Option<DeviceAuthorization>, StoreError> {
+        sqlx::query_file_as!(
+            DeviceAuthorizationRow,
+            "src/oauth/queries/device_get_pending.sql",
+            id,
+            now
+        )
+        .fetch_optional(&mut *conn)
+        .await?
+        .map(DeviceAuthorization::try_from)
+        .transpose()
+    }
+
+    async fn approve_device(
+        &self,
+        conn: &mut PgConnection,
+        id: Uuid,
+        user: crate::user::UserId,
+        scope: super::GrantScope,
+        now: DateTime<Utc>,
+    ) -> Result<Option<DeviceAuthorization>, StoreError> {
+        sqlx::query_file_as!(
+            DeviceAuthorizationRow,
+            "src/oauth/queries/device_approve.sql",
+            id,
+            now,
+            user.as_uuid(),
+            scope.as_str()
+        )
+        .fetch_optional(&mut *conn)
+        .await?
+        .map(DeviceAuthorization::try_from)
+        .transpose()
+    }
+
+    async fn deny_device(
+        &self,
+        conn: &mut PgConnection,
+        id: Uuid,
+        now: DateTime<Utc>,
+    ) -> Result<Option<DeviceAuthorization>, StoreError> {
+        sqlx::query_file_as!(
+            DeviceAuthorizationRow,
+            "src/oauth/queries/device_deny.sql",
+            id,
+            now
+        )
+        .fetch_optional(&mut *conn)
+        .await?
+        .map(DeviceAuthorization::try_from)
+        .transpose()
+    }
+
+    async fn poll_device(
+        &self,
+        conn: &mut PgConnection,
+        device_code: SecretHash,
+        now: DateTime<Utc>,
+    ) -> Result<DevicePoll, StoreError> {
+        let mut tx = conn.begin().await?;
+        let Some(row) = sqlx::query_file!("src/oauth/queries/device_lock.sql", &device_code.0[..])
+            .fetch_optional(&mut *tx)
+            .await?
+        else {
+            return Ok(DevicePoll::Unknown);
+        };
+        if row.consumed_at.is_some() {
+            if let Some(grant) = row.grant_id {
+                revoke(&mut tx, grant, now).await?;
+            }
+            tx.commit().await?;
+            return Ok(DevicePoll::Used);
+        }
+        if row.expires_at <= now {
+            return Ok(DevicePoll::Expired);
+        }
+        let too_fast = row
+            .last_polled_at
+            .is_some_and(|last| now - last < TimeDelta::seconds(i64::from(row.interval_secs)));
+        if too_fast {
+            // RFC 8628 section 3.5: the client that polls too fast waits 5 s longer from now on.
+            let interval_secs = row.interval_secs.saturating_add(SLOW_DOWN_STEP_SECS);
+            sqlx::query_file!(
+                "src/oauth/queries/device_polled.sql",
+                row.id,
+                now,
+                interval_secs
+            )
+            .execute(&mut *tx)
+            .await?;
+            tx.commit().await?;
+            return Ok(DevicePoll::SlowDown { interval_secs });
+        }
+        sqlx::query_file!(
+            "src/oauth/queries/device_polled.sql",
+            row.id,
+            now,
+            row.interval_secs
+        )
+        .execute(&mut *tx)
+        .await?;
+        let outcome = match row.outcome.as_deref() {
+            None => DevicePoll::Pending,
+            Some("denied") => DevicePoll::Denied,
+            Some(_) => {
+                let approved = sqlx::query_file_as!(
+                    DeviceAuthorizationRow,
+                    "src/oauth/queries/device_consume.sql",
+                    row.id,
+                    now
+                )
+                .fetch_one(&mut *tx)
+                .await?;
+                DevicePoll::Approved(Box::new(approved.try_into()?))
+            }
+        };
+        tx.commit().await?;
+        Ok(outcome)
+    }
+
+    async fn link_device_grant(
+        &self,
+        conn: &mut PgConnection,
+        id: Uuid,
+        grant: Uuid,
+    ) -> Result<(), StoreError> {
+        sqlx::query_file!("src/oauth/queries/device_link_grant.sql", id, grant)
+            .execute(&mut *conn)
+            .await?;
+        Ok(())
+    }
 }
+
+/// How much longer a client that polled too fast must wait between polls.
+const SLOW_DOWN_STEP_SECS: i32 = 5;
 
 async fn fetch(conn: &mut PgConnection, id: Uuid) -> Result<Option<Grant>, StoreError> {
     sqlx::query_file_as!(GrantRow, "src/oauth/queries/grant_get.sql", id)

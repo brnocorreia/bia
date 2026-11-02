@@ -1,0 +1,182 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- $1: client id, $2: client name, $3: client host, $4: provenance, $5: requested scope, $6: resource, $7: device code hash, $8: user code hash, $9: now, $10: expires at, $11: interval seconds\nINSERT INTO oauth_device_authorizations (client_id, client_name, client_host, provenance, requested_scope, resource, device_code_hash, user_code_hash, created_at, expires_at, interval_secs)\nVALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)\nRETURNING id, client_id, client_name, client_host, provenance, requested_scope, resource, created_at, expires_at, interval_secs, user_id, granted_scope, grant_id\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "client_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "client_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "client_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "client_name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "client_host",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "client_host"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "provenance",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "provenance"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "requested_scope",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "requested_scope"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "resource",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "resource"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "expires_at"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "interval_secs",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "interval_secs"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "granted_scope",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "granted_scope"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "grant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "grant_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Timestamptz",
+        "Timestamptz",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "28427d8d4334769b216a1ded2412e5dca869ad53cf85762c11c55f0465fd5a96"
+}

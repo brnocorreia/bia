@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- $1: id, $2: grant id\nUPDATE oauth_device_authorizations SET grant_id = $2 WHERE id = $1\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f3fd1e41b623aa343c49481d7be78c51db6abdb36451b8aed9ae01be34de0e88"
+}
