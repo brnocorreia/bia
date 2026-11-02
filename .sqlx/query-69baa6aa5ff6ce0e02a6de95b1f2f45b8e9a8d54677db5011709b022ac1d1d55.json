@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Withdraws the Workflow's pending request, if any. $1: workflow id, $2: now\nUPDATE approval_requests SET status = 'withdrawn', closed_at = $2\nWHERE workflow_id = $1 AND status = 'pending'\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "69baa6aa5ff6ce0e02a6de95b1f2f45b8e9a8d54677db5011709b022ac1d1d55"
+}

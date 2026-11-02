@@ -81,6 +81,12 @@ enum Command {
         #[command(subcommand)]
         command: api::QueueCommand,
     },
+    /// Lists, shows, approves and rejects the Approval Requests agents make to publish or
+    /// activate a Version.
+    Approval {
+        #[command(subcommand)]
+        command: api::ApprovalCommand,
+    },
     /// Sets, lists and deletes Secrets. No command shows a value.
     Secret {
         #[command(subcommand)]
@@ -166,6 +172,9 @@ async fn main() -> anyhow::Result<ExitCode> {
         }
         Command::Queue { command } => {
             api::queue(&api_context(&cli.config, &cli.url, cli.json)?, command).await
+        }
+        Command::Approval { command } => {
+            api::approval(&api_context(&cli.config, &cli.url, cli.json)?, command).await
         }
         Command::Secret { command } => {
             api::secret(&api_context(&cli.config, &cli.url, cli.json)?, command).await

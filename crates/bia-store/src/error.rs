@@ -2,6 +2,7 @@
 
 use bia_core::dsl::{QueueName, WorkflowId};
 
+use crate::approval::ApprovalRequestId;
 use crate::job::JobId;
 use crate::queue::MessageId;
 use crate::run::RunId;
@@ -55,6 +56,11 @@ pub enum StoreError {
     /// timeout ran out, or was already acked, retried or dead-lettered.
     #[error("lease on message {0} was lost")]
     MessageLeaseLost(MessageId),
+    #[error("approval request {0} not found")]
+    ApprovalRequestNotFound(ApprovalRequestId),
+    /// The request was already decided, withdrawn or made stale.
+    #[error("approval request {0} is not pending")]
+    ApprovalRequestNotPending(ApprovalRequestId),
     /// A stored value this build cannot read back.
     #[error("stored {what} is invalid: {message}")]
     InvalidStoredData { what: &'static str, message: String },

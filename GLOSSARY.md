@@ -126,7 +126,7 @@ The value a waiting Step declares so that an Event carrying the same name and ke
 
 **Human Task**:
 A pending request for a person's input (`human.approval`, `human.form`, `human.choice`); answering it emits an Event.
-_Avoid_: approval request, manual step
+_Avoid_: manual step
 
 ### Queues
 
@@ -195,7 +195,11 @@ The URL people reach the API at (`public_url`), and `ui_url` the one they reach 
 _Avoid_: base URL, host
 
 **Scope**:
-What a Token may do: `admin` (everything), `agent` (author Drafts, dry-run, trigger, read; never publish or activate), `webhook` (start Runs from one webhook Trigger).
+What a Token may do: `admin` (everything), `agent` (author Drafts, dry-run, trigger, read, ask for approval; never publish or activate), `webhook` (start Runs from one webhook Trigger).
+
+**Approval Request**:
+An `agent`'s ask for a Version to be published and/or activated (`publish`, `publish_and_activate` or `activate`), which the admin approves or rejects. It is `pending`, then `approved`, `rejected`, `stale` (its Draft was replaced) or `withdrawn`; approving makes the change as the deciding User.
+_Avoid_: publish request, review, Human Task
 
 **Secret**:
 A named sensitive value referenced as `secrets.NAME` in Params, resolved only at execution time and never persisted in Outputs or the Timeline.
