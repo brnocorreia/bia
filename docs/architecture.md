@@ -47,12 +47,18 @@ Engine, scheduler and store read time from an injected `Clock` (ADR-0022), and w
 - Both read their configuration from a TOML file under `BIA_*` environment variables (ADR-0037, [`configuration.md`](configuration.md)).
 - A Worker runs claimed Jobs as concurrent tasks, heartbeats their Leases, and on SIGTERM stops claiming, waits a grace period, then releases the Leases of what did not finish (ADR-0036).
 - Any number of schedulers poll, and the one holding a Postgres advisory lock leads: it rebuilds the Schedules and queue Triggers of Workflows whose Active Version changed, fires due Schedules, each in one transaction that claims the Schedule row and creates the Run with its first Job, dispatches batches of Messages to new Runs the same way, and runs Chores such as Run retention. Firing, dispatching and each interval of a Chore stay exactly-once even if two schedulers briefly both lead (ADR-0039, ADR-0040, ADR-0041, ADR-0061).
-- `bia mcp` is a stdio → HTTP proxy for local MCP clients; the `api` Role serves `/mcp` (ADR-0048).
-- Every other subcommand is an API client (ADR-0007), `bia setup` included: it sets up the User through `POST /v1/setup` with the code from the Setup Link `serve` logs. `bia serve --reset-admin` resets the User itself before serving (ADR-0062).
+- `bia mcp` is a stdio → HTTP proxy for local MCP clients, using the stored `bia login` or `BIA_TOKEN`; the `api` Role serves `/mcp` (ADR-0048) and is also the OAuth authorization server those clients sign in through (ADR-0067).
+- Every other subcommand is an API client (ADR-0007), `bia setup` and `bia login` included: `setup` sets up the User through `POST /v1/setup` with the code from the Setup Link `serve` logs, and `login` is an OAuth client of the server (ADR-0068). `bia serve --reset-admin` resets the User itself before serving (ADR-0062).
 
 ## Access
 
-Every route but the probes, `/openapi.json` and first-run setup needs a Token, which acts for a User and whose Scope the handler checks with an `Admin`, `Agent` or `Webhook` extractor (ADR-0008, ADR-0043). A webhook Trigger with `hmac` is the exception: its callers sign the body instead (ADR-0058). Tokens are stored as SHA-256 hashes. CORS allows only the configured origins.
+Every route but the probes, `/openapi.json`, first-run setup, sign-in and the OAuth discovery and authorization routes needs a Token, which acts for a User and whose Scope the handler checks with an `Admin`, `Agent` or `Webhook` extractor (ADR-0008, ADR-0043). A webhook Trigger with `hmac` is the exception: its callers sign the body instead (ADR-0058). Tokens are stored as SHA-256 hashes, and one table holds all of them, told apart by origin:
+
+- **Session**: the browser sign-in, an `HttpOnly` cookie (`bia_session`) holding a Token that expires after 14 days unused or 90 days. The extractors accept it or a bearer header, and a cookie with an unsafe method must carry an `Origin` of `public_url` or `ui_url` (ADR-0064). Passkeys are another way to start one (ADR-0065). `/mcp` ignores the cookie.
+- **OAuth**: issued to a Grant, which is what the User approved on the consent screen for an MCP client or `bia login`. Access tokens last an hour, refresh tokens live in their own table and rotate, and an audience limits where a token works (ADR-0067, ADR-0068).
+- **Manual**: made in the UI or with `bia token create`, for CI and webhook senders.
+
+The first User is created by a Setup Link (ADR-0062). An `agent` that wants a Version published or activated files an Approval Request, which an `admin` decides (ADR-0066). CORS allows the configured origins, and credentials only for `ui_url`'s origin. `public_url` and `ui_url` name where people reach the API and the UI (ADR-0063).
 
 ## Run lifecycle
 
@@ -69,11 +75,11 @@ Cancellation sets a flag on the Run that Postgres announces to Workers, which al
 
 - `GET /v1/schema`: DSL JSON Schema plus the Action catalogue (name, description, param schema, output schema, examples).
 - `GET /openapi.json`: the OpenAPI document of every endpoint, also committed as `crates/bia-server/openapi.json` (`just openapi` rewrites it, and a test fails when it drifts). Every failure has one error body: a stable `code`, a `message`, and the Diagnostics when a Definition was at fault. Routes, codes and the error body follow ADR-0042.
-- MCP tools mirror the API, each calling one endpoint with the caller's own Token (ADR-0048): `get_schema`, `list_actions`, `list_workflows`, `get_workflow`, `list_versions`, `get_version`, `validate_workflow`, `create_draft`, `replace_draft`, `dry_run`, `diff_versions`, `trigger_run`, `get_run`, `list_runs`, `list_failures`, `retry_run`, `resume_run`, `cancel_run`, `list_secrets`, `list_queues`, `request_approval`, `get_approval_request`, `withdraw_approval_request`. `send_event` joins when its endpoint exists. Publishing and activation are admin-only (ADR-0008) and have no tool: an agent asks with an Approval Request, which an admin decides (ADR-0066).
+- MCP tools mirror the API, each calling one endpoint with the caller's own credential (ADR-0048): `get_schema`, `list_actions`, `list_workflows`, `get_workflow`, `list_versions`, `get_version`, `validate_workflow`, `create_draft`, `replace_draft`, `dry_run`, `diff_versions`, `trigger_run`, `get_run`, `list_runs`, `list_failures`, `retry_run`, `resume_run`, `cancel_run`, `list_secrets`, `list_queues`, `request_approval`, `get_approval_request`, `withdraw_approval_request`. `send_event` joins when its endpoint exists. Publishing and activation are admin-only (ADR-0008) and have no tool: an agent asks with an Approval Request, which an admin decides (ADR-0066).
 
 ## UI
 
-A static SPA in `ui/`, deployed to any static host or embedded in the binary (ADR-0013). It is built in phases: Run observation and operation → schema-aware JSON/YAML editor with Diagnostics and Dry Run → visual editor (React Flow) synced both ways with the Definition → param forms generated from Action schemas. The embedded build is served from `/` as the API router's fallback (ADR-0052); `docs/deploy-ui.md` covers all three deployments. See `ui/README.md` for the screen layout, API client, Token session (ADR-0050) and checks.
+A static SPA in `ui/`, deployed to any static host or embedded in the binary (ADR-0013). It is built in phases: Run observation and operation → schema-aware JSON/YAML editor with Diagnostics and Dry Run → visual editor (React Flow) synced both ways with the Definition → param forms generated from Action schemas. The embedded build is served from `/` as the API router's fallback (ADR-0052); `docs/deploy-ui.md` covers all three deployments. See `ui/README.md` for the screen layout, API client, Session sign-in (ADR-0064) and checks.
 
 ## Where it evolves
 
