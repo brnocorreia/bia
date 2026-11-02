@@ -402,3 +402,29 @@ async fn requests_are_refused_for_unknown_workflows_and_versions(pool: PgPool) {
         (StatusCode::NOT_FOUND, "version_not_found".into())
     );
 }
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn racing_requests_for_one_workflow_leave_exactly_one_pending(pool: PgPool) {
+    let f = fixture(pool).await;
+    let mut numbers = Vec::new();
+    for _ in 0..5 {
+        numbers.push(f.draft("emails").await);
+    }
+
+    let tasks: Vec<_> = numbers
+        .iter()
+        .map(|number| {
+            let agent = f.agent.clone();
+            let request = request("greeter", *number, ApprovalAction::Publish);
+            tokio::spawn(async move { agent.request_approval(&request).await })
+        })
+        .collect();
+    for task in tasks {
+        task.await.unwrap().unwrap();
+    }
+
+    let all = f.agent.list_approval_requests(None, None).await.unwrap();
+    let count = |status| all.iter().filter(|r| r.status == status).count();
+    assert_eq!(count(ApprovalStatus::Pending), 1);
+    assert_eq!(count(ApprovalStatus::Withdrawn), 4);
+}

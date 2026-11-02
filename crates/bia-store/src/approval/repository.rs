@@ -80,6 +80,14 @@ impl ApprovalRepository for PgApprovalRepository {
         now: DateTime<Utc>,
     ) -> Result<ApprovalRequest, StoreError> {
         let mut tx = conn.begin().await?;
+        // Concurrent requests for a Workflow take turns, so the later one withdraws the earlier
+        // instead of failing the one-pending index. Workflow before request rows, as in approve.
+        sqlx::query_file!(
+            "src/approval/queries/lock_workflow.sql",
+            request.workflow_id.as_str()
+        )
+        .fetch_optional(&mut *tx)
+        .await?;
         sqlx::query_file!(
             "src/approval/queries/withdraw_pending.sql",
             request.workflow_id.as_str(),
