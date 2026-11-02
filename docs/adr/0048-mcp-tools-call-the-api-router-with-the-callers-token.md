@@ -6,3 +6,4 @@
 
 - `list_queues` is registered now that `GET /v1/queues` exists (ADR-0059).
 - `/mcp` also accepts the `oauth` Tokens that OAuth Grants issue, whose audience is `{public_url}/mcp` or `{public_url}`, and answers an unauthenticated request with a `WWW-Authenticate` challenge that points at the protected-resource metadata. The in-process requests a tool sends to the API carry a marker that lets a Token issued for `/mcp` only through, which the same Token is refused on `/v1` (ADR-0067).
+- `request_approval`, `get_approval_request` and `withdraw_approval_request` are registered, and still no tool publishes, activates, approves or rejects (ADR-0066).

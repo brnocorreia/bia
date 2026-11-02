@@ -236,6 +236,14 @@ fn documented() -> OpenApiRouter<ApiState> {
         .routes(routes!(routes::queue::list_messages))
         .routes(routes!(routes::queue::replay_dead_letters))
         .routes(routes!(routes::queue::purge_dead_letters))
+        .routes(routes!(
+            routes::approval::create_approval_request,
+            routes::approval::list_approval_requests
+        ))
+        .routes(routes!(routes::approval::get_approval_request))
+        .routes(routes!(routes::approval::withdraw_approval_request))
+        .routes(routes!(routes::approval::approve_approval_request))
+        .routes(routes!(routes::approval::reject_approval_request))
         .routes(routes!(routes::workflow::list_workflows))
         .routes(routes!(routes::workflow::get_workflow))
         .routes(routes!(

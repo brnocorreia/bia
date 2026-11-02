@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Moves a pending request to `withdrawn`, `approved` or `rejected`; updates no row for one\n-- that is not pending. $1: id, $2: status, $3: deciding user or NULL, $4: comment, $5: now\nUPDATE approval_requests\nSET status = $2, decided_by = $3, comment = $4, closed_at = $5\nWHERE id = $1 AND status = 'pending'\nRETURNING id\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "approval_requests",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b44bfed418c59207f70e96fa5aad99cfd51935e7e8d9d3401dd98debfcc6f7e5"
+}

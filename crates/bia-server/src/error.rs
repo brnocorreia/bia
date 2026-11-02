@@ -138,6 +138,11 @@ pub enum ErrorCode {
     SecretNotFound,
     /// The server has no `BIA_MASTER_KEY`, so it cannot store Secrets.
     MasterKeyMissing,
+    /// No Approval Request has this id.
+    ApprovalRequestNotFound,
+    /// The Approval Request was already approved, rejected, withdrawn or made stale by a
+    /// replaced Draft, so it cannot be decided or withdrawn.
+    ApprovalRequestNotPending,
     /// No Queue has this name.
     QueueNotFound,
     /// The Queue's `dead_letter` names a Queue that does not exist; create that one first.

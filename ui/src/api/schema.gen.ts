@@ -354,6 +354,106 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/approval-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Approval Requests, newest first, optionally of one status or Workflow. */
+        get: operations["list_approval_requests"];
+        put?: never;
+        /**
+         * Asks for a Version to be published and/or activated. A Draft target must pass the checks
+         *     publishing makes, or the request fails with `invalid_definition` and the Diagnostics and
+         *     nothing is created. `activate` needs a Published Version. The Workflow's earlier pending
+         *     request becomes `withdrawn`. Replacing the Draft later makes the request `stale`. Needs an
+         *     `agent` or `admin` Token; an admin decides it with `approve` or `reject`.
+         */
+        post: operations["create_approval_request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/approval-requests/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One Approval Request. */
+        get: operations["get_approval_request"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/approval-requests/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approves a pending request and makes its change as the deciding User: publishes the Draft
+         *     and/or activates the Version, all in one transaction with the status change, so when the
+         *     change fails nothing happens and the request stays pending. A Draft that was replaced makes
+         *     the request `stale` and unapprovable. Needs an `admin` Token; the body may be `{}`.
+         */
+        post: operations["approve_approval_request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/approval-requests/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rejects a pending request; the Version stays as it is. Needs an `admin` Token; the body may
+         *     be `{}`.
+         */
+        post: operations["reject_approval_request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/approval-requests/{id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Withdraws a pending request. Needs an `agent` or `admin` Token. */
+        post: operations["withdraw_approval_request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/dry-run": {
         parameters: {
             query?: never;
@@ -1233,8 +1333,66 @@ export interface components {
             output: unknown;
             params: Record<string, never>;
         };
+        /**
+         * @description What approving the request does.
+         * @enum {string}
+         */
+        ActionName: "publish" | "publish_and_activate" | "activate";
         Approval: {
             scope?: components["schemas"]["GrantScopeName"] | null;
+        };
+        /**
+         * @description An Approval Request, with what a review page shows: the Workflow, the Version, the action,
+         *     who asked and why, how long ago, and how it was decided.
+         */
+        ApprovalRequestInfo: {
+            action: components["schemas"]["ActionName"];
+            /**
+             * Format: date-time
+             * @description When the status left `pending`, whatever the reason.
+             */
+            closed_at?: string | null;
+            /** @description The admin's comment on the decision. */
+            comment?: string | null;
+            /**
+             * @description SHA-256 of the Draft's Definition when the request was made, as hex. Absent for
+             *     `activate`.
+             */
+            content_hash?: string | null;
+            /**
+             * Format: date-time
+             * @description The request's age is now minus this.
+             */
+            created_at: string;
+            /**
+             * Format: uuid
+             * @description The User who approved or rejected it.
+             */
+            decided_by?: string | null;
+            /** Format: uuid */
+            id: string;
+            note?: string | null;
+            /**
+             * Format: int32
+             * @description The Version the request is about.
+             */
+            number: number;
+            /**
+             * Format: uuid
+             * @description The User the requesting Token acts for.
+             */
+            requested_by: string;
+            /** @description The name of the Token the request was made with, e.g. `claude-desktop`. */
+            requester_name: string;
+            /** Format: uuid */
+            requester_token_id: string;
+            status: components["schemas"]["StatusName"];
+            /** @example onboarding-email */
+            workflow_id: string;
+        };
+        ApprovalRequestList: {
+            /** @description Newest first. */
+            approval_requests: components["schemas"]["ApprovalRequestInfo"][];
         };
         /** @enum {string} */
         AttemptStatusName: "succeeded" | "failed" | "skipped" | "cancelled";
@@ -1340,6 +1498,10 @@ export interface components {
         /** @description Where to send the person: the client's redirect URI with the result. */
         Decision: {
             redirect_to: string;
+        };
+        DecisionBody: {
+            /** @description Why, for the requester. Up to 2000 characters. */
+            comment?: string | null;
         };
         /** @description What a Dry Run of a Definition that need not be stored takes. */
         DefinitionDryRunRequest: {
@@ -1454,7 +1616,7 @@ export interface components {
          *     added, but renaming or removing one needs an ADR (ADR-0042).
          * @enum {string}
          */
-        ErrorCode: "route_not_found" | "method_not_allowed" | "malformed_request" | "request_too_large" | "invalid_definition" | "missing_token" | "invalid_token" | "insufficient_scope" | "wrong_audience" | "token_not_found" | "origin_mismatch" | "invalid_credentials" | "public_url_missing" | "invalid_client" | "invalid_redirect_uri" | "client_metadata_blocked" | "client_metadata_unreachable" | "client_metadata_too_large" | "client_metadata_redirected" | "client_metadata_invalid" | "client_metadata_mismatch" | "authorization_not_found" | "device_authorization_not_found" | "scope_exceeds_request" | "grant_not_found" | "rate_limited" | "not_a_session" | "reauthentication_required" | "passkeys_unavailable" | "passkey_not_found" | "invalid_ceremony" | "invalid_setup_code" | "setup_code_expired" | "already_set_up" | "password_too_short" | "workflow_not_found" | "version_not_found" | "version_published" | "version_not_published" | "version_changed" | "workflow_id_mismatch" | "no_active_version" | "no_manual_trigger" | "invalid_run_input" | "invalid_mock" | "dry_run_too_long" | "run_not_found" | "run_finished" | "run_not_finished" | "run_not_resumable" | "webhook_not_found" | "missing_signature" | "invalid_signature" | "hmac_secret_unavailable" | "secret_not_found" | "master_key_missing" | "queue_not_found" | "dead_letter_queue_not_found" | "queue_in_use" | "not_ready" | "internal_error";
+        ErrorCode: "route_not_found" | "method_not_allowed" | "malformed_request" | "request_too_large" | "invalid_definition" | "missing_token" | "invalid_token" | "insufficient_scope" | "wrong_audience" | "token_not_found" | "origin_mismatch" | "invalid_credentials" | "public_url_missing" | "invalid_client" | "invalid_redirect_uri" | "client_metadata_blocked" | "client_metadata_unreachable" | "client_metadata_too_large" | "client_metadata_redirected" | "client_metadata_invalid" | "client_metadata_mismatch" | "authorization_not_found" | "device_authorization_not_found" | "scope_exceeds_request" | "grant_not_found" | "rate_limited" | "not_a_session" | "reauthentication_required" | "passkeys_unavailable" | "passkey_not_found" | "invalid_ceremony" | "invalid_setup_code" | "setup_code_expired" | "already_set_up" | "password_too_short" | "workflow_not_found" | "version_not_found" | "version_published" | "version_not_published" | "version_changed" | "workflow_id_mismatch" | "no_active_version" | "no_manual_trigger" | "invalid_run_input" | "invalid_mock" | "dry_run_too_long" | "run_not_found" | "run_finished" | "run_not_finished" | "run_not_resumable" | "webhook_not_found" | "missing_signature" | "invalid_signature" | "hmac_secret_unavailable" | "secret_not_found" | "master_key_missing" | "approval_request_not_found" | "approval_request_not_pending" | "queue_not_found" | "dead_letter_queue_not_found" | "queue_in_use" | "not_ready" | "internal_error";
         /** @description A failed Run and the entry that failed it. */
         FailedRun: components["schemas"]["RunSummary"] & {
             failure?: components["schemas"]["TimelineEntryInfo"] | null;
@@ -1624,6 +1786,18 @@ export interface components {
              * @example laptop
              */
             name: string;
+        };
+        NewApprovalRequestBody: {
+            action: components["schemas"]["ActionName"];
+            /** @description Why the change should go ahead, for the admin. Up to 2000 characters. */
+            note?: string | null;
+            /**
+             * Format: int32
+             * @description The Version's number: a Draft to publish, or a Published Version to activate.
+             */
+            number: number;
+            /** @example onboarding-email */
+            workflow_id: string;
         };
         NewTokenRequest: {
             /**
@@ -1932,6 +2106,8 @@ export interface components {
             /** @example ok */
             status: string;
         };
+        /** @enum {string} */
+        StatusName: "pending" | "approved" | "rejected" | "stale" | "withdrawn";
         /**
          * @description What a Definition is validated for.
          * @enum {string}
@@ -2971,6 +3147,410 @@ export interface operations {
             };
             /** @description Not ready; `code` is `not_ready`. */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_approval_requests: {
+        parameters: {
+            query?: {
+                /** @description Only requests with this status. */
+                status?: components["schemas"]["StatusName"];
+                /** @description Only requests for this Workflow. */
+                workflow_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalRequestList"];
+                };
+            };
+            /** @description `malformed_request`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    create_approval_request: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewApprovalRequestBody"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalRequestInfo"];
+                };
+            };
+            /** @description `malformed_request`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `workflow_not_found` or `version_not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `version_published` for a Published Version asked to be published, or `version_not_published` for a Draft asked to be activated. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `invalid_definition`: the Draft cannot be published; `diagnostics` says why. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_approval_request: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The request's id. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalRequestInfo"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `approval_request_not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    approve_approval_request: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The request's id. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecisionBody"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalRequestInfo"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `approval_request_not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `approval_request_not_pending`, `version_published`, `version_not_published` or `version_changed`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `invalid_definition`: the Draft no longer passes publishing's checks. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    reject_approval_request: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The request's id. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecisionBody"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalRequestInfo"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `approval_request_not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `approval_request_not_pending`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    withdraw_approval_request: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The request's id. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalRequestInfo"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `approval_request_not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `approval_request_not_pending`. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
