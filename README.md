@@ -8,6 +8,18 @@ Because workflows are data, a UI, a CLI, a GitOps repo or an **AI agent** can cr
 
 > Status: pre-alpha, under active design. Nothing here is usable yet.
 
+## Getting started
+
+```sh
+docker compose up --detach --wait postgres
+export DATABASE_URL=postgres://bia:bia@localhost:5432/bia BIA_MASTER_KEY="$(openssl rand -hex 32)"
+bia migrate && bia serve          # logs a Setup Link: open it and choose a password
+bia login                         # approve the CLI in your browser
+claude mcp add --transport http bia http://127.0.0.1:8080/mcp   # approve the agent on the consent screen
+```
+
+No Token is copied anywhere: the browser signs you in, MCP clients and the CLI sign in through it, and an agent that wants to publish asks, so you approve in the UI. [`docs/quickstart.md`](docs/quickstart.md) walks the whole scenario.
+
 ## Highlights (planned)
 
 - Durable steps with per-step retry and timeout, `sleep` for days, waits for events and human approvals.
@@ -44,7 +56,7 @@ steps:
 
 ## Documentation
 
-- [`docs/quickstart.md`](docs/quickstart.md): run bia locally and walk the agent scenario with an MCP client
+- [`docs/quickstart.md`](docs/quickstart.md): run bia locally, sign in and walk the agent scenario with an MCP client
 - [`GLOSSARY.md`](GLOSSARY.md): domain vocabulary
 - [`docs/architecture.md`](docs/architecture.md): how the pieces fit
 - [`docs/dsl.md`](docs/dsl.md): the definition format (draft)

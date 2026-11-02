@@ -142,8 +142,8 @@ The first milestone that proves the idea end to end is the **anchor scenario**: 
 
 ### Auth and Secrets
 
-85. As an operator, I want to set up the first admin from a one-time Setup Link or the CLI, so that a fresh install is usable and secure.
-86. As an operator, I want Tokens with `admin`, `agent` and `webhook` Scopes, so that each caller gets only what it needs.
+85. As an operator, I want to set up the first admin from a one-time Setup Link logged by `bia serve` (or `bia setup`), and sign in with a password or a passkey, so that a fresh install is usable and secure without copying a credential.
+86. As an operator, I want every credential to carry an `admin`, `agent` or `webhook` Scope and an origin (Session, Connected app or manual Token), so that each caller gets only what it needs and I can revoke any of them.
 87. As an operator, I want to manage Secrets via API, CLI and UI without ever being able to read their values back, so that leaks through the interface are impossible.
 88. As an operator, I want Secrets encrypted at rest with a master key from the environment, so that a database dump doesn't expose them.
 89. As an operator, I want resolved Secret values masked in logs and kept out of Outputs and Timelines, so that observability never leaks credentials.
@@ -154,7 +154,7 @@ The first milestone that proves the idea end to end is the **anchor scenario**: 
 
 92. As an operator, I want a UI that is a static site deployable to Cloudflare Pages or S3 + CloudFront, or embedded in the binary, so that hosting it is trivial.
 93. As an operator, I want the UI to read its API URL from a runtime config file, so that one build works in every environment.
-94. As an operator, I want to log into the UI with a Token, so that it uses the same authorisation as everything else.
+94. As an operator, I want to sign in to the UI with my password or a passkey, so that I never handle a Token in the browser.
 95. As an operator, I want to list Workflows, see their Versions, diff them, and publish, activate or roll back, so that I manage lifecycle visually.
 96. As an operator, I want a filterable list of Runs and a Timeline view with Attempts, inputs, Outputs, errors and durations, so that I understand what happened.
 97. As an operator, I want to trigger, cancel, resume and retry Runs from the UI, so that I can operate without the CLI.
