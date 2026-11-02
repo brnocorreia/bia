@@ -29,7 +29,13 @@ pub(crate) use setup::CodeCheck;
 pub use setup::SetupCode;
 pub use throttle::Wait;
 pub(crate) use throttle::{ClientAddress, SignInThrottle, TokioWait};
-pub(crate) use value::TokenValue;
+pub(crate) use value::{TokenValue, secret_hash};
+
+/// Marks a request that reached the API through the MCP server, which is what lets a Token
+/// issued for `/mcp` only be used. It is an extension on a request built in-process, so nothing
+/// a client sends can carry it.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ViaMcp;
 
 /// A request made with an `admin` Token.
 #[derive(Debug)]
@@ -144,6 +150,17 @@ async fn authenticate(parts: &Parts, state: &ApiState) -> Result<Token, ApiError
         .await
         .map_err(|e| ApiError::internal(&e))?
         .ok_or_else(unknown_token)?;
+    if let Some(audience) = &token.audience
+        && !state
+            .config
+            .audience_allows(audience, parts.extensions.get::<ViaMcp>().is_some())
+    {
+        return Err(ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            ErrorCode::WrongAudience,
+            "this Token was issued for the MCP endpoint (`/mcp`) only",
+        ));
+    }
     if by_cookie {
         // A cookie is only ever a Session; any other Token in one is a mistake or an attack.
         if token.origin != Origin::Session {

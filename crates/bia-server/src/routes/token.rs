@@ -157,6 +157,8 @@ pub(crate) async fn create_token(
                 created_at: state.clock.now(),
                 user_agent: None,
                 grant_id: None,
+                expires_at: None,
+                audience: None,
             },
         )
         .await

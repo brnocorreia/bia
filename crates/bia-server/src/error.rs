@@ -29,6 +29,8 @@ pub enum ErrorCode {
     InvalidToken,
     /// The Token's Scope does not allow this route.
     InsufficientScope,
+    /// The Token was issued for `/mcp` only and the request is not to `/mcp`.
+    WrongAudience,
     /// No Token has this id.
     TokenNotFound,
     /// A request made with the Session cookie uses an unsafe method and carries no `Origin`
@@ -36,6 +38,35 @@ pub enum ErrorCode {
     OriginMismatch,
     /// The password is wrong.
     InvalidCredentials,
+    /// `public_url` is not configured, so the server cannot name itself to OAuth clients.
+    PublicUrlMissing,
+    /// An authorization request names no client, or one that cannot be found or fetched.
+    InvalidClient,
+    /// The authorization request's `redirect_uri` is not one the client registered.
+    InvalidRedirectUri,
+    /// The client's metadata document resolves to a loopback, private or link-local address, or
+    /// is not served over HTTPS; bia does not fetch it.
+    ClientMetadataBlocked,
+    /// The client's metadata document could not be fetched: no answer in time, no such host, or
+    /// a status other than 200.
+    ClientMetadataUnreachable,
+    /// The client's metadata document is larger than 5 KB.
+    ClientMetadataTooLarge,
+    /// The client's metadata URL answers with a redirect, which bia does not follow.
+    ClientMetadataRedirected,
+    /// The client's metadata document is not JSON, lacks `redirect_uris`, or names a client
+    /// that authenticates with a secret.
+    ClientMetadataInvalid,
+    /// The `client_id` inside the metadata document is not the URL it was fetched from.
+    ClientMetadataMismatch,
+    /// No pending authorization has this id: it is unknown, decided already, or ran out.
+    AuthorizationNotFound,
+    /// The approved Scope is broader than the client asked for.
+    ScopeExceedsRequest,
+    /// No Grant has this id.
+    GrantNotFound,
+    /// Too many requests from this address; try again later.
+    RateLimited,
     /// The request is not made with a Session, so there is none to end.
     NotASession,
     /// The setup code is not the one in the Setup Link the server logged.

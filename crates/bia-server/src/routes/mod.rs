@@ -1,4 +1,5 @@
 pub(crate) mod dry_run;
+pub(crate) mod grant;
 pub(crate) mod probe;
 pub(crate) mod queue;
 pub(crate) mod run;
