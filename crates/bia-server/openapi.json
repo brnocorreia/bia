@@ -1282,6 +1282,362 @@
         ]
       }
     },
+    "/v1/passkeys": {
+      "get": {
+        "tags": [
+          "passkeys"
+        ],
+        "summary": "The User's passkeys. Needs an `admin` Token.",
+        "operationId": "list_passkeys",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasskeyList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route (`insufficient_scope`), or a request made\nwith the Session cookie carries no acceptable `Origin` (`origin_mismatch`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/v1/passkeys/registration/begin": {
+      "post": {
+        "tags": [
+          "passkeys"
+        ],
+        "summary": "Begins registering a passkey and returns the options for `navigator.credentials.create`.\nNeeds an `admin` Token.",
+        "operationId": "begin_registration",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NamePasskey"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ceremony"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_request`: `name` is empty or too long.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route (`insufficient_scope`), or a request made\nwith the Session cookie carries no acceptable `Origin` (`origin_mismatch`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`passkeys_unavailable`: `public_url` cannot be a relying party.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/v1/passkeys/registration/finish": {
+      "post": {
+        "tags": [
+          "passkeys"
+        ],
+        "summary": "Finishes registering a passkey with the browser's response. The response must come from\n`public_url`'s origin and RP ID. Needs an `admin` Token.",
+        "operationId": "finish_registration",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinishCeremony"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasskeyInfo"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_ceremony`: unknown, expired or used ceremony, or a response that does not verify, e.g. from another origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route (`insufficient_scope`), or a request made\nwith the Session cookie carries no acceptable `Origin` (`origin_mismatch`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`passkeys_unavailable`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/v1/passkeys/{passkey_id}": {
+      "delete": {
+        "tags": [
+          "passkeys"
+        ],
+        "summary": "Removes a passkey. The caller must be a Session that signed in within the last 10 minutes,\nwhich a Token that is not a Session cannot prove.",
+        "operationId": "delete_passkey",
+        "parameters": [
+          {
+            "name": "passkey_id",
+            "in": "path",
+            "description": "The passkey's `id`.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The passkey is gone."
+          },
+          "401": {
+            "description": "No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route (`insufficient_scope`), or a request made\nwith the Session cookie carries no acceptable `Origin` (`origin_mismatch`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`passkey_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "passkeys"
+        ],
+        "summary": "Renames a passkey. Needs an `admin` Token.",
+        "operationId": "rename_passkey",
+        "parameters": [
+          {
+            "name": "passkey_id",
+            "in": "path",
+            "description": "The passkey's `id`.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NamePasskey"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasskeyInfo"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_request`: `name` is empty or too long.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route (`insufficient_scope`), or a request made\nwith the Session cookie carries no acceptable `Origin` (`origin_mismatch`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`passkey_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": []
+          }
+        ]
+      }
+    },
     "/v1/queues": {
       "get": {
         "tags": [
@@ -2757,6 +3113,104 @@
             "token": []
           }
         ]
+      }
+    },
+    "/v1/session/passkey/begin": {
+      "post": {
+        "tags": [
+          "session"
+        ],
+        "summary": "Begins signing in with a passkey and returns the options for `navigator.credentials.get`.\nPublic, like the password sign-in.",
+        "operationId": "begin_sign_in",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ceremony"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`invalid_credentials`: no passkey is registered.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`passkeys_unavailable`: `public_url` cannot be a relying party.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/session/passkey/finish": {
+      "post": {
+        "tags": [
+          "session"
+        ],
+        "summary": "Finishes signing in with the browser's response and starts the same Session as the password\ndoes, with the same cookie. A response that fails, for whatever reason, counts towards\nsign-in throttling like a wrong password. Public.",
+        "operationId": "finish_sign_in",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinishCeremony"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "headers": {
+              "Set-Cookie": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "`bia_session=<value>`"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedIn"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`invalid_credentials`: unknown, expired or used ceremony, or a response that does not verify, e.g. from another origin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`passkeys_unavailable`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/setup": {
@@ -4429,6 +4883,24 @@
           }
         }
       },
+      "Ceremony": {
+        "type": "object",
+        "description": "A ceremony that has begun.",
+        "required": [
+          "ceremony_id",
+          "options"
+        ],
+        "properties": {
+          "ceremony_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Send it back with the browser's response. Valid for 5 minutes, once."
+          },
+          "options": {
+            "description": "The WebAuthn options as JSON, `publicKey` inside: binary fields are base64url strings.\nPass them to `navigator.credentials.create` (registration) or `.get` (sign-in) after\ndecoding those fields."
+          }
+        }
+      },
       "ChangePasswordRequest": {
         "type": "object",
         "required": [
@@ -4880,6 +5352,10 @@
           "grant_not_found",
           "rate_limited",
           "not_a_session",
+          "reauthentication_required",
+          "passkeys_unavailable",
+          "passkey_not_found",
+          "invalid_ceremony",
           "invalid_setup_code",
           "setup_code_expired",
           "already_set_up",
@@ -4958,6 +5434,23 @@
             "description": "Failed Runs, newest first."
           }
         }
+      },
+      "FinishCeremony": {
+        "type": "object",
+        "required": [
+          "ceremony_id",
+          "credential"
+        ],
+        "properties": {
+          "ceremony_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "credential": {
+            "description": "The browser's `PublicKeyCredential` as JSON, with binary fields as base64url strings."
+          }
+        },
+        "additionalProperties": false
       },
       "GrantInfo": {
         "type": "object",
@@ -5221,6 +5714,20 @@
           }
         }
       },
+      "NamePasskey": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "What the passkey is called, 1 to 128 characters. Need not be unique.",
+            "example": "laptop"
+          }
+        },
+        "additionalProperties": false
+      },
       "NewTokenRequest": {
         "type": "object",
         "required": [
@@ -5289,6 +5796,52 @@
             "format": "int64",
             "description": "How many Sessions it revoked. OAuth Grants and manual Tokens are not affected.",
             "minimum": 0
+          }
+        }
+      },
+      "PasskeyInfo": {
+        "type": "object",
+        "description": "A passkey, without its credential.",
+        "required": [
+          "id",
+          "name",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "last_used_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When it last signed in."
+          },
+          "name": {
+            "type": "string",
+            "description": "What the admin calls it, e.g. `laptop`."
+          }
+        }
+      },
+      "PasskeyList": {
+        "type": "object",
+        "required": [
+          "passkeys"
+        ],
+        "properties": {
+          "passkeys": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PasskeyInfo"
+            },
+            "description": "The User's passkeys, oldest first."
           }
         }
       },

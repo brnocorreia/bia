@@ -1,7 +1,8 @@
 import { createFileRoute, redirect, useNavigate, useRouter } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
-import { signIn } from "@/auth/login";
+import { signIn, signInWithPasskey } from "@/auth/login";
 import { safeRedirect } from "@/auth/redirect";
+import { PASSKEYS_NEED_HTTPS, passkeysSupported } from "@/auth/webauthn";
 import { session } from "@/auth/session";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,12 +26,17 @@ function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const supported = passkeysSupported();
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    await start(() => signIn(password));
+  }
+
+  async function start(attempt: () => ReturnType<typeof signIn>) {
     setBusy(true);
     setError(null);
-    const result = await signIn(password);
+    const result = await attempt();
     setBusy(false);
     if (!result.ok) {
       setError(result.message);
@@ -73,6 +79,23 @@ function Login() {
               {busy ? "Signing in…" : "Sign in"}
             </Button>
           </form>
+          <div className="mt-4 border-t pt-4">
+            {supported ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                disabled={busy}
+                onClick={() => void start(signInWithPasskey)}
+              >
+                Sign in with a passkey
+              </Button>
+            ) : (
+              <p role="note" className="text-sm text-muted-foreground">
+                {PASSKEYS_NEED_HTTPS}
+              </p>
+            )}
+          </div>
         </CardContent>
       </Card>
     </main>

@@ -408,6 +408,84 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/passkeys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The User's passkeys. Needs an `admin` Token. */
+        get: operations["list_passkeys"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/passkeys/registration/begin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Begins registering a passkey and returns the options for `navigator.credentials.create`.
+         *     Needs an `admin` Token.
+         */
+        post: operations["begin_registration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/passkeys/registration/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finishes registering a passkey with the browser's response. The response must come from
+         *     `public_url`'s origin and RP ID. Needs an `admin` Token.
+         */
+        post: operations["finish_registration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/passkeys/{passkey_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Removes a passkey. The caller must be a Session that signed in within the last 10 minutes,
+         *     which a Token that is not a Session cannot prove.
+         */
+        delete: operations["delete_passkey"];
+        options?: never;
+        head?: never;
+        /** Renames a passkey. Needs an `admin` Token. */
+        patch: operations["rename_passkey"];
+        trace?: never;
+    };
     "/v1/queues": {
         parameters: {
             query?: never;
@@ -740,6 +818,47 @@ export interface paths {
          *     one. Needs an `admin` Token.
          */
         delete: operations["sign_out_others"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/session/passkey/begin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Begins signing in with a passkey and returns the options for `navigator.credentials.get`.
+         *     Public, like the password sign-in.
+         */
+        post: operations["begin_sign_in"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/session/passkey/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finishes signing in with the browser's response and starts the same Session as the password
+         *     does, with the same cookie. A response that fails, for whatever reason, counts towards
+         *     sign-in throttling like a wrong password. Public.
+         */
+        post: operations["finish_sign_in"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1144,6 +1263,20 @@ export interface components {
             /** @description `none`: clients are public and prove themselves with PKCE. */
             token_endpoint_auth_methods_supported: string[];
         };
+        /** @description A ceremony that has begun. */
+        Ceremony: {
+            /**
+             * Format: uuid
+             * @description Send it back with the browser's response. Valid for 5 minutes, once.
+             */
+            ceremony_id: string;
+            /**
+             * @description The WebAuthn options as JSON, `publicKey` inside: binary fields are base64url strings.
+             *     Pass them to `navigator.credentials.create` (registration) or `.get` (sign-in) after
+             *     decoding those fields.
+             */
+            options: unknown;
+        };
         ChangePasswordRequest: {
             /** @description The password being replaced. */
             current: string;
@@ -1321,7 +1454,7 @@ export interface components {
          *     added, but renaming or removing one needs an ADR (ADR-0042).
          * @enum {string}
          */
-        ErrorCode: "route_not_found" | "method_not_allowed" | "malformed_request" | "request_too_large" | "invalid_definition" | "missing_token" | "invalid_token" | "insufficient_scope" | "wrong_audience" | "token_not_found" | "origin_mismatch" | "invalid_credentials" | "public_url_missing" | "invalid_client" | "invalid_redirect_uri" | "client_metadata_blocked" | "client_metadata_unreachable" | "client_metadata_too_large" | "client_metadata_redirected" | "client_metadata_invalid" | "client_metadata_mismatch" | "authorization_not_found" | "device_authorization_not_found" | "scope_exceeds_request" | "grant_not_found" | "rate_limited" | "not_a_session" | "invalid_setup_code" | "setup_code_expired" | "already_set_up" | "password_too_short" | "workflow_not_found" | "version_not_found" | "version_published" | "version_not_published" | "version_changed" | "workflow_id_mismatch" | "no_active_version" | "no_manual_trigger" | "invalid_run_input" | "invalid_mock" | "dry_run_too_long" | "run_not_found" | "run_finished" | "run_not_finished" | "run_not_resumable" | "webhook_not_found" | "missing_signature" | "invalid_signature" | "hmac_secret_unavailable" | "secret_not_found" | "master_key_missing" | "queue_not_found" | "dead_letter_queue_not_found" | "queue_in_use" | "not_ready" | "internal_error";
+        ErrorCode: "route_not_found" | "method_not_allowed" | "malformed_request" | "request_too_large" | "invalid_definition" | "missing_token" | "invalid_token" | "insufficient_scope" | "wrong_audience" | "token_not_found" | "origin_mismatch" | "invalid_credentials" | "public_url_missing" | "invalid_client" | "invalid_redirect_uri" | "client_metadata_blocked" | "client_metadata_unreachable" | "client_metadata_too_large" | "client_metadata_redirected" | "client_metadata_invalid" | "client_metadata_mismatch" | "authorization_not_found" | "device_authorization_not_found" | "scope_exceeds_request" | "grant_not_found" | "rate_limited" | "not_a_session" | "reauthentication_required" | "passkeys_unavailable" | "passkey_not_found" | "invalid_ceremony" | "invalid_setup_code" | "setup_code_expired" | "already_set_up" | "password_too_short" | "workflow_not_found" | "version_not_found" | "version_published" | "version_not_published" | "version_changed" | "workflow_id_mismatch" | "no_active_version" | "no_manual_trigger" | "invalid_run_input" | "invalid_mock" | "dry_run_too_long" | "run_not_found" | "run_finished" | "run_not_finished" | "run_not_resumable" | "webhook_not_found" | "missing_signature" | "invalid_signature" | "hmac_secret_unavailable" | "secret_not_found" | "master_key_missing" | "queue_not_found" | "dead_letter_queue_not_found" | "queue_in_use" | "not_ready" | "internal_error";
         /** @description A failed Run and the entry that failed it. */
         FailedRun: components["schemas"]["RunSummary"] & {
             failure?: components["schemas"]["TimelineEntryInfo"] | null;
@@ -1334,6 +1467,12 @@ export interface components {
             next_after?: string | null;
             /** @description Failed Runs, newest first. */
             runs: components["schemas"]["FailedRun"][];
+        };
+        FinishCeremony: {
+            /** Format: uuid */
+            ceremony_id: string;
+            /** @description The browser's `PublicKeyCredential` as JSON, with binary fields as base64url strings. */
+            credential: unknown;
         };
         /** @description What a person approved for an OAuth client. */
         GrantInfo: {
@@ -1479,6 +1618,13 @@ export interface components {
             /** @description The Output every Attempt returns. Any JSON value, `null` included. */
             output?: unknown;
         };
+        NamePasskey: {
+            /**
+             * @description What the passkey is called, 1 to 128 characters. Need not be unique.
+             * @example laptop
+             */
+            name: string;
+        };
         NewTokenRequest: {
             /**
              * @description What the Token is for, e.g. `claude-desktop`. Need not be unique.
@@ -1510,6 +1656,24 @@ export interface components {
              * @description How many Sessions it revoked. OAuth Grants and manual Tokens are not affected.
              */
             revoked_sessions: number;
+        };
+        /** @description A passkey, without its credential. */
+        PasskeyInfo: {
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: date-time
+             * @description When it last signed in.
+             */
+            last_used_at?: string | null;
+            /** @description What the admin calls it, e.g. `laptop`. */
+            name: string;
+        };
+        PasskeyList: {
+            /** @description The User's passkeys, oldest first. */
+            passkeys: components["schemas"]["PasskeyInfo"][];
         };
         PasswordChanged: {
             /**
@@ -2979,6 +3143,301 @@ export interface operations {
             };
         };
     };
+    list_passkeys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyList"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    begin_registration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NamePasskey"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ceremony"];
+                };
+            };
+            /** @description `malformed_request`: `name` is empty or too long. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `passkeys_unavailable`: `public_url` cannot be a relying party. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    finish_registration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FinishCeremony"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyInfo"];
+                };
+            };
+            /** @description `invalid_ceremony`: unknown, expired or used ceremony, or a response that does not verify, e.g. from another origin. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `passkeys_unavailable`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_passkey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The passkey's `id`. */
+                passkey_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The passkey is gone. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /**
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `passkey_not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    rename_passkey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The passkey's `id`. */
+                passkey_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NamePasskey"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyInfo"];
+                };
+            };
+            /** @description `malformed_request`: `name` is empty or too long. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `passkey_not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     list_queues: {
         parameters: {
             query?: never;
@@ -4131,6 +4590,86 @@ export interface operations {
              *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
              */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    begin_sign_in: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ceremony"];
+                };
+            };
+            /** @description `invalid_credentials`: no passkey is registered. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `passkeys_unavailable`: `public_url` cannot be a relying party. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    finish_sign_in: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FinishCeremony"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    /** @description `bia_session=<value>` */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignedIn"];
+                };
+            };
+            /** @description `invalid_credentials`: unknown, expired or used ceremony, or a response that does not verify, e.g. from another origin. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `passkeys_unavailable`. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

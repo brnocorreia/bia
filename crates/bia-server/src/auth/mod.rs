@@ -19,6 +19,7 @@ use utoipa::IntoResponses;
 
 use crate::{ApiError, ApiState, ErrorBody, ErrorCode};
 
+pub(crate) mod passkey;
 pub(crate) mod password;
 pub(crate) mod session;
 mod setup;

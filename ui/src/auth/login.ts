@@ -1,5 +1,6 @@
 import { getApi } from "@/api/client";
 import { ApiError, unwrap } from "@/api/request";
+import { signInWithPasskeyCeremony, passkeyErrorMessage } from "@/api/passkeys";
 import { getConfig } from "@/config";
 import { session } from "./session";
 
@@ -48,6 +49,20 @@ export async function signIn(password: string): Promise<SignInResult> {
         : { ok: false, kind: "other", message: failure.message };
     }
     return unreachable();
+  }
+  return confirmSession();
+}
+
+/** Signs in with a passkey: the browser prompts, and the same Session as the password's starts. */
+export async function signInWithPasskey(): Promise<SignInResult> {
+  try {
+    await signInWithPasskeyCeremony();
+  } catch (failure) {
+    if (failure instanceof ApiError && failure.code === "invalid_credentials") {
+      return { ok: false, kind: "credentials", message: "That passkey was not accepted." };
+    }
+    if (failure instanceof TypeError) return unreachable();
+    return { ok: false, kind: "other", message: passkeyErrorMessage(failure) };
   }
   return confirmSession();
 }

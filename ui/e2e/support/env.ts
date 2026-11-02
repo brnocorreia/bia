@@ -33,9 +33,11 @@ export function e2eEnv(): E2eEnv {
   return {
     embedded,
     apiPort,
-    apiUrl: `http://127.0.0.1:${apiPort}`,
+    // `localhost`, not `127.0.0.1`: it is what `public_url` defaults to, so it is the WebAuthn RP ID
+    // and the origin the Session cookie is for, and an IP address cannot be an RP ID.
+    apiUrl: `http://localhost:${apiPort}`,
     uiPort,
-    uiUrl: embedded ? `http://127.0.0.1:${apiPort}` : `http://127.0.0.1:${uiPort}`,
+    uiUrl: embedded ? `http://localhost:${apiPort}` : `http://localhost:${uiPort}`,
     databaseUrl: process.env.BIA_E2E_DATABASE_URL ?? "postgres://bia:bia@localhost:5432/bia_e2e",
     binary: process.env.BIA_E2E_BIN,
     adminTokenFile: path.resolve(import.meta.dirname, "../.auth/admin-token"),

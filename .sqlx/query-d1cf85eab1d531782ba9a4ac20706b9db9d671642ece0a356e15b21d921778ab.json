@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Deletes the ceremony and returns it when it is the User's, of this kind, and not expired.\n-- $1: id, $2: user id, $3: kind, $4: now\nDELETE FROM passkey_ceremonies\nWHERE id = $1 AND user_id = $2 AND kind = $3 AND expires_at > $4\nRETURNING state\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "state",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "passkey_ceremonies",
+            "name": "state"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d1cf85eab1d531782ba9a4ac20706b9db9d671642ece0a356e15b21d921778ab"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM passkeys\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "353b26b030e46439d25b62b895cd43640a6f54f8a6276ff43e1b3a6c3fdb4d5b"
+}

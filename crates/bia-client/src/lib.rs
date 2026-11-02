@@ -191,6 +191,29 @@ pub struct PasswordChanged {
     pub revoked_sessions: u64,
 }
 
+/// A passkey, without its credential.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Passkey {
+    pub id: Uuid,
+    pub name: String,
+    pub created_at: DateTime<Utc>,
+    pub last_used_at: Option<DateTime<Utc>>,
+}
+
+/// A WebAuthn ceremony that has begun.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct Ceremony {
+    /// Goes back with the authenticator's response.
+    pub ceremony_id: Uuid,
+    /// The options for `navigator.credentials.create` or `.get`, as the server sends them.
+    pub options: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+struct PasskeyList {
+    passkeys: Vec<Passkey>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct TokenList {
     tokens: Vec<Token>,
@@ -671,6 +694,89 @@ impl Client {
             session,
         ) = self
             .send_for_session(Method::POST, "/v1/session", Some(&Request { password }))
+            .await?;
+        Ok(SignedIn {
+            user,
+            token,
+            session,
+        })
+    }
+
+    /// The passkeys the User signs in with.
+    pub async fn list_passkeys(&self) -> Result<Vec<Passkey>, Error> {
+        let list: PasskeyList = self.send(Method::GET, "/v1/passkeys", None::<&()>).await?;
+        Ok(list.passkeys)
+    }
+
+    /// Begins registering a passkey called `name`.
+    pub async fn begin_passkey_registration(&self, name: &str) -> Result<Ceremony, Error> {
+        self.send(
+            Method::POST,
+            "/v1/passkeys/registration/begin",
+            Some(&serde_json::json!({ "name": name })),
+        )
+        .await
+    }
+
+    /// Finishes a registration with the authenticator's `credential`.
+    pub async fn finish_passkey_registration(
+        &self,
+        ceremony_id: Uuid,
+        credential: &serde_json::Value,
+    ) -> Result<Passkey, Error> {
+        self.send(
+            Method::POST,
+            "/v1/passkeys/registration/finish",
+            Some(&serde_json::json!({ "ceremony_id": ceremony_id, "credential": credential })),
+        )
+        .await
+    }
+
+    pub async fn rename_passkey(&self, id: Uuid, name: &str) -> Result<Passkey, Error> {
+        self.send(
+            Method::PATCH,
+            &format!("/v1/passkeys/{id}"),
+            Some(&serde_json::json!({ "name": name })),
+        )
+        .await
+    }
+
+    /// Needs a Session that signed in within the last 10 minutes.
+    pub async fn delete_passkey(&self, id: Uuid) -> Result<(), Error> {
+        self.execute(Method::DELETE, &format!("/v1/passkeys/{id}"), None::<&()>)
+            .await?;
+        Ok(())
+    }
+
+    /// Begins signing in with a passkey.
+    pub async fn begin_passkey_sign_in(&self) -> Result<Ceremony, Error> {
+        self.send(Method::POST, "/v1/session/passkey/begin", None::<&()>)
+            .await
+    }
+
+    /// Finishes signing in with the authenticator's `credential`, starting a Session.
+    pub async fn finish_passkey_sign_in(
+        &self,
+        ceremony_id: Uuid,
+        credential: &serde_json::Value,
+    ) -> Result<SignedIn, Error> {
+        #[derive(Deserialize)]
+        struct Response {
+            user: User,
+            session: Token,
+        }
+        let (
+            Response {
+                user,
+                session: token,
+            },
+            session,
+        ) = self
+            .send_for_session(
+                Method::POST,
+                "/v1/session/passkey/finish",
+                Some(&serde_json::json!({ "ceremony_id": ceremony_id, "credential": credential })),
+            )
             .await?;
         Ok(SignedIn {
             user,

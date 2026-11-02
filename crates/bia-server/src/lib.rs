@@ -195,6 +195,15 @@ fn documented() -> OpenApiRouter<ApiState> {
         .routes(routes!(routes::setup::set_up))
         .routes(routes!(routes::session::sign_in, routes::session::sign_out))
         .routes(routes!(routes::session::sign_out_others))
+        .routes(routes!(routes::passkey::begin_sign_in))
+        .routes(routes!(routes::passkey::finish_sign_in))
+        .routes(routes!(routes::passkey::list_passkeys))
+        .routes(routes!(routes::passkey::begin_registration))
+        .routes(routes!(routes::passkey::finish_registration))
+        .routes(routes!(
+            routes::passkey::rename_passkey,
+            routes::passkey::delete_passkey
+        ))
         .routes(routes!(routes::user::change_password))
         .routes(routes!(routes::grant::list_grants))
         .routes(routes!(routes::grant::revoke_grant))

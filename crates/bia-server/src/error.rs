@@ -36,7 +36,7 @@ pub enum ErrorCode {
     /// A request made with the Session cookie uses an unsafe method and carries no `Origin`
     /// equal to the origin of `public_url` or `ui_url`.
     OriginMismatch,
-    /// The password is wrong.
+    /// The password is wrong, or so is the passkey response.
     InvalidCredentials,
     /// `public_url` is not configured, so the server cannot name itself to OAuth clients.
     PublicUrlMissing,
@@ -72,6 +72,17 @@ pub enum ErrorCode {
     RateLimited,
     /// The request is not made with a Session, so there is none to end.
     NotASession,
+    /// The Session signed in more than 10 minutes ago, or is not a Session, so it cannot remove
+    /// a passkey. Sign in again and retry.
+    ReauthenticationRequired,
+    /// The server cannot run passkey ceremonies: `public_url` is unset or its host is an IP
+    /// address, which WebAuthn does not accept as an RP ID.
+    PasskeysUnavailable,
+    /// No passkey has this id.
+    PasskeyNotFound,
+    /// A passkey registration failed: its ceremony is unknown, expired or already used, or the
+    /// authenticator's response is for another origin or RP ID, or is invalid.
+    InvalidCeremony,
     /// The setup code is not the one in the Setup Link the server logged.
     InvalidSetupCode,
     /// The setup code is from before the server last started; use the Setup Link it logged

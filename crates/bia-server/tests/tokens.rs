@@ -260,7 +260,8 @@ async fn every_route_but_the_probes_setup_sign_in_and_oauth_needs_a_token(pool: 
                 .replace("{token_id}", &nil)
                 .replace("{grant_id}", &nil)
                 .replace("{request_id}", &nil)
-                .replace("{id}", &nil);
+                .replace("{id}", &nil)
+                .replace("{passkey_id}", &nil);
             let response = http
                 .request(
                     method.to_uppercase().parse().unwrap(),
@@ -291,6 +292,8 @@ async fn every_route_but_the_probes_setup_sign_in_and_oauth_needs_a_token(pool: 
             "post /oauth/revoke",
             "post /oauth/token",
             "post /v1/session",
+            "post /v1/session/passkey/begin",
+            "post /v1/session/passkey/finish",
             "post /v1/setup"
         ]
     );
