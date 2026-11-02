@@ -1,10 +1,12 @@
 //! `bia mcp`: a stdio proxy to the server's `/mcp` endpoint, for MCP clients that spawn a
 //! local process (ADR-0048). It adds nothing: each JSON-RPC message read from stdin is POSTed
-//! with the configured Token, and what comes back is written to stdout, one message per line.
+//! with the configured Token or stored login (ADR-0068), and what comes back is written to
+//! stdout, one message per line.
 
 use std::sync::Arc;
 
 use anyhow::Context;
+use bia_client::TokenSource;
 use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 use reqwest::{Client, Response};
 use serde_json::{Value, json};
@@ -15,23 +17,17 @@ const SESSION_ID: &str = "mcp-session-id";
 const PROTOCOL_VERSION: &str = "mcp-protocol-version";
 
 /// Proxies stdin to `{url}/mcp` until stdin closes.
-pub(crate) async fn proxy(url: &str, token: Option<&str>) -> anyhow::Result<()> {
+pub(crate) async fn proxy(url: &str, token: Option<Arc<dyn TokenSource>>) -> anyhow::Result<()> {
     let endpoint = format!("{}/mcp", url.trim_end_matches('/'));
     reqwest::Url::parse(&endpoint).with_context(|| format!("invalid server URL `{url}`"))?;
-    run(
-        tokio::io::stdin(),
-        tokio::io::stdout(),
-        endpoint,
-        token.map(str::to_owned),
-    )
-    .await
+    run(tokio::io::stdin(), tokio::io::stdout(), endpoint, token).await
 }
 
 async fn run(
     input: impl tokio::io::AsyncRead + Unpin,
     output: impl AsyncWrite + Unpin + Send + 'static,
     endpoint: String,
-    token: Option<String>,
+    token: Option<Arc<dyn TokenSource>>,
 ) -> anyhow::Result<()> {
     let proxy = Arc::new(Proxy {
         http: Client::new(),
@@ -56,7 +52,7 @@ async fn run(
 struct Proxy<W> {
     http: Client,
     endpoint: String,
-    token: Option<String>,
+    token: Option<Arc<dyn TokenSource>>,
     /// What the server handed out and expects back: the session and the protocol version.
     headers: Mutex<Vec<(&'static str, String)>>,
     output: Mutex<W>,
@@ -87,22 +83,24 @@ impl<W: AsyncWrite + Unpin> Proxy<W> {
     }
 
     async fn post(&self, message: &str) -> Result<Vec<Value>, String> {
-        let mut request = self
-            .http
-            .post(&self.endpoint)
-            .header(CONTENT_TYPE, "application/json")
-            .header(ACCEPT, "application/json, text/event-stream")
-            .body(message.to_owned());
-        if let Some(token) = &self.token {
-            request = request.header(AUTHORIZATION, format!("Bearer {token}"));
-        }
-        for (name, value) in self.headers.lock().await.iter() {
-            request = request.header(*name, value);
-        }
-        let response = request
-            .send()
-            .await
-            .map_err(|e| format!("cannot reach {}: {e}", self.endpoint))?;
+        let mut token = match &self.token {
+            Some(source) => source.token().await,
+            None => None,
+        };
+        let mut retried = false;
+        let response = loop {
+            let response = self.send(message, token.as_deref()).await?;
+            if response.status().as_u16() == 401
+                && !retried
+                && let Some(source) = &self.token
+                && let Some(renewed) = source.refresh(token.clone()).await
+            {
+                retried = true;
+                token = Some(renewed);
+                continue;
+            }
+            break response;
+        };
         self.remember(&response).await;
         let status = response.status();
         let is_stream = response
@@ -115,7 +113,11 @@ impl<W: AsyncWrite + Unpin> Proxy<W> {
             .await
             .map_err(|e| format!("cannot read the response: {e}"))?;
         if !status.is_success() {
-            return Err(failure(status.as_u16(), &body));
+            let mut message = failure(status.as_u16(), &body);
+            if status.as_u16() == 401 {
+                message.push_str("; run `bia login`, or set BIA_TOKEN to a valid Token");
+            }
+            return Err(message);
         }
         let texts: Vec<String> = if is_stream {
             data_events(&body)
@@ -137,6 +139,25 @@ impl<W: AsyncWrite + Unpin> Proxy<W> {
             self.set(PROTOCOL_VERSION, version.to_owned()).await;
         }
         Ok(replies)
+    }
+
+    async fn send(&self, message: &str, token: Option<&str>) -> Result<Response, String> {
+        let mut request = self
+            .http
+            .post(&self.endpoint)
+            .header(CONTENT_TYPE, "application/json")
+            .header(ACCEPT, "application/json, text/event-stream")
+            .body(message.to_owned());
+        if let Some(token) = token {
+            request = request.header(AUTHORIZATION, format!("Bearer {token}"));
+        }
+        for (name, value) in self.headers.lock().await.iter() {
+            request = request.header(*name, value);
+        }
+        request
+            .send()
+            .await
+            .map_err(|e| format!("cannot reach {}: {e}", self.endpoint))
     }
 
     async fn set(&self, name: &'static str, value: String) {

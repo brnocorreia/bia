@@ -94,6 +94,11 @@ struct Ran {
 
 async fn bia(url: &str, token: &str, args: &[&str], stdin: &str) -> Ran {
     let mut child = Command::new(env!("CARGO_BIN_EXE_bia"))
+        .env("BIA_KEYCHAIN", "off")
+        .env(
+            "BIA_CONFIG_DIR",
+            std::env::temp_dir().join("bia-cli-tests-no-login"),
+        )
         .args(args)
         .env_remove("BIA_CONFIG")
         .env("BIA_URL", url)
