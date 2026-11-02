@@ -9,6 +9,7 @@ import {
 import { useEffect } from "react";
 import { currentTokenQuery } from "@/auth/scope";
 import { session, useSessionState } from "@/auth/session";
+import { PendingApprovalsBadge } from "@/components/pending-approvals-badge";
 import { UserMenu } from "@/components/user-menu";
 import { cn } from "@/lib/utils";
 
@@ -60,6 +61,7 @@ function Shell() {
               activeProps={{ className: "bg-accent font-medium" }}
             >
               {entry.label}
+              {entry.to === "/approvals" && <PendingApprovalsBadge />}
             </Link>
           ))}
         </nav>
