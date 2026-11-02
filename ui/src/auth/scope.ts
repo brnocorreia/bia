@@ -1,23 +1,25 @@
-import { useQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery } from "@tanstack/react-query";
 import { getApi, type components } from "@/api/client";
 import { unwrap } from "@/api/request";
-import { useToken } from "./session";
+import { useSessionState } from "./session";
 
 export type Scope = components["schemas"]["ScopeName"];
 
+/** The Token behind the Session, as the API describes it (`GET /v1/tokens/me`, ADR-0064). */
+export const currentTokenQuery = queryOptions({
+  queryKey: ["current-token"],
+  staleTime: 60_000,
+  queryFn: async () => unwrap(await getApi().GET("/v1/tokens/me")),
+});
+
 /**
  * The Token the UI is signed in with, as the API describes it. The Scope is read from the
- * server (`GET /v1/tokens/me`) rather than guessed, and is keyed by the session Token so
- * signing in as someone else never shows the previous Scope.
+ * server rather than guessed. The cache is cleared on sign-out, so signing in as someone else
+ * never shows the previous Scope.
  */
 export function useCurrentToken() {
-  const token = useToken();
-  return useQuery({
-    queryKey: ["current-token", token],
-    enabled: token !== null,
-    staleTime: 60_000,
-    queryFn: async () => unwrap(await getApi().GET("/v1/tokens/me")),
-  });
+  const state = useSessionState();
+  return useQuery({ ...currentTokenQuery, enabled: state === "signed-in" });
 }
 
 /**

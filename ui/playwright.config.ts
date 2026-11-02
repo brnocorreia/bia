@@ -16,6 +16,18 @@ export default defineConfig({
   use: { baseURL: uiUrl, trace: "retain-on-failure" },
   projects: [
     { name: "setup", testMatch: /\.setup\.ts$/, use: { browserName: "chromium" } },
-    { name: "chromium", dependencies: ["setup"], use: { browserName: "chromium" } },
+    {
+      name: "chromium",
+      dependencies: ["setup"],
+      testIgnore: /account\//,
+      use: { browserName: "chromium" },
+    },
+    // Changing the password signs other Sessions out, so it runs once the rest are done.
+    {
+      name: "account",
+      dependencies: ["chromium"],
+      testMatch: /account\/.*\.spec\.ts$/,
+      use: { browserName: "chromium" },
+    },
   ],
 });

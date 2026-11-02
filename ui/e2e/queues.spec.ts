@@ -1,12 +1,5 @@
 import pg from "pg";
-import {
-  apiClient,
-  expect,
-  startSessionWith,
-  test,
-  uniqueName,
-  type SeedApi,
-} from "./support/fixtures";
+import { actAsAgent, apiClient, expect, test, uniqueName, type SeedApi } from "./support/fixtures";
 import { e2eEnv } from "./support/env";
 
 interface Seeded {
@@ -157,8 +150,8 @@ test("purging removes the selected dead letters after confirmation", async ({
   expect((await messagesOf(api, audit)).map((m) => m.body)).toEqual(["alive"]);
 });
 
-test("a non-admin Token sees dead letters but cannot replay or purge them", async ({
-  page,
+test("a non-admin Scope sees dead letters but cannot replay or purge them", async ({
+  signedInPage: page,
   api,
 }) => {
   const { source, dlq } = await queuePair(api);
@@ -167,7 +160,7 @@ test("a non-admin Token sees dead letters but cannot replay or purge them", asyn
     body: { name: uniqueName("viewer"), scope: "agent" },
   });
   const agent = made.data!.value;
-  await startSessionWith(page, agent);
+  await actAsAgent(page);
 
   await page.goto(`/queues/${dlq}`);
   await expect(page.getByRole("row").filter({ hasText: "boom" })).toBeVisible();

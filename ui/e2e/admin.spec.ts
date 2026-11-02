@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, startSessionWith, test, uniqueName } from "./support/fixtures";
+import { expect, actAsAgent, test, uniqueName } from "./support/fixtures";
 import { e2eEnv } from "./support/env";
 
 // Collects every response body the page receives, so a test can prove a value never came back.
@@ -137,11 +137,10 @@ test("a revoked Token fails authentication", async ({ signedInPage: page, api })
   expect((await authenticate()).status).toBe(401);
 });
 
-test("a non-admin Token cannot use the Secrets and Tokens screens", async ({ page, api }) => {
-  const made = await api.POST("/v1/tokens", {
-    body: { name: uniqueName("viewer"), scope: "agent" },
-  });
-  await startSessionWith(page, made.data!.value);
+test("a non-admin Scope cannot use the Secrets and Tokens screens", async ({
+  signedInPage: page,
+}) => {
+  await actAsAgent(page);
 
   for (const path of ["/secrets", "/tokens"]) {
     await page.goto(path);

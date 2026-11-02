@@ -1,6 +1,6 @@
 # bia UI
 
-A static React SPA (Vite, TypeScript, TanStack Router and Query, Tailwind, shadcn/ui) that talks to the bia HTTP API. See ADR-0013, ADR-0050 and ADR-0051; `docs/deploy-ui.md` covers embedding and static deployment.
+A static React SPA (Vite, TypeScript, TanStack Router and Query, Tailwind, shadcn/ui) that talks to the bia HTTP API. See ADR-0013, ADR-0064 and ADR-0051; `docs/deploy-ui.md` covers embedding and static deployment.
 
 Needs Node.js 22+ and pnpm (the version is pinned by `packageManager`; `corepack enable` installs it).
 
@@ -14,14 +14,14 @@ pnpm dev          # http://localhost:5173
 
 The API URL comes from `config.json` at the site root, read at startup, so one build works everywhere. In development it is `public/config.json` (default `http://127.0.0.1:8080`); on a deployment, put your own `config.json` next to `index.html`. The site must be served from the root of its origin. An empty `apiUrl` means "the page's own origin". The API must allow the UI's origin in `BIA_CORS_ORIGINS`.
 
-Run an API for development with `just db-up`, `bia migrate`, then `bia serve` (set `BIA_CORS_ORIGINS=http://localhost:5173` and `BIA_UI_URL=http://localhost:5173`), and open the Setup Link it logs to set the password and get an admin Token.
+Run an API for development with `just db-up`, `bia migrate`, then `bia serve` (set `BIA_CORS_ORIGINS=http://localhost:5173` and `BIA_UI_URL=http://localhost:5173`), and open the Setup Link it logs to set the password, which signs you in. The API sets the Session cookie, so the UI and the API must be same-site: `localhost:5173` and `127.0.0.1:8080` are not (use `localhost:8080`).
 
 ## Layout
 
 - `src/routes/`: one file per screen. A screen is `_app.<name>.tsx`; setting `staticData: { nav: { label, order } }` adds it to the navigation, so a new screen edits no shared file. `login.tsx` is the only route outside the signed-in shell.
-- `src/api/client.ts`: the one API client, typed by `schema.gen.ts`. It sends the session Token and signs the user out on 401. Use `getApi()`, with TanStack Query.
-- `src/auth/`: the Token session (`sessionStorage`) and the login check.
-- `src/auth/scope.ts`: `useCurrentToken()` and `useIsAdmin()` read the signed-in Token's Scope from `GET /v1/tokens/me` (ADR-0053). `components/admin-only.tsx` has `AdminOnly` (render or fall back) and `RequireAdmin` (a whole admin-only screen). Disable, rather than hide, controls a Scope cannot use; the server still enforces it.
+- `src/api/client.ts`: the one API client, typed by `schema.gen.ts`. It sends the Session cookie (`credentials: "include"`) and signs the user out on a 401 that says the Token is missing or invalid. Use `getApi()`, with TanStack Query.
+- `src/auth/`: `session.ts` remembers whether the API accepts the Session cookie (nothing is stored; the cookie is `HttpOnly`), and `login.ts` signs in, confirms the Session and signs out.
+- `src/auth/scope.ts`: `useCurrentToken()` and `useIsAdmin()` read the signed-in Token's Scope from `GET /v1/tokens/me` (ADR-0053, ADR-0064). `components/admin-only.tsx` has `AdminOnly` (render or fall back) and `RequireAdmin` (a whole admin-only screen). Disable, rather than hide, controls a Scope cannot use; the server still enforces it.
 - `src/api/request.ts`: `unwrap(result)` turns an `openapi-fetch` result into data or an `ApiError` (with the error body and its Diagnostics), and `messageOf(error)` words it for users. `src/api/workflows.ts` holds the Workflow and Version queries and mutations.
 - Shared components in `src/components/`: `ConfirmDialog` (modal confirmation with an inline error), `DiagnosticsList`, `DefinitionViewer` (read-only YAML/JSON toggle), `VersionDiff`.
 - `src/components/ui/`: shadcn/ui components, added by hand to `components.json`'s conventions.
@@ -41,7 +41,7 @@ pnpm check:api     # regenerates the API types and fails if they differ from the
 
 ## End-to-end tests
 
-Playwright drives a real `bia serve`. The global setup (`e2e/support/global-setup.ts`) drops and recreates a database, migrates it, starts `bia serve`, reads the Setup Link from its logs, and serves `dist/` with a `config.json` pointing at that server. The `setup` project (`e2e/first-run.setup.ts`) then sets up the admin through the `/setup` page and leaves its Token in `e2e/.auth/` for the other tests, which depend on it. `pnpm test:e2e` builds first. One-time: `pnpm exec playwright install chromium`.
+Playwright drives a real `bia serve`. The global setup (`e2e/support/global-setup.ts`) drops and recreates a database, migrates it, starts `bia serve`, reads the Setup Link from its logs, and serves `dist/` with a `config.json` pointing at that server. The `setup` project (`e2e/first-run.setup.ts`) then sets up the admin through the `/setup` page, which signs it in, mints a manual admin Token through that Session and leaves it in `e2e/.auth/` for seeding. The other tests depend on it, and the `account` project (`e2e/account/`) runs last, since changing the password signs other Sessions out. `pnpm test:e2e` builds first. One-time: `pnpm exec playwright install chromium`.
 
 | Variable               | Default                                     | Meaning                                                                                               |
 | ---------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
@@ -56,9 +56,9 @@ Use your own port and database when several checkouts run at once, for example `
 
 Specs import `test` and `expect` from `e2e/support/fixtures.ts`:
 
-- `signedInPage`: a page already signed in as the admin Token.
-- `api`: a typed client authenticated as the admin Token, for seeding data through the API.
-- `adminToken`, `signIn(page, token)` (through the form), `startSessionWith(page, token)`, `uniqueName(prefix)`.
+- `signedInPage`: a page already signed in as the admin, through a Session cookie from `POST /v1/session`.
+- `api`: a typed client authenticated with a manual admin Token, for seeding data through the API.
+- `adminToken`, `signIn(page, password?)` (through the form), `sessionCookies()`, `actAsAgent(page)` (stubs `GET /v1/tokens/me` to test non-admin screens, since a Session is always admin), `uniqueName(prefix)`.
 
 Tests share one database, so give seeded data a `uniqueName` and do not assume the list screens are empty.
 
