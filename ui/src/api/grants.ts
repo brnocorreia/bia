@@ -5,6 +5,7 @@ import { tokenKeys } from "./tokens";
 
 export type GrantInfo = components["schemas"]["GrantInfo"];
 export type ConsentRequest = components["schemas"]["ConsentRequest"];
+export type DeviceConsentRequest = components["schemas"]["DeviceConsentRequest"];
 export type ScopeName = components["schemas"]["GrantScopeName"];
 
 export const grantKeys = { all: ["grants"] as const };
@@ -61,4 +62,22 @@ export async function denyConsent(requestId: string): Promise<string> {
     }),
   );
   return decision.redirect_to;
+}
+
+/** Finds the pending device sign-in a user code names. The server throttles wrong guesses. */
+export async function lookupDevice(userCode: string): Promise<DeviceConsentRequest> {
+  return unwrap(await getApi().POST("/oauth/device/lookup", { body: { user_code: userCode } }));
+}
+
+export async function approveDevice(id: string, scope: ScopeName): Promise<void> {
+  unwrap(
+    await getApi().POST("/oauth/device/{id}/approve", {
+      params: { path: { id } },
+      body: { scope },
+    }),
+  );
+}
+
+export async function denyDevice(id: string): Promise<void> {
+  unwrap(await getApi().POST("/oauth/device/{id}/deny", { params: { path: { id } } }));
 }
