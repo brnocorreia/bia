@@ -25,7 +25,7 @@ export function apiClient(token: string): SeedApi {
 export async function signIn(page: Page, password = ADMIN_PASSWORD) {
   await page.goto("/login");
   await page.getByLabel("Password").fill(password);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
 }
 
 /** The Session cookie of a fresh sign-in through the API, to put in a browser context. */
