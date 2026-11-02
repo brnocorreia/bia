@@ -119,6 +119,10 @@ pub struct Token {
     pub created_at: DateTime<Utc>,
     pub last_used_at: Option<DateTime<Utc>>,
     pub revoked_at: Option<DateTime<Utc>>,
+    /// The browser a Session was started from.
+    pub user_agent: Option<String>,
+    /// The OAuth Grant an [`Origin::Oauth`] Token belongs to.
+    pub grant_id: Option<Uuid>,
 }
 
 /// A Token just created, with the value the API shows only this once.
@@ -652,6 +656,18 @@ impl Client {
     /// Revokes the Session this client sends.
     pub async fn sign_out(&self) -> Result<Token, Error> {
         self.send(Method::DELETE, "/v1/session", None::<&()>).await
+    }
+
+    /// Revokes every Session but the one this client sends, returning how many it revoked.
+    pub async fn sign_out_others(&self) -> Result<u64, Error> {
+        #[derive(Deserialize)]
+        struct Response {
+            revoked_sessions: u64,
+        }
+        let response: Response = self
+            .send(Method::DELETE, "/v1/session/others", None::<&()>)
+            .await?;
+        Ok(response.revoked_sessions)
     }
 
     /// Replaces the password and revokes every other Session.

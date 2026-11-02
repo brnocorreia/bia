@@ -92,6 +92,10 @@ pub struct Token {
     /// write on every request.
     pub last_used_at: Option<DateTime<Utc>>,
     pub revoked_at: Option<DateTime<Utc>>,
+    /// The browser a Session was started from, as it described itself.
+    pub user_agent: Option<String>,
+    /// The OAuth Grant an `oauth` Token belongs to.
+    pub grant_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone)]
@@ -103,6 +107,8 @@ pub struct NewToken {
     /// Who the Token acts for.
     pub user_id: UserId,
     pub created_at: DateTime<Utc>,
+    pub user_agent: Option<String>,
+    pub grant_id: Option<Uuid>,
 }
 
 /// A Session unused for this long stops authenticating.

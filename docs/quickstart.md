@@ -21,7 +21,7 @@ bia serve --role all
 
 ## 2. Create the Tokens
 
-Open the Setup Link in a browser and choose a password of at least 12 characters; setup signs you in. (Without a browser, `bia setup` asks for the link or its code and the password, but returns no credential.) In the Tokens screen create an `admin` Token and an `agent` Token, and copy each value, which is shown once. In the second terminal, `BIA_URL` defaults to `http://127.0.0.1:8080`:
+Open the Setup Link in a browser and choose a password of at least 12 characters; setup signs you in. (Without a browser, `bia setup` asks for the link or its code and the password, but returns no credential.) In the Access screen create an `admin` Token and an `agent` Token, and copy each value, which is shown once. In the second terminal, `BIA_URL` defaults to `http://127.0.0.1:8080`:
 
 ```sh
 export BIA_TOKEN=<admin token>

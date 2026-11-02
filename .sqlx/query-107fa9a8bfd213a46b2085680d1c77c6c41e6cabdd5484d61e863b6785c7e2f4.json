@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "-- $1: hash\nSELECT id, name, scope, origin, workflow_id, trigger_id, user_id, created_at, last_used_at, revoked_at\nFROM tokens\nWHERE hash = $1 AND revoked_at IS NULL\n",
+  "query": "-- $1: hash\nSELECT id, name, scope, origin, workflow_id, trigger_id, user_id, created_at, last_used_at, revoked_at, user_agent, grant_id\nFROM tokens\nWHERE hash = $1 AND revoked_at IS NULL\n",
   "describe": {
     "columns": [
       {
@@ -112,6 +112,28 @@
             "name": "revoked_at"
           }
         }
+      },
+      {
+        "ordinal": 10,
+        "name": "user_agent",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tokens",
+            "name": "user_agent"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "grant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "tokens",
+            "name": "grant_id"
+          }
+        }
       }
     ],
     "parameters": {
@@ -129,8 +151,10 @@
       false,
       false,
       true,
+      true,
+      true,
       true
     ]
   },
-  "hash": "4c8ac8a89bc648430b878c929b70c118a36d6daa3d6cadaba4841911073ba862"
+  "hash": "107fa9a8bfd213a46b2085680d1c77c6c41e6cabdd5484d61e863b6785c7e2f4"
 }

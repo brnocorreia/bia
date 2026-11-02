@@ -35,3 +35,12 @@ export function useRevokeToken() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: tokenKeys.all }),
   });
 }
+
+/** Signs out every Session but this one; the answer is how many it revoked. */
+export function useSignOutOthers() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => unwrap(await getApi().DELETE("/v1/session/others")).revoked_sessions,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: tokenKeys.all }),
+  });
+}

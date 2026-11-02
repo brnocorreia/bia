@@ -396,6 +396,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/session/others": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revokes every Session of the caller's User but the one the request is made with, if it is
+         *     one. Needs an `admin` Token.
+         */
+        delete: operations["sign_out_others"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/setup": {
         parameters: {
             query?: never;
@@ -425,7 +445,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Every Token, revoked ones included, without their values. Needs an `admin` Token. */
+        /**
+         * Every credential, revoked ones included, without their values: Sessions, `oauth` Tokens and
+         *     manual Tokens, told apart by `origin`. Needs an `admin` Token.
+         */
         get: operations["list_tokens"];
         put?: never;
         /** Creates a Token and returns its value, once. Needs an `admin` Token. */
@@ -982,6 +1005,14 @@ export interface components {
          * @enum {string}
          */
         OriginName: "session" | "oauth" | "manual";
+        /** @description What signing out the other Sessions did. */
+        OtherSessionsRevoked: {
+            /**
+             * Format: int64
+             * @description How many Sessions it revoked. OAuth Grants and manual Tokens are not affected.
+             */
+            revoked_sessions: number;
+        };
         PasswordChanged: {
             /**
              * Format: int64
@@ -1241,6 +1272,11 @@ export interface components {
         TokenInfo: {
             /** Format: date-time */
             created_at: string;
+            /**
+             * Format: uuid
+             * @description The OAuth Grant an `oauth` Token belongs to; only for `oauth` Tokens.
+             */
+            grant_id?: string | null;
             /** Format: uuid */
             id: string;
             /**
@@ -1256,10 +1292,12 @@ export interface components {
              */
             revoked_at?: string | null;
             scope: components["schemas"]["ScopeName"];
+            /** @description The browser a Session was started from, as it described itself; only for Sessions. */
+            user_agent?: string | null;
             webhook?: components["schemas"]["WebhookBinding"] | null;
         };
         TokenList: {
-            /** @description Every Token, revoked ones included, oldest first. */
+            /** @description Every credential, revoked ones included, oldest first. */
             tokens: components["schemas"]["TokenInfo"][];
         };
         TriggerRequest: {
@@ -2678,6 +2716,49 @@ export interface operations {
             };
             /** @description `not_a_session`: the request is made with a Token that is not a Session. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    sign_out_others: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OtherSessionsRevoked"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

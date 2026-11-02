@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "-- $1: name, $2: hash, $3: scope, $4: workflow id, $5: trigger id, $6: user id, $7: now, $8: origin\nINSERT INTO tokens (name, hash, scope, workflow_id, trigger_id, user_id, created_at, origin)\nVALUES ($1, $2, $3, $4, $5, $6, $7, $8)\nRETURNING id, name, scope, origin, workflow_id, trigger_id, user_id, created_at, last_used_at, revoked_at\n",
+  "query": "SELECT id, name, scope, origin, workflow_id, trigger_id, user_id, created_at, last_used_at, revoked_at, user_agent, grant_id\nFROM tokens\nORDER BY created_at, id\n",
   "describe": {
     "columns": [
       {
@@ -112,19 +112,32 @@
             "name": "revoked_at"
           }
         }
+      },
+      {
+        "ordinal": 10,
+        "name": "user_agent",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tokens",
+            "name": "user_agent"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "grant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "tokens",
+            "name": "grant_id"
+          }
+        }
       }
     ],
     "parameters": {
-      "Left": [
-        "Text",
-        "Bytea",
-        "Text",
-        "Text",
-        "Text",
-        "Uuid",
-        "Timestamptz",
-        "Text"
-      ]
+      "Left": []
     },
     "nullable": [
       false,
@@ -136,8 +149,10 @@
       false,
       false,
       true,
+      true,
+      true,
       true
     ]
   },
-  "hash": "d8d34f4fdfe155fd580a3d6df384ddb9277a552604e5a18997c6b8f7838d3d5a"
+  "hash": "9cd903a76fec752a006dcba555eeeb5ede5ddb01d45adb9951375bba5030c517"
 }

@@ -1691,6 +1691,54 @@
         ]
       }
     },
+    "/v1/session/others": {
+      "delete": {
+        "tags": [
+          "session"
+        ],
+        "summary": "Revokes every Session of the caller's User but the one the request is made with, if it is\none. Needs an `admin` Token.",
+        "operationId": "sign_out_others",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OtherSessionsRevoked"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route (`insufficient_scope`), or a request made\nwith the Session cookie carries no acceptable `Origin` (`origin_mismatch`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": []
+          }
+        ]
+      }
+    },
     "/v1/setup": {
       "post": {
         "tags": [
@@ -1774,7 +1822,7 @@
         "tags": [
           "tokens"
         ],
-        "summary": "Every Token, revoked ones included, without their values. Needs an `admin` Token.",
+        "summary": "Every credential, revoked ones included, without their values: Sessions, `oauth` Tokens and\nmanual Tokens, told apart by `origin`. Needs an `admin` Token.",
         "operationId": "list_tokens",
         "responses": {
           "200": {
@@ -3759,6 +3807,21 @@
           "manual"
         ]
       },
+      "OtherSessionsRevoked": {
+        "type": "object",
+        "description": "What signing out the other Sessions did.",
+        "required": [
+          "revoked_sessions"
+        ],
+        "properties": {
+          "revoked_sessions": {
+            "type": "integer",
+            "format": "int64",
+            "description": "How many Sessions it revoked. OAuth Grants and manual Tokens are not affected.",
+            "minimum": 0
+          }
+        }
+      },
       "PasswordChanged": {
         "type": "object",
         "required": [
@@ -4315,6 +4378,14 @@
             "type": "string",
             "format": "date-time"
           },
+          "grant_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The OAuth Grant an `oauth` Token belongs to; only for `oauth` Tokens."
+          },
           "id": {
             "type": "string",
             "format": "uuid"
@@ -4344,6 +4415,13 @@
           "scope": {
             "$ref": "#/components/schemas/ScopeName"
           },
+          "user_agent": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The browser a Session was started from, as it described itself; only for Sessions."
+          },
           "webhook": {
             "oneOf": [
               {
@@ -4368,7 +4446,7 @@
             "items": {
               "$ref": "#/components/schemas/TokenInfo"
             },
-            "description": "Every Token, revoked ones included, oldest first."
+            "description": "Every credential, revoked ones included, oldest first."
           }
         }
       },

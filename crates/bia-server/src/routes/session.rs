@@ -2,13 +2,13 @@
 
 use axum::extract::State;
 use axum::extract::rejection::JsonRejection;
-use axum::http::{HeaderValue, StatusCode, header};
+use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use bia_store::token::{Origin, PgTokenRepository, TokenRepository};
 use bia_store::user::{PgUserRepository, UserRepository};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::auth::{Agent, AuthErrors, ClientAddress, password, session};
+use crate::auth::{Admin, Agent, AuthErrors, ClientAddress, password, session};
 use crate::routes::token::TokenInfo;
 use crate::routes::user::UserInfo;
 use crate::{ApiError, ApiState, ErrorBody, ErrorCode, Json};
@@ -46,6 +46,7 @@ pub(crate) struct SignedIn {
 pub(crate) async fn sign_in(
     State(state): State<ApiState>,
     ClientAddress(address): ClientAddress,
+    headers: HeaderMap,
     request: Result<axum::Json<SignInRequest>, JsonRejection>,
 ) -> Result<
     (
@@ -78,7 +79,13 @@ pub(crate) async fn sign_in(
         return Err(password::invalid_credentials());
     }
     state.sign_ins.succeeded(subject);
-    let (token, value) = session::start(&state, &mut conn, credentials.user.id).await?;
+    let (token, value) = session::start(
+        &state,
+        &mut conn,
+        credentials.user.id,
+        session::user_agent(&headers),
+    )
+    .await?;
     tracing::info!(user_id = %token.user_id, session_id = %token.id, "signed in");
     Ok((
         StatusCode::CREATED,
@@ -135,4 +142,38 @@ pub(crate) async fn sign_out(
         )],
         Json(revoked.into()),
     ))
+}
+
+/// What signing out the other Sessions did.
+#[derive(Debug, Serialize, ToSchema)]
+pub(crate) struct OtherSessionsRevoked {
+    /// How many Sessions it revoked. OAuth Grants and manual Tokens are not affected.
+    revoked_sessions: u64,
+}
+
+/// Revokes every Session of the caller's User but the one the request is made with, if it is
+/// one. Needs an `admin` Token.
+#[utoipa::path(
+    delete,
+    path = "/v1/session/others",
+    tag = "session",
+    security(("session" = []), ("token" = [])),
+    responses((status = OK, body = OtherSessionsRevoked), AuthErrors)
+)]
+pub(crate) async fn sign_out_others(
+    Admin(caller): Admin,
+    State(state): State<ApiState>,
+) -> Result<Json<OtherSessionsRevoked>, ApiError> {
+    let mut conn = state
+        .pool
+        .acquire()
+        .await
+        .map_err(|e| ApiError::internal(&e))?;
+    let keep = (caller.origin == Origin::Session).then_some(caller.id);
+    let revoked_sessions = PgTokenRepository
+        .revoke_sessions_except(&mut conn, caller.user_id, keep, state.clock.now())
+        .await
+        .map_err(|e| ApiError::internal(&e))?;
+    tracing::info!(user_id = %caller.user_id, revoked_sessions, "other sessions signed out");
+    Ok(Json(OtherSessionsRevoked { revoked_sessions }))
 }
