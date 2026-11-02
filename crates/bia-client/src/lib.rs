@@ -517,6 +517,80 @@ struct VersionList {
     versions: Vec<VersionSummary>,
 }
 
+/// What approving an Approval Request does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ApprovalAction {
+    Publish,
+    PublishAndActivate,
+    Activate,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ApprovalStatus {
+    Pending,
+    Approved,
+    Rejected,
+    Stale,
+    Withdrawn,
+}
+
+impl ApprovalStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Approved => "approved",
+            Self::Rejected => "rejected",
+            Self::Stale => "stale",
+            Self::Withdrawn => "withdrawn",
+        }
+    }
+}
+
+impl ApprovalAction {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Publish => "publish",
+            Self::PublishAndActivate => "publish_and_activate",
+            Self::Activate => "activate",
+        }
+    }
+}
+
+/// `POST /v1/approval-requests`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct NewApprovalRequest {
+    pub workflow_id: String,
+    pub number: i32,
+    pub action: ApprovalAction,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ApprovalRequest {
+    pub id: Uuid,
+    pub workflow_id: String,
+    pub number: i32,
+    pub action: ApprovalAction,
+    pub note: Option<String>,
+    pub status: ApprovalStatus,
+    pub requester_name: String,
+    pub requested_by: Uuid,
+    pub requester_token_id: Uuid,
+    pub content_hash: Option<String>,
+    pub decided_by: Option<Uuid>,
+    pub comment: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub closed_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct ApprovalRequestList {
+    approval_requests: Vec<ApprovalRequest>,
+}
+
 #[derive(Clone)]
 pub struct Client {
     http: reqwest::Client,
@@ -874,6 +948,89 @@ impl Client {
             Method::POST,
             &format!("/v1/workflows/{workflow}/versions/{number}/activate"),
             None::<&()>,
+        )
+        .await
+    }
+
+    /// Asks for a Version to be published and/or activated. Needs an `agent` or `admin` Token.
+    pub async fn request_approval(
+        &self,
+        request: &NewApprovalRequest,
+    ) -> Result<ApprovalRequest, Error> {
+        self.send(Method::POST, "/v1/approval-requests", Some(request))
+            .await
+    }
+
+    /// Newest first.
+    pub async fn list_approval_requests(
+        &self,
+        status: Option<ApprovalStatus>,
+        workflow: Option<&str>,
+    ) -> Result<Vec<ApprovalRequest>, Error> {
+        let mut pairs = Vec::new();
+        if let Some(status) = status {
+            pairs.push(("status", status.as_str().to_owned()));
+        }
+        if let Some(workflow) = workflow {
+            pairs.push(("workflow_id", workflow.to_owned()));
+        }
+        let path = Self::encode("/v1/approval-requests", pairs)?;
+        let list: ApprovalRequestList = self.send(Method::GET, &path, None::<&()>).await?;
+        Ok(list.approval_requests)
+    }
+
+    pub async fn get_approval_request(&self, id: Uuid) -> Result<ApprovalRequest, Error> {
+        self.send(
+            Method::GET,
+            &format!("/v1/approval-requests/{id}"),
+            None::<&()>,
+        )
+        .await
+    }
+
+    pub async fn withdraw_approval_request(&self, id: Uuid) -> Result<ApprovalRequest, Error> {
+        self.send(
+            Method::POST,
+            &format!("/v1/approval-requests/{id}/withdraw"),
+            None::<&()>,
+        )
+        .await
+    }
+
+    /// Approves the request, which publishes and/or activates as this Token's User. Needs an
+    /// `admin` Token.
+    pub async fn approve_approval_request(
+        &self,
+        id: Uuid,
+        comment: Option<&str>,
+    ) -> Result<ApprovalRequest, Error> {
+        self.decide(id, "approve", comment).await
+    }
+
+    /// Rejects the request. Needs an `admin` Token.
+    pub async fn reject_approval_request(
+        &self,
+        id: Uuid,
+        comment: Option<&str>,
+    ) -> Result<ApprovalRequest, Error> {
+        self.decide(id, "reject", comment).await
+    }
+
+    async fn decide(
+        &self,
+        id: Uuid,
+        decision: &str,
+        comment: Option<&str>,
+    ) -> Result<ApprovalRequest, Error> {
+        #[derive(Serialize)]
+        struct Request<'a> {
+            #[serde(skip_serializing_if = "Option::is_none")]
+            comment: Option<&'a str>,
+        }
+        self.send(
+            Method::POST,
+            &format!("/v1/approval-requests/{id}/{decision}"),
+            Some(&Request { comment }),
         )
         .await
     }

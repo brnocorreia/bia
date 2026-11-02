@@ -69,7 +69,7 @@ Cancellation sets a flag on the Run that Postgres announces to Workers, which al
 
 - `GET /v1/schema`: DSL JSON Schema plus the Action catalogue (name, description, param schema, output schema, examples).
 - `GET /openapi.json`: the OpenAPI document of every endpoint, also committed as `crates/bia-server/openapi.json` (`just openapi` rewrites it, and a test fails when it drifts). Every failure has one error body: a stable `code`, a `message`, and the Diagnostics when a Definition was at fault. Routes, codes and the error body follow ADR-0042.
-- MCP tools mirror the API, each calling one endpoint with the caller's own Token (ADR-0048): `get_schema`, `list_actions`, `list_workflows`, `get_workflow`, `list_versions`, `get_version`, `validate_workflow`, `create_draft`, `replace_draft`, `dry_run`, `diff_versions`, `trigger_run`, `get_run`, `list_runs`, `list_failures`, `retry_run`, `resume_run`, `cancel_run`, `list_secrets`, `list_queues`. `send_event` joins when its endpoint exists. Publishing and activation are admin-only (ADR-0008) and have no tool.
+- MCP tools mirror the API, each calling one endpoint with the caller's own Token (ADR-0048): `get_schema`, `list_actions`, `list_workflows`, `get_workflow`, `list_versions`, `get_version`, `validate_workflow`, `create_draft`, `replace_draft`, `dry_run`, `diff_versions`, `trigger_run`, `get_run`, `list_runs`, `list_failures`, `retry_run`, `resume_run`, `cancel_run`, `list_secrets`, `list_queues`, `request_approval`, `get_approval_request`, `withdraw_approval_request`. `send_event` joins when its endpoint exists. Publishing and activation are admin-only (ADR-0008) and have no tool: an agent asks with an Approval Request, which an admin decides (ADR-0066).
 
 ## UI
 

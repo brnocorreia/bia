@@ -892,3 +892,64 @@ async fn queue_commands_set_list_show_and_delete_queues(pool: PgPool) {
         missing.stderr()
     );
 }
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn approval_commands_list_show_approve_and_reject_requests(pool: PgPool) {
+    let h = start(pool).await;
+    h.write("greet.json", &greet_json());
+    h.bia_with(&h.agent, &["workflow", "apply", "-f", "greet.json"])
+        .await;
+    let agent = Client::new(&h.url).unwrap().with_token(&h.agent);
+    let request = |number| bia_client::NewApprovalRequest {
+        workflow_id: "greet".into(),
+        number,
+        action: bia_client::ApprovalAction::PublishAndActivate,
+        note: None,
+    };
+    let first = agent.request_approval(&request(1)).await.unwrap();
+
+    let listed = h
+        .bia(&["--json", "approval", "list", "--status", "pending"])
+        .await;
+    assert_eq!(listed.code(), 0, "{}", listed.stderr());
+    assert_eq!(listed.json()["approval_requests"][0]["id"], json!(first.id));
+    let shown = h.bia(&["approval", "show", &first.id.to_string()]).await;
+    assert!(shown.stdout().contains("pending"), "{}", shown.stdout());
+
+    let approved = h
+        .bia(&[
+            "approval",
+            "approve",
+            &first.id.to_string(),
+            "--comment",
+            "ok",
+        ])
+        .await;
+    assert_eq!(approved.code(), 0, "{}", approved.stderr());
+    assert_eq!(
+        h.client.get_workflow("greet").await.unwrap().active_version,
+        Some(1)
+    );
+
+    h.write("greet.json", &greet_json().replace("1 + 1", "2 + 2"));
+    h.bia_with(&h.agent, &["workflow", "apply", "-f", "greet.json"])
+        .await;
+    let second = agent.request_approval(&request(2)).await.unwrap();
+    let rejected = h
+        .bia(&[
+            "--json",
+            "approval",
+            "reject",
+            &second.id.to_string(),
+            "--comment",
+            "no",
+        ])
+        .await;
+    assert_eq!(rejected.json()["status"], "rejected");
+    assert_eq!(rejected.json()["comment"], "no");
+
+    let by_agent = h
+        .bia_with(&h.agent, &["approval", "approve", &second.id.to_string()])
+        .await;
+    assert_eq!(by_agent.code(), 1);
+}

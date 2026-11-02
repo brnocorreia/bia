@@ -5,3 +5,4 @@
 ## Amendments
 
 - `list_queues` is registered now that `GET /v1/queues` exists (ADR-0059).
+- `request_approval`, `get_approval_request` and `withdraw_approval_request` are registered, and still no tool publishes, activates, approves or rejects (ADR-0066).

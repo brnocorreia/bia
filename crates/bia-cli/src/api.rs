@@ -9,8 +9,8 @@ use std::path::PathBuf;
 
 use anyhow::{Context, bail};
 use bia_client::{
-    Client, DryRunReport, Error, MessageQuery, Queue, QueueSettings, Run, RunQuery, RunStatus,
-    RunSummary, Target, Version, VersionState,
+    ApprovalRequest, ApprovalStatus, Client, DryRunReport, Error, MessageQuery, Queue,
+    QueueSettings, Run, RunQuery, RunStatus, RunSummary, Target, Version, VersionState,
 };
 use bia_core::dsl::{
     DEFAULT_BATCH_SIZE, DEFAULT_MAX_RETRIES, Duration, QueueResource, default_visibility_timeout,
@@ -218,6 +218,57 @@ pub(crate) enum QueueCommand {
 }
 
 #[derive(Debug, Subcommand)]
+pub(crate) enum ApprovalCommand {
+    /// Lists Approval Requests, newest first.
+    List {
+        /// Only requests with this status.
+        #[arg(long, value_enum)]
+        status: Option<StatusArg>,
+        /// Only requests for this Workflow.
+        #[arg(long)]
+        workflow: Option<String>,
+    },
+    /// Shows one request.
+    Show { id: Uuid },
+    /// Approves a pending request, which publishes and/or activates its Version. Needs an
+    /// `admin` Token.
+    Approve {
+        id: Uuid,
+        /// Why, for the requester.
+        #[arg(long)]
+        comment: Option<String>,
+    },
+    /// Rejects a pending request. Needs an `admin` Token.
+    Reject {
+        id: Uuid,
+        /// Why, for the requester.
+        #[arg(long)]
+        comment: Option<String>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub(crate) enum StatusArg {
+    Pending,
+    Approved,
+    Rejected,
+    Stale,
+    Withdrawn,
+}
+
+impl From<StatusArg> for ApprovalStatus {
+    fn from(status: StatusArg) -> Self {
+        match status {
+            StatusArg::Pending => Self::Pending,
+            StatusArg::Approved => Self::Approved,
+            StatusArg::Rejected => Self::Rejected,
+            StatusArg::Stale => Self::Stale,
+            StatusArg::Withdrawn => Self::Withdrawn,
+        }
+    }
+}
+
+#[derive(Debug, Subcommand)]
 pub(crate) enum SecretCommand {
     /// Creates a Secret or replaces its value. The value is read from standard input, or from
     /// `--file`, never from an argument that `ps` would show; one trailing newline is dropped.
@@ -251,6 +302,89 @@ pub(crate) async fn run(ctx: &Ctx, command: RunCommand) -> bool {
 
 pub(crate) async fn secret(ctx: &Ctx, command: SecretCommand) -> bool {
     finish(ctx, secret_command(ctx, command).await)
+}
+
+pub(crate) async fn approval(ctx: &Ctx, command: ApprovalCommand) -> bool {
+    finish(ctx, approval_command(ctx, command).await)
+}
+
+async fn approval_command(ctx: &Ctx, command: ApprovalCommand) -> anyhow::Result<bool> {
+    let client = &ctx.client;
+    match command {
+        ApprovalCommand::List { status, workflow } => {
+            let requests = client
+                .list_approval_requests(status.map(Into::into), workflow.as_deref())
+                .await?;
+            emit(ctx, &json!({ "approval_requests": requests }), || {
+                let rows: Vec<_> = requests
+                    .iter()
+                    .map(|request| {
+                        vec![
+                            request.id.to_string(),
+                            request.status.as_str().to_owned(),
+                            request.workflow_id.clone(),
+                            request.number.to_string(),
+                            request.action.as_str().to_owned(),
+                            request.requester_name.clone(),
+                            render::time(request.created_at),
+                        ]
+                    })
+                    .collect();
+                render::table(
+                    &[
+                        "ID",
+                        "STATUS",
+                        "WORKFLOW",
+                        "VERSION",
+                        "ACTION",
+                        "REQUESTER",
+                        "CREATED",
+                    ],
+                    &rows,
+                )
+            })?;
+        }
+        ApprovalCommand::Show { id } => {
+            let request = client.get_approval_request(id).await?;
+            emit(ctx, &request, || describe_approval(&request))?;
+        }
+        ApprovalCommand::Approve { id, comment } => {
+            let request = client
+                .approve_approval_request(id, comment.as_deref())
+                .await?;
+            emit(ctx, &request, || {
+                format!(
+                    "approved {}: {} version {} ({})\n",
+                    request.id,
+                    request.workflow_id,
+                    request.number,
+                    request.action.as_str()
+                )
+            })?;
+        }
+        ApprovalCommand::Reject { id, comment } => {
+            let request = client
+                .reject_approval_request(id, comment.as_deref())
+                .await?;
+            emit(ctx, &request, || format!("rejected {}\n", request.id))?;
+        }
+    }
+    Ok(true)
+}
+
+fn describe_approval(request: &ApprovalRequest) -> String {
+    format!(
+        "request    {}\nstatus     {}\nworkflow   {}\nversion    {}\naction     {}\nrequester  {}\nnote       {}\ncreated    {}\ncomment    {}\n",
+        request.id,
+        request.status.as_str(),
+        request.workflow_id,
+        request.number,
+        request.action.as_str(),
+        request.requester_name,
+        request.note.as_deref().unwrap_or("-"),
+        render::time(request.created_at),
+        request.comment.as_deref().unwrap_or("-"),
+    )
 }
 
 pub(crate) async fn queue(ctx: &Ctx, command: QueueCommand) -> bool {
