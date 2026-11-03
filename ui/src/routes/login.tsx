@@ -1,23 +1,22 @@
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
-import { verifyToken } from "@/auth/login";
+import { signIn } from "@/auth/login";
 import { session } from "@/auth/session";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getConfig } from "@/config";
 
 export const Route = createFileRoute("/login")({
   beforeLoad: () => {
-    if (session.getToken()) throw redirect({ to: "/" });
+    if (session.getState() === "signed-in") throw redirect({ to: "/" });
   },
   component: Login,
 });
 
 function Login() {
   const navigate = useNavigate();
-  const [token, setToken] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -25,14 +24,12 @@ function Login() {
     event.preventDefault();
     setBusy(true);
     setError(null);
-    const value = token.trim();
-    const result = await verifyToken(getConfig().apiUrl, value);
+    const result = await signIn(password);
     setBusy(false);
     if (!result.ok) {
       setError(result.message);
       return;
     }
-    session.setToken(value);
     await navigate({ to: "/" });
   }
 
@@ -42,20 +39,21 @@ function Login() {
         <CardHeader>
           <CardTitle>Sign in to bia</CardTitle>
           <CardDescription>
-            Paste an API Token. Create one with <code>bia token create</code>.
+            Enter the admin password. Lost it? Restart bia with <code>bia serve --reset-admin</code>
+            .
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={submit} className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
-              <Label htmlFor="token">Token</Label>
+              <Label htmlFor="password">Password</Label>
               <Input
-                id="token"
+                id="password"
                 type="password"
-                autoComplete="off"
-                placeholder="bia_…"
-                value={token}
-                onChange={(event) => setToken(event.target.value)}
+                autoComplete="current-password"
+                autoFocus
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
               />
             </div>
             {error && (
@@ -63,8 +61,8 @@ function Login() {
                 {error}
               </p>
             )}
-            <Button type="submit" disabled={busy || token.trim() === ""}>
-              {busy ? "Checking…" : "Sign in"}
+            <Button type="submit" disabled={busy || password === ""}>
+              {busy ? "Signing in…" : "Sign in"}
             </Button>
           </form>
         </CardContent>

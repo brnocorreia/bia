@@ -22,7 +22,7 @@ export function RequireAdmin({ children, what }: { children: ReactNode; what: st
   if (token.isPending) return null;
   return (
     <p role="alert" className="text-sm text-muted-foreground">
-      {what} needs an admin Token. Sign out and sign in with one.
+      {what} needs an admin Token, and this one is {token.data?.scope ?? "not known"}.
     </p>
   );
 }

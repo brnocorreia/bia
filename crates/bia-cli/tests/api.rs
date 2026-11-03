@@ -38,17 +38,36 @@ impl Drop for Harness {
     }
 }
 
+/// The first admin Token, minted through the Session that setup started, since setup itself
+/// returns none.
+async fn first_admin_token(url: &str, code: &str) -> String {
+    let anonymous = Client::new(url).unwrap();
+    let done = anonymous.set_up(code, PASSWORD).await.unwrap();
+    anonymous
+        .with_session(done.session)
+        .with_origin(url)
+        .create_token(&NewToken {
+            name: "admin".into(),
+            scope: Scope::Admin,
+            webhook: None,
+        })
+        .await
+        .unwrap()
+        .value
+}
+
 async fn start(pool: PgPool) -> Harness {
     let registry = Arc::new(bia_actions::builtin_registry().unwrap());
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
     let (setup_code, code) = SetupCode::generate().unwrap();
     let config = ApiConfig {
         setup_code: Some(setup_code),
+        public_url: Some(url.parse().unwrap()),
         ..ApiConfig::default()
     };
     let state =
         ApiState::new(pool.clone(), registry.clone(), Arc::new(SystemClock)).with_config(config);
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let url = format!("http://{}", listener.local_addr().unwrap());
     let shutdown = CancellationToken::new();
     tokio::spawn(bia_server::serve(
         listener,
@@ -61,7 +80,7 @@ async fn start(pool: PgPool) -> Harness {
     tokio::spawn(async move { worker.run(stop).await.unwrap() });
 
     let anonymous = Client::new(&url).unwrap();
-    let admin = anonymous.set_up(&code, PASSWORD).await.unwrap().token.value;
+    let admin = first_admin_token(&url, &code).await;
     let client = anonymous.with_token(&admin);
     let agent = client
         .create_token(&NewToken {

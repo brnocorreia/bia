@@ -7,8 +7,9 @@ export type SetupDone = components["schemas"]["SetupDone"];
 export const MIN_PASSWORD_LENGTH = 12;
 
 /**
- * Sets up the User with the Setup Link's code. A plain function, not a `useMutation`, so the
- * password and the returned Token stay out of the TanStack Query cache.
+ * Sets up the User with the Setup Link's code, which also signs them in: the response sets the
+ * Session cookie. A plain function, not a `useMutation`, so the password stays out of the
+ * TanStack Query cache.
  */
 export async function setUp(code: string, password: string): Promise<SetupDone> {
   return unwrap(await getApi().POST("/v1/setup", { body: { code, password } }));

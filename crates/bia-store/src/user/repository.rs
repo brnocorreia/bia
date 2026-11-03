@@ -3,8 +3,8 @@ use std::future::Future;
 use chrono::{DateTime, Utc};
 use sqlx::{Connection, PgConnection};
 
-use super::row::UserRow;
-use super::{PasswordHash, User};
+use super::row::{CredentialsRow, UserRow};
+use super::{Credentials, PasswordHash, User, UserId};
 use crate::StoreError;
 
 /// The advisory lock key, `bia_user` in ASCII.
@@ -26,6 +26,20 @@ pub trait UserRepository {
         password: &PasswordHash,
         now: DateTime<Utc>,
     ) -> impl Future<Output = Result<Option<User>, StoreError>> + Send;
+
+    /// The User who can sign in with a password, and its hash; `None` while setup is pending.
+    fn credentials(
+        &self,
+        conn: &mut PgConnection,
+    ) -> impl Future<Output = Result<Option<Credentials>, StoreError>> + Send;
+
+    /// Replaces the password of a User who has one; returns whether it did.
+    fn set_password(
+        &self,
+        conn: &mut PgConnection,
+        user: UserId,
+        password: &PasswordHash,
+    ) -> impl Future<Output = Result<bool, StoreError>> + Send;
 
     /// Clears every User's password and revokes all their Tokens at `now`, returning how many
     /// Tokens it revoked, or `None` when no User exists.
@@ -75,6 +89,41 @@ impl UserRepository for PgUserRepository {
         }
         tx.commit().await?;
         Ok(row.map(User::from))
+    }
+
+    async fn credentials(
+        &self,
+        conn: &mut PgConnection,
+    ) -> Result<Option<Credentials>, StoreError> {
+        Ok(
+            sqlx::query_file_as!(CredentialsRow, "src/user/queries/credentials.sql")
+                .fetch_optional(&mut *conn)
+                .await?
+                .map(|row| Credentials {
+                    user: User {
+                        id: UserId::from_uuid(row.id),
+                        created_at: row.created_at,
+                    },
+                    password: PasswordHash(row.password_hash),
+                }),
+        )
+    }
+
+    async fn set_password(
+        &self,
+        conn: &mut PgConnection,
+        user: UserId,
+        password: &PasswordHash,
+    ) -> Result<bool, StoreError> {
+        Ok(sqlx::query_file!(
+            "src/user/queries/set_password.sql",
+            user.as_uuid(),
+            password.0
+        )
+        .execute(&mut *conn)
+        .await?
+        .rows_affected()
+            == 1)
     }
 
     async fn reset(

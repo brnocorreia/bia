@@ -1,4 +1,4 @@
-import { expect, startSessionWith, test, uniqueName, type SeedApi } from "./support/fixtures";
+import { expect, actAsAgent, test, uniqueName, type SeedApi } from "./support/fixtures";
 
 type Step = { id: string; action: string; params: Record<string, unknown> };
 
@@ -149,18 +149,15 @@ test("rolling back activates an older Version", async ({ signedInPage: page, api
   await expect(page.getByRole("row", { name: "Version 2" })).not.toContainText("Active");
 });
 
-test("with an agent Token the publish and activate controls are disabled", async ({
-  page,
+test("with an agent Scope the publish and activate controls are disabled", async ({
+  signedInPage: page,
   api,
 }) => {
   const id = uniqueName("guarded");
   const one = await saveDraft(api, id, [sleep("1s")]);
   await publish(api, id, one);
   await saveDraft(api, id, [sleep("2s")]);
-  const agent = await api.POST("/v1/tokens", {
-    body: { name: uniqueName("agent"), scope: "agent" },
-  });
-  await startSessionWith(page, agent.data!.value);
+  await actAsAgent(page);
 
   await page.goto(`/workflows/${id}`);
 

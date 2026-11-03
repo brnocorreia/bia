@@ -31,6 +31,13 @@ pub enum ErrorCode {
     InsufficientScope,
     /// No Token has this id.
     TokenNotFound,
+    /// A request made with the Session cookie uses an unsafe method and carries no `Origin`
+    /// equal to the origin of `public_url` or `ui_url`.
+    OriginMismatch,
+    /// The password is wrong.
+    InvalidCredentials,
+    /// The request is not made with a Session, so there is none to end.
+    NotASession,
     /// The setup code is not the one in the Setup Link the server logged.
     InvalidSetupCode,
     /// The setup code is from before the server last started; use the Setup Link it logged

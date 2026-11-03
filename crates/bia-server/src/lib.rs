@@ -5,11 +5,13 @@
 //! OpenAPI document is generated from the handlers and committed as `openapi.json` next to
 //! this crate's manifest; a test fails when the two drift (`just openapi` rewrites it).
 //!
-//! Every route but the probes and first-run setup needs a Token, whose Scope the handler checks
-//! through the extractors in [`auth`] (ADR-0043). The one exception is a webhook Trigger with
+//! Every route but the probes, first-run setup and sign-in needs a Token, whose Scope the
+//! handler checks through the extractors in [`auth`] (ADR-0043). A browser holds its Token in
+//! the Session cookie (ADR-0064). The one exception is a webhook Trigger with
 //! `hmac`, whose callers sign the body instead (ADR-0058).
 
 use std::fmt;
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::Router;
@@ -21,7 +23,7 @@ use bia_core::clock::Clock;
 use bia_store::secret::MasterKey;
 use sqlx::PgPool;
 use tokio::net::TcpListener;
-use utoipa::openapi::security::{Http, HttpAuthScheme, SecurityScheme};
+use utoipa::openapi::security::{ApiKey, ApiKeyValue, Http, HttpAuthScheme, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
@@ -35,7 +37,7 @@ mod routes;
 #[cfg(feature = "ui")]
 mod ui;
 
-pub use auth::SetupCode;
+pub use auth::{SetupCode, Wait};
 pub use cors::{CorsOrigins, InvalidOrigin};
 pub use error::{ApiError, ErrorBody, ErrorCode};
 pub use extract::{Json, Path, Query};
@@ -47,11 +49,21 @@ pub struct ApiState {
     actions: Arc<dyn ActionRegistry>,
     clock: Arc<dyn Clock>,
     config: Arc<ApiConfig>,
+    sign_ins: Arc<auth::SignInThrottle>,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct ApiConfig {
+    /// Origins other than `ui_url`'s that may call the API from a browser, without credentials.
     pub cors_origins: CorsOrigins,
+    /// Where people reach the API. Its origin is accepted on requests made with the Session
+    /// cookie, and an `https` URL makes the cookie `Secure`.
+    pub public_url: Option<url::Url>,
+    /// Where the UI is. Its origin is accepted like `public_url`'s, and is the only one allowed
+    /// to send the Session cookie from another site.
+    pub ui_url: Option<url::Url>,
+    /// How sign-in waits out its throttle. Sleeps unless a test says otherwise.
+    pub sign_in_wait: Option<Arc<dyn Wait>>,
     /// The code `POST /v1/setup` takes, from the Setup Link. Without one, setup refuses every
     /// code.
     pub setup_code: Option<SetupCode>,
@@ -66,12 +78,41 @@ impl ApiState {
             actions,
             clock,
             config: Arc::default(),
+            sign_ins: Arc::default(),
         }
     }
 
     pub fn with_config(mut self, config: ApiConfig) -> Self {
         self.config = Arc::new(config);
         self
+    }
+}
+
+impl ApiConfig {
+    /// Whether `origin`, as a browser's `Origin` header writes it, is `public_url`'s or
+    /// `ui_url`'s.
+    pub(crate) fn is_own_origin(&self, origin: &str) -> bool {
+        [&self.public_url, &self.ui_url]
+            .into_iter()
+            .flatten()
+            .any(|url| url.origin().ascii_serialization() == origin)
+    }
+
+    /// Whether the Session cookie is `Secure`: `public_url` is HTTPS.
+    pub(crate) fn secure_cookies(&self) -> bool {
+        self.public_url
+            .as_ref()
+            .is_some_and(|url| url.scheme() == "https")
+    }
+
+    fn ui_origin(&self) -> Option<axum::http::HeaderValue> {
+        self.ui_url
+            .as_ref()
+            .and_then(|url| url.origin().ascii_serialization().parse().ok())
+    }
+
+    pub(crate) fn wait(&self) -> &dyn Wait {
+        self.sign_in_wait.as_deref().unwrap_or(&auth::TokioWait)
     }
 }
 
@@ -112,6 +153,16 @@ impl Modify for SecuritySchemes {
                  administration, `webhook` only its own webhook Trigger.",
             ),
         );
+        components.add_security_scheme(
+            "session",
+            SecurityScheme::ApiKey(ApiKey::Cookie(ApiKeyValue::with_description(
+                "bia_session",
+                "The Session cookie `POST /v1/session` sets: an `admin` Token for browsers. \
+                 Wherever `token` is accepted, this is too, except on `/mcp`. A request with an \
+                 unsafe method must carry an `Origin` equal to the origin of `public_url` or \
+                 `ui_url`, or it fails with `origin_mismatch`.",
+            ))),
+        );
     }
 }
 
@@ -127,6 +178,8 @@ fn documented() -> OpenApiRouter<ApiState> {
         .routes(routes!(routes::token::current_token))
         .routes(routes!(routes::token::revoke_token))
         .routes(routes!(routes::setup::set_up))
+        .routes(routes!(routes::session::sign_in, routes::session::sign_out))
+        .routes(routes!(routes::user::change_password))
         .routes(routes!(routes::secret::list_secrets))
         .routes(routes!(
             routes::secret::put_secret,
@@ -175,9 +228,9 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
 
 /// The whole API, and the MCP server at `/mcp` whose tools call it. Unknown routes and methods
 /// answer with the uniform error body too. Browsers may call it from the configured CORS
-/// origins only.
+/// origins and the UI's only; the UI's may send the Session cookie.
 pub fn router(state: ApiState) -> Router {
-    let cors = state.config.cors_origins.layer();
+    let cors = state.config.cors_origins.layer(state.config.ui_origin());
     let api = api(state.clone());
     api.clone()
         .merge(mcp::router(&state, api))
@@ -221,7 +274,11 @@ pub async fn serve(
     router: Router,
     shutdown: CancellationToken,
 ) -> std::io::Result<()> {
-    axum::serve(listener, router)
-        .with_graceful_shutdown(shutdown.cancelled_owned())
-        .await
+    // The peer address is what sign-in throttling counts attempts against.
+    axum::serve(
+        listener,
+        router.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown.cancelled_owned())
+    .await
 }

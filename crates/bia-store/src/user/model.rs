@@ -37,3 +37,10 @@ impl fmt::Debug for PasswordHash {
         f.write_str("PasswordHash(..)")
     }
 }
+
+/// A User and the hash of the password they sign in with.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Credentials {
+    pub user: User,
+    pub password: PasswordHash,
+}

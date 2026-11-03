@@ -65,6 +65,11 @@ pub(crate) fn router(state: &ApiState, api: Router) -> Router {
 /// Refuses a request that carries no Token an agent may use, before MCP sees it.
 async fn authenticate(State(state): State<ApiState>, request: Request, next: Next) -> Response {
     let (mut parts, body) = request.into_parts();
+    // Tools forward the `Authorization` header, and a cookie would make `/mcp` a target for
+    // cross-site requests, so only the header authenticates here.
+    if !parts.headers.contains_key(header::AUTHORIZATION) {
+        return crate::auth::missing_token().into_response();
+    }
     match Agent::from_request_parts(&mut parts, &state).await {
         Ok(_) => next.run(Request::from_parts(parts, body)).await,
         Err(error) => error.into_response(),

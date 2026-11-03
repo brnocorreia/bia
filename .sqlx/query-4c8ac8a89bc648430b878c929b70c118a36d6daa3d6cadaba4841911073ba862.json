@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "-- $1: hash\nSELECT id, name, scope, workflow_id, trigger_id, user_id, created_at, last_used_at, revoked_at\nFROM tokens\nWHERE hash = $1 AND revoked_at IS NULL\n",
+  "query": "-- $1: hash\nSELECT id, name, scope, origin, workflow_id, trigger_id, user_id, created_at, last_used_at, revoked_at\nFROM tokens\nWHERE hash = $1 AND revoked_at IS NULL\n",
   "describe": {
     "columns": [
       {
@@ -38,6 +38,17 @@
       },
       {
         "ordinal": 3,
+        "name": "origin",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tokens",
+            "name": "origin"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
         "name": "workflow_id",
         "type_info": "Text",
         "origin": {
@@ -48,7 +59,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "trigger_id",
         "type_info": "Text",
         "origin": {
@@ -59,7 +70,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "user_id",
         "type_info": "Uuid",
         "origin": {
@@ -70,7 +81,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -81,7 +92,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "last_used_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -92,7 +103,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "revoked_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -112,6 +123,7 @@
       false,
       false,
       false,
+      false,
       true,
       true,
       false,
@@ -120,5 +132,5 @@
       true
     ]
   },
-  "hash": "c6432df0e2a19b8ddc63046ea7b950333d02fb4e24c9a818b67f3937889c78a5"
+  "hash": "4c8ac8a89bc648430b878c929b70c118a36d6daa3d6cadaba4841911073ba862"
 }

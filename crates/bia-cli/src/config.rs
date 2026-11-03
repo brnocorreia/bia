@@ -310,19 +310,20 @@ impl Config {
                 self.log.filter
             )
         })?;
-        self.api_config()?;
-        self.public_url()?;
-        self.ui_url()?;
+        self.api_config(self.api.bind)?;
         Ok(())
     }
 
-    pub(crate) fn api_config(&self) -> anyhow::Result<ApiConfig> {
+    /// `listening` is the address the API actually listens on, which `public_url` defaults to.
+    pub(crate) fn api_config(&self, listening: SocketAddr) -> anyhow::Result<ApiConfig> {
         let cors_origins = CorsOrigins::parse(&self.cors_origins.0)
             .context("invalid configuration: `cors_origins`")?;
         // The message never echoes the key.
         let master_key = self.master_key()?;
         Ok(ApiConfig {
             cors_origins,
+            public_url: Some(self.public_url_on(listening)?),
+            ui_url: Some(self.ui_url_on(listening)?),
             master_key,
             ..ApiConfig::default()
         })
@@ -389,13 +390,9 @@ impl Config {
     }
 
     /// `public_url`, or `http://<api.bind>`.
+    #[cfg(test)]
     pub(crate) fn public_url(&self) -> anyhow::Result<Url> {
         self.public_url_on(self.api.bind)
-    }
-
-    /// `ui_url`, or the `public_url`, where the embedded UI is served.
-    pub(crate) fn ui_url(&self) -> anyhow::Result<Url> {
-        self.ui_url_on(self.api.bind)
     }
 
     /// `{ui_url}/setup?code=<code>`, the page that sets up the User. `listening` is the
@@ -625,14 +622,20 @@ mod tests {
                 "bia.toml",
                 r#"cors_origins = ["https://ui.example.com", "http://localhost:5173"]"#,
             )?;
-            let from_file = load(jail, Some("bia.toml")).unwrap().api_config().unwrap();
+            let from_file = load(jail, Some("bia.toml"))
+                .unwrap()
+                .api_config(std::net::SocketAddr::from(([127, 0, 0, 1], 8080)))
+                .unwrap();
             assert!(matches!(from_file.cors_origins, CorsOrigins::List(list) if list.len() == 2));
 
             jail.set_env(
                 "BIA_CORS_ORIGINS",
                 "https://ui.example.com, https://b.example.com",
             );
-            let from_env = load(jail, Some("bia.toml")).unwrap().api_config().unwrap();
+            let from_env = load(jail, Some("bia.toml"))
+                .unwrap()
+                .api_config(std::net::SocketAddr::from(([127, 0, 0, 1], 8080)))
+                .unwrap();
             assert!(matches!(from_env.cors_origins, CorsOrigins::List(list) if list.len() == 2));
 
             jail.set_env("BIA_CORS_ORIGINS", "ui.example.com");

@@ -373,6 +373,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Signs in with the password and sets the `bia_session` cookie: `HttpOnly`, `SameSite=Lax`,
+         *     `Secure` when `public_url` is HTTPS, and no `Domain`. The Session lasts 14 days without use
+         *     and 90 days at most. After five failed attempts each further one waits longer, up to a
+         *     minute, per User and client address. Public, since it is how a browser gets a Token.
+         */
+        post: operations["sign_in"];
+        /** Revokes the Session the request is made with and clears its cookie. Needs a Session. */
+        delete: operations["sign_out"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/setup": {
         parameters: {
             query?: never;
@@ -384,8 +407,9 @@ export interface paths {
         put?: never;
         /**
          * Sets the password of the install's User, creating it on a fresh install, with the code
-         *     from the Setup Link that `bia serve` logs. Public, since no one can sign in yet. Refuses
-         *     once a User has a password; `bia serve --reset-admin` clears it and logs a new link.
+         *     from the Setup Link that `bia serve` logs, and signs that User in: the response sets the
+         *     `bia_session` cookie, as `POST /v1/session` does. Public, since no one can sign in yet.
+         *     Refuses once a User has a password; `bia serve --reset-admin` clears it and logs a new link.
          */
         post: operations["set_up"];
         delete?: never;
@@ -421,7 +445,7 @@ export interface paths {
         };
         /**
          * The Token the request is made with, so a client can tell which controls its Scope allows.
-         *     Open to `admin` and `agent` Tokens, the two the UI signs in with.
+         *     Open to `admin` and `agent` Tokens, and to the Session cookie the UI signs in with.
          */
         get: operations["current_token"];
         put?: never;
@@ -442,10 +466,31 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Revokes a Token at once; revoking it again changes nothing. Needs an `admin` Token, which
-         *     may revoke itself.
+         * Revokes a Token or Session at once; revoking it again changes nothing. Needs an `admin`
+         *     Token, which may revoke itself.
          */
         post: operations["revoke_token"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/user/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Replaces the password and revokes every other Session, so a stolen one stops working. Needs
+         *     an `admin` Token and the current password, and counts wrong ones towards sign-in
+         *     throttling.
+         */
+        post: operations["change_password"];
         delete?: never;
         options?: never;
         head?: never;
@@ -719,6 +764,12 @@ export interface components {
         };
         /** @enum {string} */
         AttemptStatusName: "succeeded" | "failed" | "skipped" | "cancelled";
+        ChangePasswordRequest: {
+            /** @description The password being replaced. */
+            current: string;
+            /** @description The new password: at least 12 characters. */
+            new: string;
+        };
         /** @description A Token just created, with its value. */
         CreatedToken: {
             token: components["schemas"]["TokenInfo"];
@@ -811,7 +862,7 @@ export interface components {
          *     added, but renaming or removing one needs an ADR (ADR-0042).
          * @enum {string}
          */
-        ErrorCode: "route_not_found" | "method_not_allowed" | "malformed_request" | "request_too_large" | "invalid_definition" | "missing_token" | "invalid_token" | "insufficient_scope" | "token_not_found" | "invalid_setup_code" | "setup_code_expired" | "already_set_up" | "password_too_short" | "workflow_not_found" | "version_not_found" | "version_published" | "version_not_published" | "version_changed" | "workflow_id_mismatch" | "no_active_version" | "no_manual_trigger" | "invalid_run_input" | "invalid_mock" | "dry_run_too_long" | "run_not_found" | "run_finished" | "run_not_finished" | "run_not_resumable" | "webhook_not_found" | "missing_signature" | "invalid_signature" | "hmac_secret_unavailable" | "secret_not_found" | "master_key_missing" | "queue_not_found" | "dead_letter_queue_not_found" | "queue_in_use" | "not_ready" | "internal_error";
+        ErrorCode: "route_not_found" | "method_not_allowed" | "malformed_request" | "request_too_large" | "invalid_definition" | "missing_token" | "invalid_token" | "insufficient_scope" | "token_not_found" | "origin_mismatch" | "invalid_credentials" | "not_a_session" | "invalid_setup_code" | "setup_code_expired" | "already_set_up" | "password_too_short" | "workflow_not_found" | "version_not_found" | "version_published" | "version_not_published" | "version_changed" | "workflow_id_mismatch" | "no_active_version" | "no_manual_trigger" | "invalid_run_input" | "invalid_mock" | "dry_run_too_long" | "run_not_found" | "run_finished" | "run_not_finished" | "run_not_resumable" | "webhook_not_found" | "missing_signature" | "invalid_signature" | "hmac_secret_unavailable" | "secret_not_found" | "master_key_missing" | "queue_not_found" | "dead_letter_queue_not_found" | "queue_in_use" | "not_ready" | "internal_error";
         /** @description A failed Run and the entry that failed it. */
         FailedRun: components["schemas"]["RunSummary"] & {
             failure?: components["schemas"]["TimelineEntryInfo"] | null;
@@ -925,6 +976,19 @@ export interface components {
             name: string;
             scope: components["schemas"]["ScopeName"];
             webhook?: components["schemas"]["WebhookBinding"] | null;
+        };
+        /**
+         * @description Where a Token came from.
+         * @enum {string}
+         */
+        OriginName: "session" | "oauth" | "manual";
+        PasswordChanged: {
+            /**
+             * Format: int64
+             * @description How many other Sessions it signed out. The caller's own Session stays. OAuth Grants are
+             *     not affected.
+             */
+            revoked_sessions: number;
         };
         /**
          * @description A Queue's settings. Every field is optional and a field left out takes its default, so
@@ -1095,10 +1159,8 @@ export interface components {
             /** @description Every Secret by name. */
             secrets: components["schemas"]["SecretInfo"][];
         };
-        /** @description The User setup created, and an admin Token for it. */
+        /** @description The User setup created. The Session it started is in the `Set-Cookie` header. */
         SetupDone: {
-            /** @description An admin Token to call the API with until sign-in exists. Shown only in this response. */
-            token: components["schemas"]["CreatedToken"];
             user: components["schemas"]["UserInfo"];
         };
         SetupRequest: {
@@ -1115,6 +1177,15 @@ export interface components {
          * @enum {string}
          */
         Severity: "error" | "warning";
+        SignInRequest: {
+            password: string;
+        };
+        /** @description A Session just started. Its value is only in the `Set-Cookie` header. */
+        SignedIn: {
+            /** @description The Session, which is a Token with origin `session`. */
+            session: components["schemas"]["TokenInfo"];
+            user: components["schemas"]["UserInfo"];
+        };
         /** @enum {string} */
         StateName: "draft" | "published";
         Status: {
@@ -1178,6 +1249,7 @@ export interface components {
              */
             last_used_at?: string | null;
             name: string;
+            origin: components["schemas"]["OriginName"];
             /**
              * Format: date-time
              * @description Once set, the Token authenticates nothing.
@@ -1343,7 +1415,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -1354,7 +1426,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1460,7 +1535,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -1471,7 +1546,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1509,7 +1587,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -1520,7 +1598,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1552,7 +1633,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -1563,7 +1644,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1617,7 +1701,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -1628,7 +1712,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1669,7 +1756,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -1680,7 +1767,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1743,7 +1833,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -1754,7 +1844,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1808,7 +1901,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -1819,7 +1912,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1876,7 +1972,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -1887,7 +1983,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1947,7 +2046,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -1958,7 +2057,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2007,7 +2109,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -2018,7 +2120,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2050,7 +2155,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -2061,7 +2166,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2102,7 +2210,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -2113,7 +2221,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2163,7 +2274,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -2174,7 +2285,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2224,7 +2338,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -2235,7 +2349,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2282,7 +2399,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -2293,7 +2410,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2322,7 +2442,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -2333,7 +2453,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2378,7 +2501,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -2389,7 +2512,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2430,7 +2556,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -2441,7 +2567,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2452,6 +2581,103 @@ export interface operations {
             };
             /** @description `secret_not_found`. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    sign_in: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignInRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    /** @description `bia_session=<value>` */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignedIn"];
+                };
+            };
+            /** @description `malformed_request`: the body is not `{password}`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `invalid_credentials`: the password is wrong, or no User has one yet. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    sign_out: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    /** @description Clears `bia_session` */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenInfo"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `not_a_session`: the request is made with a Token that is not a Session. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2476,6 +2702,8 @@ export interface operations {
         responses: {
             201: {
                 headers: {
+                    /** @description `bia_session=<value>` */
+                    "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -2538,7 +2766,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -2549,7 +2777,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2591,7 +2822,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -2602,7 +2833,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2631,7 +2865,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -2642,7 +2876,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2674,7 +2911,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -2685,7 +2922,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2696,6 +2936,71 @@ export interface operations {
             };
             /** @description `token_not_found`. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    change_password: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasswordChanged"];
+                };
+            };
+            /** @description `malformed_request`: the body is not `{current, new}`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `password_too_short`: `new` has fewer than 12 characters. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2740,7 +3045,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -2751,7 +3056,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2780,7 +3088,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -2791,7 +3099,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2823,7 +3134,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -2834,7 +3145,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2880,7 +3194,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -2891,7 +3205,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2946,7 +3263,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -2957,7 +3274,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3016,7 +3336,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -3027,7 +3347,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3082,7 +3405,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -3093,7 +3416,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3136,7 +3462,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -3147,7 +3473,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3204,7 +3533,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -3215,7 +3544,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3276,7 +3608,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -3287,7 +3619,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3353,7 +3688,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -3364,7 +3699,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3416,7 +3754,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -3427,7 +3765,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3491,7 +3832,7 @@ export interface operations {
                 };
             };
             /**
-             * @description No Token, or one that is unknown or revoked; `code` is `missing_token` or
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
              *     `invalid_token`.
              */
             401: {
@@ -3502,7 +3843,10 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description The Token's Scope does not allow this route; `code` is `insufficient_scope`. */
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
             403: {
                 headers: {
                     [name: string]: unknown;

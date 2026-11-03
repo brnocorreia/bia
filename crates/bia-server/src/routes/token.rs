@@ -4,7 +4,9 @@
 use axum::extract::State;
 use axum::http::StatusCode;
 use bia_core::dsl::{TriggerId, WorkflowId};
-use bia_store::token::{NewToken, PgTokenRepository, Scope, Token, TokenId, TokenRepository};
+use bia_store::token::{
+    NewToken, Origin, PgTokenRepository, Scope, Token, TokenId, TokenRepository,
+};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -49,12 +51,25 @@ pub(crate) struct NewTokenRequest {
     webhook: Option<WebhookBinding>,
 }
 
+/// Where a Token came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum OriginName {
+    /// A browser sign-in; expires after 14 days without use, or 90 days at most.
+    Session,
+    /// Granted to an OAuth client.
+    Oauth,
+    /// Created with `POST /v1/tokens`, for CI and scripts; never expires.
+    Manual,
+}
+
 /// A Token, without its value.
 #[derive(Debug, Serialize, ToSchema)]
 pub(crate) struct TokenInfo {
     id: Uuid,
     name: String,
     scope: ScopeName,
+    origin: OriginName,
     /// Present with the `webhook` Scope.
     #[serde(skip_serializing_if = "Option::is_none")]
     webhook: Option<WebhookBinding>,
@@ -133,6 +148,7 @@ pub(crate) async fn create_token(
                 name,
                 hash,
                 scope,
+                origin: Origin::Manual,
                 user_id: caller.user_id,
                 created_at: state.clock.now(),
             },
@@ -169,8 +185,8 @@ pub(crate) async fn list_tokens(
     }))
 }
 
-/// Revokes a Token at once; revoking it again changes nothing. Needs an `admin` Token, which
-/// may revoke itself.
+/// Revokes a Token or Session at once; revoking it again changes nothing. Needs an `admin`
+/// Token, which may revoke itself.
 #[utoipa::path(
     post,
     path = "/v1/tokens/{token_id}/revoke",
@@ -209,12 +225,12 @@ pub(crate) async fn revoke_token(
 }
 
 /// The Token the request is made with, so a client can tell which controls its Scope allows.
-/// Open to `admin` and `agent` Tokens, the two the UI signs in with.
+/// Open to `admin` and `agent` Tokens, and to the Session cookie the UI signs in with.
 #[utoipa::path(
     get,
     path = "/v1/tokens/me",
     tag = "tokens",
-    security(("token" = [])),
+    security(("token" = []), ("session" = [])),
     responses((status = OK, body = TokenInfo), AuthErrors)
 )]
 pub(crate) async fn current_token(Agent(token): Agent) -> Json<TokenInfo> {
@@ -261,6 +277,11 @@ impl From<Token> for TokenInfo {
             id: token.id.as_uuid(),
             name: token.name,
             scope,
+            origin: match token.origin {
+                Origin::Session => OriginName::Session,
+                Origin::OAuth => OriginName::Oauth,
+                Origin::Manual => OriginName::Manual,
+            },
             webhook,
             created_at: token.created_at,
             last_used_at: token.last_used_at,

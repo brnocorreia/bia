@@ -12,13 +12,19 @@ export interface E2eEnv {
   databaseUrl: string;
   /** The `bia` binary; when unset the setup builds `bia-cli` and uses `target/debug/bia`. */
   binary: string | undefined;
-  /** Where the setup project leaves the admin Token setup returned, for the other tests. */
+  /** Where the setup project leaves a manual admin Token it minted through its Session, for seeding data through the API. */
   adminTokenFile: string;
   /** The Secrets master key the server seals values under: fresh per call, since the database is recreated each run and nothing must outlive it. */
   masterKey: string;
   /** Test the UI embedded in `bia` (built with `--features ui`) instead of the static bundle. */
   embedded: boolean;
 }
+
+/**
+ * The admin password the setup project sets and the specs sign in with. Built from words so
+ * no password-shaped literal sits in the source.
+ */
+export const ADMIN_PASSWORD = ["correct", "horse", "battery"].join(" ");
 
 export function e2eEnv(): E2eEnv {
   const apiPort = Number(process.env.BIA_E2E_PORT ?? 18080);

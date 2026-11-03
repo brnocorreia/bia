@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use bia_client::Client;
+use bia_client::{Client, NewToken, Scope};
 use bia_core::action::CancellationToken;
 use bia_core::clock::{Clock, ManualClock};
 use bia_engine::{InternalSecrets, Interpreter, Scheduler, SchedulerConfig, Worker, WorkerConfig};
@@ -151,6 +151,24 @@ fn uptime_check(action: &str, target: &str) -> Value {
     })
 }
 
+/// The first admin Token, minted through the Session that setup started, since setup itself
+/// returns none.
+async fn first_admin_token(url: &str, code: &str) -> String {
+    let anonymous = Client::new(url).unwrap();
+    let done = anonymous.set_up(code, PASSWORD).await.unwrap();
+    anonymous
+        .with_session(done.session)
+        .with_origin(url)
+        .create_token(&NewToken {
+            name: "admin".into(),
+            scope: Scope::Admin,
+            webhook: None,
+        })
+        .await
+        .unwrap()
+        .value
+}
+
 #[sqlx::test(migrator = "bia_store::MIGRATOR")]
 async fn an_agent_authors_an_admin_ships_cron_runs_it_and_the_agent_retries_the_failure(
     pool: PgPool,
@@ -160,16 +178,17 @@ async fn an_agent_authors_an_admin_ships_cron_runs_it_and_the_agent_retries_the_
     let clock = ManualClock::new(start);
     let registry = Arc::new(bia_actions::builtin_registry().unwrap());
     let key = MasterKey::parse(&"0f".repeat(32)).unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
     let (setup_code, code) = SetupCode::generate().unwrap();
     let config = ApiConfig {
         setup_code: Some(setup_code),
+        public_url: Some(url.parse().unwrap()),
         master_key: Some(key.clone()),
         ..ApiConfig::default()
     };
     let state =
         ApiState::new(pool.clone(), registry.clone(), Arc::new(clock.clone())).with_config(config);
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let url = format!("http://{}", listener.local_addr().unwrap());
     let shutdown = CancellationToken::new();
     let _stop = shutdown.clone().drop_guard();
     tokio::spawn(bia_server::serve(
@@ -194,13 +213,7 @@ async fn an_agent_authors_an_admin_ships_cron_runs_it_and_the_agent_retries_the_
         .await;
 
     // Setup, as the quickstart does: the admin Token, the agent Token, the Secret.
-    let admin = Client::new(&url)
-        .unwrap()
-        .set_up(&code, PASSWORD)
-        .await
-        .unwrap()
-        .token
-        .value;
+    let admin = first_admin_token(&url, &code).await;
     let created = bia(
         &url,
         &admin,

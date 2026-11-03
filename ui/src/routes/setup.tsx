@@ -1,6 +1,7 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
-import { MIN_PASSWORD_LENGTH, setUp, setupErrorMessage, type SetupDone } from "@/api/setup";
+import { MIN_PASSWORD_LENGTH, setUp, setupErrorMessage } from "@/api/setup";
+import { confirmSession } from "@/auth/login";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,13 +20,17 @@ export const Route = createFileRoute("/setup")({
 
 function Setup() {
   const { code: linkCode } = Route.useSearch();
-  // The Token lives in component state only: it is shown once and never cached (ADR-0057).
-  const [done, setDone] = useState<SetupDone | null>(null);
+  // Set when setup worked but the browser dropped the cookie it started the Session with.
+  const [notSignedIn, setNotSignedIn] = useState<string | null>(null);
 
   return (
     <main className="flex min-h-screen items-center justify-center p-4">
       <Card className="w-full max-w-md">
-        {done ? <Complete done={done} /> : <SetupForm linkCode={linkCode} onDone={setDone} />}
+        {notSignedIn ? (
+          <NotSignedIn message={notSignedIn} />
+        ) : (
+          <SetupForm linkCode={linkCode} onNotSignedIn={setNotSignedIn} />
+        )}
       </Card>
     </main>
   );
@@ -33,11 +38,12 @@ function Setup() {
 
 function SetupForm({
   linkCode,
-  onDone,
+  onNotSignedIn,
 }: {
   linkCode: string | undefined;
-  onDone: (done: SetupDone) => void;
+  onNotSignedIn: (message: string) => void;
 }) {
+  const navigate = useNavigate();
   const [code, setCode] = useState(linkCode ?? "");
   const [password, setPassword] = useState("");
   const [again, setAgain] = useState("");
@@ -52,7 +58,11 @@ function SetupForm({
     setBusy(true);
     setError(null);
     try {
-      onDone(await setUp(code.trim(), password));
+      await setUp(code.trim(), password);
+      // Setup started the Session; setting up ends by signing in.
+      const result = await confirmSession();
+      if (result.ok) await navigate({ to: "/" });
+      else onNotSignedIn(result.message);
     } catch (failure) {
       setError(setupErrorMessage(failure));
     } finally {
@@ -123,45 +133,20 @@ function SetupForm({
   );
 }
 
-function Complete({ done }: { done: SetupDone }) {
-  const { value } = done.token;
+function NotSignedIn({ message }: { message: string }) {
   return (
     <>
       <CardHeader>
         <CardTitle>Setup complete</CardTitle>
-        <CardDescription>
-          Your password is set. Until bia can sign you in with it, use this admin Token: copy it
-          now, since it is shown only once.
-        </CardDescription>
+        <CardDescription>Your password is set.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 text-sm">
-        <div className="flex items-center gap-2">
-          <code
-            data-testid="setup-token-value"
-            className="break-all rounded bg-muted px-2 py-1 font-mono"
-          >
-            {value}
-          </code>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void navigator.clipboard?.writeText(value)}
-          >
-            Copy
-          </Button>
-        </div>
-        <ol className="list-decimal space-y-1 pl-5">
-          <li>
-            Sign in to this UI by pasting the Token on the{" "}
-            <Link to="/login" className="underline">
-              sign-in screen
-            </Link>
-            .
-          </li>
-          <li>
-            For the CLI, set <code>BIA_TOKEN</code> to it.
-          </li>
-        </ol>
+        <p role="alert" className="text-destructive">
+          {message}
+        </p>
+        <p>
+          Once they are, <Link to="/login">sign in</Link> with the password you just set.
+        </p>
       </CardContent>
     </>
   );

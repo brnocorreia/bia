@@ -6,35 +6,30 @@ export type { components, paths };
 export type ErrorBody = components["schemas"]["ErrorBody"];
 export type ApiClient = Client<paths>;
 
+/** The codes that say the Session (or Token) the request carried is no longer accepted. */
+const UNAUTHENTICATED = new Set(["missing_token", "invalid_token"]);
+
 /**
- * Sends the session's Token and, when the API rejects it with 401, ends the session so the
- * app shell returns to the login screen. A request that sets its own `Authorization` (the
- * login probe) is left alone: its failure is the login form's to show.
+ * Sends the Session cookie with every request and, when the API answers that it no longer
+ * knows the caller, ends the session so the app shell returns to the sign-in screen. Other
+ * 401s, such as a wrong password, belong to the form that asked.
  */
 export function createApi(apiUrl: string, session: Session = appSession): ApiClient {
   const auth: Middleware = {
-    onRequest({ request }) {
-      const token = session.getToken();
-      if (token && !request.headers.has("Authorization")) {
-        request.headers.set("Authorization", `Bearer ${token}`);
-      }
-      return request;
-    },
-    onResponse({ request, response }) {
-      // Compare with the Token that was sent, so a late 401 for an old Token cannot end a
-      // newer session.
-      const token = session.getToken();
-      if (
-        response.status === 401 &&
-        token &&
-        request.headers.get("Authorization") === `Bearer ${token}`
-      ) {
-        session.clear();
+    async onResponse({ response }) {
+      if (response.status === 401) {
+        const body: unknown = await response
+          .clone()
+          .json()
+          .catch(() => null);
+        const code =
+          typeof body === "object" && body !== null && "code" in body ? body.code : undefined;
+        if (typeof code === "string" && UNAUTHENTICATED.has(code)) session.signedOut();
       }
       return response;
     },
   };
-  const client = createClient<paths>({ baseUrl: apiUrl });
+  const client = createClient<paths>({ baseUrl: apiUrl, credentials: "include" });
   client.use(auth);
   return client;
 }

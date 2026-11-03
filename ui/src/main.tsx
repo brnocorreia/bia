@@ -26,8 +26,10 @@ async function main() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: 5_000 } },
   });
-  // Cached responses belong to the Token that fetched them.
-  session.subscribe(() => queryClient.clear());
+  // Cached responses belong to the Session that fetched them.
+  session.subscribe(() => {
+    if (session.getState() === "signed-out") queryClient.clear();
+  });
   const router = createAppRouter(queryClient);
 
   root.render(

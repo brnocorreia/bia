@@ -1,8 +1,9 @@
 //! Typed HTTP client for the bia API.
 //!
 //! Every method maps to one endpoint. A failed request comes back as [`Error::Api`] carrying
-//! the server's error body, Diagnostics included. Every endpoint but the probes needs a Token,
-//! set with [`Client::with_token`].
+//! the server's error body, Diagnostics included. Every endpoint but the probes, setup and
+//! sign-in needs a Token, set with [`Client::with_token`], or a Session, set with
+//! [`Client::with_session`] after [`Client::sign_in`].
 
 use std::fmt;
 
@@ -98,12 +99,22 @@ pub struct NewToken {
     pub webhook: Option<WebhookBinding>,
 }
 
+/// Where a Token came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Origin {
+    Session,
+    Oauth,
+    Manual,
+}
+
 /// A Token, without its value.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Token {
     pub id: Uuid,
     pub name: String,
     pub scope: Scope,
+    pub origin: Origin,
     pub webhook: Option<WebhookBinding>,
     pub created_at: DateTime<Utc>,
     pub last_used_at: Option<DateTime<Utc>>,
@@ -131,20 +142,46 @@ pub struct User {
     pub created_at: DateTime<Utc>,
 }
 
-/// What setup answers: the User and an admin Token for it.
-#[derive(Clone, Deserialize)]
+/// What setup answers: the User and the Session it started.
+#[derive(Clone)]
 pub struct SetupDone {
     pub user: User,
-    pub token: CreatedToken,
+    /// The value of the `bia_session` cookie, for [`Client::with_session`].
+    pub session: String,
 }
 
 impl fmt::Debug for SetupDone {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SetupDone")
             .field("user", &self.user)
-            .field("token", &self.token)
-            .finish()
+            .finish_non_exhaustive()
     }
+}
+
+/// What sign-in answers: the User and the Session it started.
+#[derive(Clone)]
+pub struct SignedIn {
+    pub user: User,
+    /// The Session's Token row, without its value.
+    pub token: Token,
+    /// The value of the `bia_session` cookie, for [`Client::with_session`].
+    pub session: String,
+}
+
+impl fmt::Debug for SignedIn {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SignedIn")
+            .field("user", &self.user)
+            .field("token", &self.token)
+            .finish_non_exhaustive()
+    }
+}
+
+/// `POST /v1/user/password`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+pub struct PasswordChanged {
+    /// How many other Sessions it signed out.
+    pub revoked_sessions: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -485,6 +522,8 @@ pub struct Client {
     http: reqwest::Client,
     base: Url,
     token: Option<String>,
+    session: Option<String>,
+    origin: Option<String>,
 }
 
 impl fmt::Debug for Client {
@@ -510,12 +549,28 @@ impl Client {
             http: reqwest::Client::new(),
             base,
             token: None,
+            session: None,
+            origin: None,
         })
     }
 
     /// Sends `token` as `Authorization: Bearer <token>` with every request.
     pub fn with_token(mut self, token: impl Into<String>) -> Self {
         self.token = Some(token.into());
+        self
+    }
+
+    /// Sends `session`, the value of the `bia_session` cookie, with every request, as a
+    /// browser would.
+    pub fn with_session(mut self, session: impl Into<String>) -> Self {
+        self.session = Some(session.into());
+        self
+    }
+
+    /// Sends `origin` as the `Origin` header, which the server requires, equal to its
+    /// `public_url` or `ui_url`, on unsafe requests made with a Session.
+    pub fn with_origin(mut self, origin: impl Into<String>) -> Self {
+        self.origin = Some(origin.into());
         self
     }
 
@@ -550,15 +605,77 @@ impl Client {
     }
 
     /// Sets the install's User's password with the code from the Setup Link, which is all a
-    /// fresh install accepts. Returns an admin Token, shown only this once.
+    /// fresh install accepts, and starts the User's first Session.
     pub async fn set_up(&self, code: &str, password: &str) -> Result<SetupDone, Error> {
         #[derive(Serialize)]
         struct Request<'a> {
             code: &'a str,
             password: &'a str,
         }
-        self.send(Method::POST, "/v1/setup", Some(&Request { code, password }))
-            .await
+        #[derive(Deserialize)]
+        struct Response {
+            user: User,
+        }
+        let (Response { user }, session) = self
+            .send_for_session(Method::POST, "/v1/setup", Some(&Request { code, password }))
+            .await?;
+        Ok(SetupDone { user, session })
+    }
+
+    /// Signs in with the password, starting a Session.
+    pub async fn sign_in(&self, password: &str) -> Result<SignedIn, Error> {
+        #[derive(Serialize)]
+        struct Request<'a> {
+            password: &'a str,
+        }
+        #[derive(Deserialize)]
+        struct Response {
+            user: User,
+            session: Token,
+        }
+        let (
+            Response {
+                user,
+                session: token,
+            },
+            session,
+        ) = self
+            .send_for_session(Method::POST, "/v1/session", Some(&Request { password }))
+            .await?;
+        Ok(SignedIn {
+            user,
+            token,
+            session,
+        })
+    }
+
+    /// Revokes the Session this client sends.
+    pub async fn sign_out(&self) -> Result<Token, Error> {
+        self.send(Method::DELETE, "/v1/session", None::<&()>).await
+    }
+
+    /// Replaces the password and revokes every other Session.
+    pub async fn change_password(
+        &self,
+        current: &str,
+        new: &str,
+    ) -> Result<PasswordChanged, Error> {
+        #[derive(Serialize)]
+        struct Request<'a> {
+            current: &'a str,
+            new: &'a str,
+        }
+        self.send(
+            Method::POST,
+            "/v1/user/password",
+            Some(&Request { current, new }),
+        )
+        .await
+    }
+
+    /// The Token this client authenticates as, whether it sends a Token or a Session.
+    pub async fn current_token(&self) -> Result<Token, Error> {
+        self.send(Method::GET, "/v1/tokens/me", None::<&()>).await
     }
 
     /// Creates the Secret or replaces its value. Needs an `admin` Token.
@@ -904,6 +1021,35 @@ impl Client {
         path: &str,
         body: Option<&impl Serialize>,
     ) -> Result<T, Error> {
+        Ok(self.execute(method, path, body).await?.json().await?)
+    }
+
+    /// Like [`send`](Self::send), also returning the value the response sets `bia_session` to.
+    async fn send_for_session<T: DeserializeOwned>(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<&impl Serialize>,
+    ) -> Result<(T, String), Error> {
+        let response = self.execute(method, path, body).await?;
+        let session = response
+            .headers()
+            .get_all(reqwest::header::SET_COOKIE)
+            .iter()
+            .filter_map(|value| value.to_str().ok())
+            .find_map(|cookie| cookie.strip_prefix("bia_session="))
+            .and_then(|cookie| cookie.split(';').next())
+            .map(str::to_owned)
+            .unwrap_or_default();
+        Ok((response.json().await?, session))
+    }
+
+    async fn execute(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<&impl Serialize>,
+    ) -> Result<reqwest::Response, Error> {
         let url = self
             .base
             .join(path.trim_start_matches('/'))
@@ -912,13 +1058,19 @@ impl Client {
         if let Some(token) = &self.token {
             request = request.bearer_auth(token);
         }
+        if let Some(session) = &self.session {
+            request = request.header(reqwest::header::COOKIE, format!("bia_session={session}"));
+        }
+        if let Some(origin) = &self.origin {
+            request = request.header(reqwest::header::ORIGIN, origin);
+        }
         if let Some(body) = body {
             request = request.json(body);
         }
         let response = request.send().await?;
         let status = response.status();
         if status.is_success() {
-            return Ok(response.json().await?);
+            return Ok(response);
         }
         Err(Error::Api {
             status,
