@@ -164,3 +164,66 @@ test("a request that was already answered says so", async ({ signedInPage: page 
 
   await expect(page.getByRole("alert")).toContainText("already answered");
 });
+
+const DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
+
+/** What `bia login --device` does: asks for a code, then polls with the device code. */
+async function startDevice(request: APIRequestContext) {
+  const response = await request.post(`${e2eEnv().apiUrl}/oauth/device_authorization`, {
+    form: { client_id: "bia-cli", scope: "admin", resource: await issuer(request) },
+  });
+  expect(response.status()).toBe(200);
+  return (await response.json()) as { device_code: string; user_code: string };
+}
+
+function pollDevice(request: APIRequestContext, deviceCode: string) {
+  return request.post(`${e2eEnv().apiUrl}/oauth/token`, {
+    form: { grant_type: DEVICE_GRANT, client_id: "bia-cli", device_code: deviceCode },
+  });
+}
+
+test("the admin enters a device's code, approves it, and the device gets tokens", async ({
+  signedInPage: page,
+}) => {
+  const device = await startDevice(page.request);
+
+  await page.goto("/device");
+  await page.getByLabel("Code").fill(device.user_code.toLowerCase());
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Let bia CLI (built in) use bia?" }),
+  ).toBeVisible();
+  await expect(page.getByText("built into bia").first()).toBeVisible();
+  await page.getByRole("button", { name: "Approve" }).click();
+  await expect(page.getByRole("heading", { name: "Approved" })).toBeVisible();
+
+  const polled = await pollDevice(page.request, device.device_code);
+  expect(polled.status()).toBe(200);
+  expect((await polled.json()).scope).toBe("admin");
+});
+
+test("a code in the link is prefilled, and denying tells the device access_denied", async ({
+  signedInPage: page,
+}) => {
+  const device = await startDevice(page.request);
+
+  await page.goto(`/device?user_code=${device.user_code}`);
+  await expect(page.getByLabel("Code")).toHaveValue(device.user_code);
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Deny" }).click();
+  await expect(page.getByRole("heading", { name: "Denied" })).toBeVisible();
+
+  const polled = await pollDevice(page.request, device.device_code);
+  expect(polled.status()).toBe(400);
+  expect((await polled.json()).error).toBe("access_denied");
+});
+
+test("a code nobody is waiting for is refused with a way forward", async ({
+  signedInPage: page,
+}) => {
+  await page.goto("/device");
+  await page.getByLabel("Code").fill("BBBB-BBBB");
+  await page.getByRole("button", { name: "Continue" }).click();
+
+  await expect(page.getByRole("alert")).toContainText("bia login --device");
+});

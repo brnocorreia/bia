@@ -259,7 +259,8 @@ async fn every_route_but_the_probes_setup_sign_in_and_oauth_needs_a_token(pool: 
             let concrete = path
                 .replace("{token_id}", &nil)
                 .replace("{grant_id}", &nil)
-                .replace("{request_id}", &nil);
+                .replace("{request_id}", &nil)
+                .replace("{id}", &nil);
             let response = http
                 .request(
                     method.to_uppercase().parse().unwrap(),
@@ -285,6 +286,7 @@ async fn every_route_but_the_probes_setup_sign_in_and_oauth_needs_a_token(pool: 
             "get /health",
             "get /oauth/authorize",
             "get /ready",
+            "post /oauth/device_authorization",
             "post /oauth/register",
             "post /oauth/revoke",
             "post /oauth/token",

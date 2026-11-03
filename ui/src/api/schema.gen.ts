@@ -177,6 +177,104 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/oauth/device/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finds the pending device authorization a user code names. Attempts are throttled like
+         *     sign-ins, since a guess that lands would let someone approve their own request. Needs a
+         *     Session.
+         */
+        post: operations["lookup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/device/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The pending device authorization with this id. Needs a Session. */
+        get: operations["get_device_consent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/device/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approves the device authorization with the Scope given or less. The device's next poll
+         *     receives its tokens. Answering twice fails. Needs a Session.
+         */
+        post: operations["approve_device"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/device/{id}/deny": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Denies the device authorization; the device's next poll is answered `access_denied`. Needs
+         *     a Session.
+         */
+        post: operations["deny_device"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/device_authorization": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Starts a device authorization. Needs no credential; only the built-in `bia-cli` client may
+         *     use it, and a request from an address that asked too often is refused.
+         */
+        post: operations["device_authorization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/oauth/register": {
         parameters: {
             query?: never;
@@ -1030,6 +1128,11 @@ export interface components {
             client_id_metadata_document_supported: boolean;
             /** @description `S256` only. */
             code_challenge_methods_supported: string[];
+            /**
+             * @description The device authorization grant (RFC 8628), which only the built-in `bia-cli` client may
+             *     use.
+             */
+            device_authorization_endpoint: string;
             grant_types_supported: string[];
             issuer: string;
             registration_endpoint: string;
@@ -1116,6 +1219,56 @@ export interface components {
                 [key: string]: components["schemas"]["MockSchema"];
             };
         };
+        /** @description What a device posts. */
+        DeviceAuthorizationRequest: {
+            /** @description Only `bia-cli`, the built-in client. */
+            client_id?: string | null;
+            /** @description The audience (RFC 8707): the server's `public_url`, or `{public_url}/mcp`. */
+            resource?: string | null;
+            /** @description `agent` (default) or `admin`; the person may approve less than is asked. */
+            scope?: string | null;
+        };
+        /** @description What the device shows the person, and polls with (RFC 8628 section 3.2). */
+        DeviceAuthorizationResponse: {
+            /** @description Secret: the device polls the token endpoint with it. Never shown to the person. */
+            device_code: string;
+            /**
+             * Format: int64
+             * @description Seconds until the codes stop working: 600.
+             */
+            expires_in: number;
+            /**
+             * Format: int32
+             * @description Seconds the device must leave between polls. Polling sooner is answered `slow_down`.
+             */
+            interval: number;
+            /** @description What the person types at `verification_uri`, e.g. `BCDF-GHJK`. */
+            user_code: string;
+            /** @description `{ui_url}/device`. */
+            verification_uri: string;
+            /** @description `verification_uri` with the user code filled in. */
+            verification_uri_complete: string;
+        };
+        /** @description A device authorization a person is asked about. */
+        DeviceConsentRequest: {
+            client: components["schemas"]["ConsentClient"];
+            /** Format: date-time */
+            expires_at: string;
+            /**
+             * Format: uuid
+             * @description Pass it to `GET /oauth/device/{id}` and the approve and deny routes.
+             */
+            id: string;
+            /** @description What the client asked for; the person may approve less. */
+            requested_scope: components["schemas"]["GrantScopeName"];
+            /** @description What the tokens will be good for: the API, or the MCP endpoint only. */
+            resource: string;
+        };
+        /** @description How a device authorization was answered. The device learns the result by polling. */
+        DeviceDecision: {
+            /** @description `approved` or `denied`. */
+            outcome: string;
+        };
         /** @description One validation finding about a Definition. */
         Diagnostic: {
             /** @description A stable snake_case phrase naming the problem, listed in `docs/dsl.md`. */
@@ -1168,7 +1321,7 @@ export interface components {
          *     added, but renaming or removing one needs an ADR (ADR-0042).
          * @enum {string}
          */
-        ErrorCode: "route_not_found" | "method_not_allowed" | "malformed_request" | "request_too_large" | "invalid_definition" | "missing_token" | "invalid_token" | "insufficient_scope" | "wrong_audience" | "token_not_found" | "origin_mismatch" | "invalid_credentials" | "public_url_missing" | "invalid_client" | "invalid_redirect_uri" | "client_metadata_blocked" | "client_metadata_unreachable" | "client_metadata_too_large" | "client_metadata_redirected" | "client_metadata_invalid" | "client_metadata_mismatch" | "authorization_not_found" | "scope_exceeds_request" | "grant_not_found" | "rate_limited" | "not_a_session" | "invalid_setup_code" | "setup_code_expired" | "already_set_up" | "password_too_short" | "workflow_not_found" | "version_not_found" | "version_published" | "version_not_published" | "version_changed" | "workflow_id_mismatch" | "no_active_version" | "no_manual_trigger" | "invalid_run_input" | "invalid_mock" | "dry_run_too_long" | "run_not_found" | "run_finished" | "run_not_finished" | "run_not_resumable" | "webhook_not_found" | "missing_signature" | "invalid_signature" | "hmac_secret_unavailable" | "secret_not_found" | "master_key_missing" | "queue_not_found" | "dead_letter_queue_not_found" | "queue_in_use" | "not_ready" | "internal_error";
+        ErrorCode: "route_not_found" | "method_not_allowed" | "malformed_request" | "request_too_large" | "invalid_definition" | "missing_token" | "invalid_token" | "insufficient_scope" | "wrong_audience" | "token_not_found" | "origin_mismatch" | "invalid_credentials" | "public_url_missing" | "invalid_client" | "invalid_redirect_uri" | "client_metadata_blocked" | "client_metadata_unreachable" | "client_metadata_too_large" | "client_metadata_redirected" | "client_metadata_invalid" | "client_metadata_mismatch" | "authorization_not_found" | "device_authorization_not_found" | "scope_exceeds_request" | "grant_not_found" | "rate_limited" | "not_a_session" | "invalid_setup_code" | "setup_code_expired" | "already_set_up" | "password_too_short" | "workflow_not_found" | "version_not_found" | "version_published" | "version_not_published" | "version_changed" | "workflow_id_mismatch" | "no_active_version" | "no_manual_trigger" | "invalid_run_input" | "invalid_mock" | "dry_run_too_long" | "run_not_found" | "run_finished" | "run_not_finished" | "run_not_resumable" | "webhook_not_found" | "missing_signature" | "invalid_signature" | "hmac_secret_unavailable" | "secret_not_found" | "master_key_missing" | "queue_not_found" | "dead_letter_queue_not_found" | "queue_in_use" | "not_ready" | "internal_error";
         /** @description A failed Run and the entry that failed it. */
         FailedRun: components["schemas"]["RunSummary"] & {
             failure?: components["schemas"]["TimelineEntryInfo"] | null;
@@ -1700,7 +1853,17 @@ export interface components {
             code?: string | null;
             /** @description `authorization_code`: the PKCE verifier whose SHA-256 is the `code_challenge`. */
             code_verifier?: string | null;
-            /** @description `authorization_code` or `refresh_token`. */
+            /**
+             * @description `urn:ietf:params:oauth:grant-type:device_code`: the `device_code` that
+             *     `POST /oauth/device_authorization` returned. Polling before the `interval` is answered
+             *     `slow_down`; `authorization_pending` means keep polling; `expired_token` and
+             *     `access_denied` end the flow. It is spent when it returns tokens.
+             */
+            device_code?: string | null;
+            /**
+             * @description `authorization_code`, `refresh_token` or, for the built-in `bia-cli` client,
+             *     `urn:ietf:params:oauth:grant-type:device_code`.
+             */
             grant_type?: string | null;
             /** @description `authorization_code`: the `redirect_uri` of the authorization request, exactly. */
             redirect_uri?: string | null;
@@ -1719,6 +1882,10 @@ export interface components {
              *     Version.
              */
             trigger_id?: string | null;
+        };
+        UserCode: {
+            /** @description The code the device shows, in any case, with or without the hyphen. */
+            user_code: string;
         };
         UserInfo: {
             /** Format: date-time */
@@ -2236,6 +2403,282 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    lookup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserCode"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceConsentRequest"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `device_authorization_not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_device_consent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The `id` that `POST /oauth/device/lookup` returned. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceConsentRequest"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `device_authorization_not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    approve_device: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The `id` that `POST /oauth/device/lookup` returned. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Approval"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceDecision"];
+                };
+            };
+            /** @description `scope_exceeds_request`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `device_authorization_not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    deny_device: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The `id` that `POST /oauth/device/lookup` returned. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceDecision"];
+                };
+            };
+            /**
+             * @description No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or
+             *     `invalid_token`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /**
+             * @description The Token's Scope does not allow this route (`insufficient_scope`), or a request made
+             *     with the Session cookie carries no acceptable `Origin` (`origin_mismatch`).
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description `device_authorization_not_found`. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    device_authorization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/x-www-form-urlencoded": components["schemas"]["DeviceAuthorizationRequest"];
+            };
+        };
+        responses: {
+            /** @description Sent with `Cache-Control: no-store`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceAuthorizationResponse"];
+                };
+            };
+            /** @description An OAuth error: `invalid_request`, `invalid_client`, `unauthorized_client`, `invalid_scope` or `invalid_target`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthErrorBody"];
+                };
+            };
+            /** @description `temporarily_unavailable`: the server has no `ui_url` to send the person to. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthErrorBody"];
                 };
             };
         };

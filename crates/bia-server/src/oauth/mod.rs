@@ -7,8 +7,9 @@
 //! Session), and exchanges the code for tokens at [`token`]. The result is a Grant (ADR-0067)
 //! whose access tokens are `oauth` Tokens limited to the Grant's `resource`.
 //!
-//! Seams for flows that arrive later: [`client::resolve`] is the one place a client id becomes a
-//! client, and [`issue::issue_tokens`] turns any Grant into an access token and a refresh token.
+//! [`client::resolve`] is the one place a client id becomes a client, and
+//! [`issue::issue_tokens`] turns any Grant into an access token and a refresh token. The CLI
+//! uses both, through the authorization code flow or [`device`] (ADR-0068).
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -21,6 +22,7 @@ use crate::{ApiConfig, ApiError, ErrorCode};
 pub(crate) mod authorize;
 pub(crate) mod client;
 pub(crate) mod consent;
+pub(crate) mod device;
 pub(crate) mod discovery;
 mod error;
 pub(crate) mod fetch;
@@ -40,11 +42,17 @@ pub(crate) const ACCESS_TOKEN_LIFETIME: TimeDelta = TimeDelta::hours(1);
 pub(crate) const REFRESH_TOKEN_LIFETIME: TimeDelta = TimeDelta::days(90);
 /// How long a person has to answer the consent screen.
 pub(crate) const AUTHORIZATION_LIFETIME: TimeDelta = TimeDelta::minutes(10);
+/// How long a person has to enter the user code a device showed, and the device to collect the
+/// result.
+pub(crate) const DEVICE_LIFETIME: TimeDelta = TimeDelta::minutes(10);
 /// How long a client has to exchange the code it was given.
 pub(crate) const CODE_LIFETIME: TimeDelta = TimeDelta::seconds(60);
 
 pub(crate) const AUTHORIZATION_CODE_PREFIX: &str = "bia_code_";
 pub(crate) const REFRESH_TOKEN_PREFIX: &str = "bia_refresh_";
+pub(crate) const DEVICE_CODE_PREFIX: &str = "bia_device_";
+
+const DEFAULT_DEVICE_INTERVAL_SECS: i32 = 5;
 
 impl ApiConfig {
     /// `public_url` without a trailing slash: the issuer, and the `resource` of tokens that work
@@ -91,6 +99,20 @@ impl ApiConfig {
             (Ok(issuer), Ok(mcp)) => audience == issuer || (via_mcp && audience == mcp),
             _ => false,
         }
+    }
+
+    /// Where a person types the user code of a device, or `None` when there is no UI.
+    pub(crate) fn device_verification_url(&self) -> Option<String> {
+        let ui = self.ui_url.as_ref()?;
+        Some(format!("{}/device", ui.as_str().trim_end_matches('/')))
+    }
+
+    /// How long a device must leave between polls.
+    pub(crate) fn device_interval_secs(&self) -> i32 {
+        self.device_poll_interval
+            .map_or(DEFAULT_DEVICE_INTERVAL_SECS, |interval| {
+                i32::try_from(interval.as_secs().max(1)).unwrap_or(i32::MAX)
+            })
     }
 
     /// Where the consent screen for an authorization is, or `None` when there is no UI.

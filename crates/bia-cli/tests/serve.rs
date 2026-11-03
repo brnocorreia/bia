@@ -23,6 +23,10 @@ use tokio::process::Command;
 
 fn bia() -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_bia"));
+    command.env("BIA_KEYCHAIN", "off").env(
+        "BIA_CONFIG_DIR",
+        std::env::temp_dir().join("bia-cli-tests-no-login"),
+    );
     command
         .env_remove("BIA_CONFIG")
         .env_remove("DATABASE_URL")

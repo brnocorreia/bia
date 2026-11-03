@@ -1,0 +1,173 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- $1: id, $2: now\nUPDATE oauth_device_authorizations\nSET decided_at = $2, outcome = 'denied'\nWHERE id = $1 AND decided_at IS NULL AND expires_at > $2\nRETURNING id, client_id, client_name, client_host, provenance, requested_scope, resource, created_at, expires_at, interval_secs, user_id, granted_scope, grant_id\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "client_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "client_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "client_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "client_name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "client_host",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "client_host"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "provenance",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "provenance"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "requested_scope",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "requested_scope"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "resource",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "resource"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "expires_at"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "interval_secs",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "interval_secs"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "granted_scope",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "granted_scope"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "grant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "grant_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "38ace26b01bd77976854bb13cdcf06bcc7f1cd6f4e7ccf4fc4867a48b62c79b1"
+}

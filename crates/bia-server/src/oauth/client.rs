@@ -2,8 +2,8 @@
 //!
 //! A `client_id` that is an `https` URL names a Client ID Metadata Document, fetched from that
 //! URL (see [`super::fetch`]). Any other is looked up among the clients that registered
-//! themselves. This is the one place a client id becomes a client, so a built-in client (the
-//! CLI's) is added here.
+//! themselves. This is the one place a client id becomes a client, and where the built-in
+//! client of the CLI is known (ADR-0068).
 
 use axum::http::StatusCode;
 use bia_store::oauth::{OAuthRepository, PgOAuthRepository, Provenance};
@@ -15,6 +15,23 @@ use super::fetch::FetchError;
 use crate::{ApiError, ApiState, ErrorCode};
 
 const MAX_NAME_LEN: usize = 128;
+
+/// The `client_id` of the CLI. It is not a URL, so it cannot name a metadata document, and
+/// registration never hands it out.
+pub(crate) const BUILTIN_CLI_ID: &str = "bia-cli";
+
+/// The CLI is first-party and known without fetching or registration, since a metadata
+/// document needs HTTPS and an install may be plain HTTP. Its one redirect URI is on loopback,
+/// where [`redirect_uri_matches`] lets the CLI pick any port, and nothing else can be added.
+fn builtin_cli() -> ResolvedClient {
+    ResolvedClient {
+        client_id: BUILTIN_CLI_ID.to_owned(),
+        name: "bia CLI (built in)".to_owned(),
+        host: None,
+        provenance: Provenance::Builtin,
+        redirect_uris: vec!["http://127.0.0.1/callback".to_owned()],
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ResolvedClient {
@@ -29,6 +46,9 @@ pub(crate) struct ResolvedClient {
 /// The client `client_id` names, or the error to show the person: nothing is redirected to a
 /// client that cannot be identified.
 pub(crate) async fn resolve(state: &ApiState, client_id: &str) -> Result<ResolvedClient, ApiError> {
+    if client_id == BUILTIN_CLI_ID {
+        return Ok(builtin_cli());
+    }
     if client_id.starts_with("https://") || client_id.starts_with("http://") {
         return from_metadata_document(state, client_id).await;
     }
@@ -290,6 +310,27 @@ mod tests {
             &registered,
             "http://127.0.0.1.evil.example/callback"
         ));
+    }
+
+    #[test]
+    fn the_built_in_cli_client_accepts_loopback_redirects_only() {
+        let cli = super::builtin_cli();
+
+        assert!(redirect_uri_matches(
+            &cli.redirect_uris,
+            "http://127.0.0.1:41234/callback"
+        ));
+        for other in [
+            "https://127.0.0.1:41234/callback",
+            "http://127.0.0.1:41234/other",
+            "http://localhost:41234/callback",
+            "http://example.com/callback",
+            "https://example.com/callback",
+            "http://127.0.0.1.evil.example/callback",
+            "cursor://anysphere.cursor/oauth",
+        ] {
+            assert!(!redirect_uri_matches(&cli.redirect_uris, other), "{other}");
+        }
     }
 
     #[test]

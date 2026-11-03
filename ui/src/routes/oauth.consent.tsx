@@ -1,19 +1,10 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
-import {
-  approveConsent,
-  denyConsent,
-  getConsent,
-  type ConsentRequest,
-  type ScopeName,
-} from "@/api/grants";
+import { approveConsent, denyConsent, getConsent, type ConsentRequest } from "@/api/grants";
 import { ApiError, messageOf } from "@/api/request";
-import { currentTokenQuery } from "@/auth/scope";
-import { session } from "@/auth/session";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { describeProvenance, describeResource } from "@/oauth/provenance";
+import { requireSession } from "@/auth/require-session";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConsentCard } from "@/oauth/consent-card";
 
 interface Search {
   request?: string;
@@ -25,15 +16,7 @@ export const Route = createFileRoute("/oauth/consent")({
   validateSearch: (search: Record<string, unknown>): Search => ({
     request: typeof search.request === "string" && search.request ? search.request : undefined,
   }),
-  beforeLoad: async ({ context, location }) => {
-    if (session.getState() === "signed-in") return;
-    try {
-      await context.queryClient.fetchQuery(currentTokenQuery);
-      session.signedIn();
-    } catch {
-      throw redirect({ to: "/login", search: { redirect: location.href } });
-    }
-  },
+  beforeLoad: ({ context, location }) => requireSession(context.queryClient, location),
   component: Consent,
 });
 
@@ -86,89 +69,16 @@ function Problem({ message }: { message: string }) {
   );
 }
 
-const SCOPE_TEXT: Record<ScopeName, string> = {
-  agent: "Agent: author Drafts, validate, dry-run, trigger and read. Cannot publish or activate.",
-  admin: "Admin: everything, including publishing, activating and managing Secrets and access.",
-};
-
 function Decide({ request, consent }: { request: string; consent: ConsentRequest }) {
-  const [scope, setScope] = useState<ScopeName>(consent.requested_scope);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const { client } = consent;
-
-  async function answer(decide: () => Promise<string>) {
-    setBusy(true);
-    setError(null);
-    try {
-      // The server built this address from the redirect URI it recorded for the app.
-      window.location.assign(await decide());
-    } catch (failure) {
-      setBusy(false);
-      setError(messageOf(failure));
-    }
-  }
-
-  const scopes: ScopeName[] = consent.requested_scope === "admin" ? ["admin", "agent"] : ["agent"];
-
+  // The server built these addresses from the redirect URI it recorded for the app.
   return (
-    <>
-      <CardHeader>
-        <CardTitle>Let {client.name} use bia?</CardTitle>
-        <CardDescription>
-          {client.name} is {describeProvenance(client)}.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        {!client.verified && (
-          <p role="note" className="rounded-md border border-destructive p-3 text-sm">
-            This app registered itself, so nothing vouches for its name. Only approve it if you just
-            started connecting it yourself.
-          </p>
-        )}
-        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-          <dt className="text-muted-foreground">Sends you back to</dt>
-          <dd className="break-all font-mono">{consent.redirect_uri}</dd>
-          <dt className="text-muted-foreground">Access to</dt>
-          <dd>{describeResource(consent.resource)}</dd>
-        </dl>
-        <fieldset className="flex flex-col gap-2">
-          <legend className="text-sm font-medium">
-            {scopes.length > 1 ? "It asks for admin access. Allow:" : "It will get:"}
-          </legend>
-          {scopes.map((option) => (
-            <label key={option} className="flex items-start gap-2 text-sm">
-              <input
-                type="radio"
-                name="scope"
-                value={option}
-                checked={scope === option}
-                disabled={scopes.length === 1}
-                onChange={() => setScope(option)}
-                className="mt-1"
-              />
-              <span>{SCOPE_TEXT[option]}</span>
-            </label>
-          ))}
-        </fieldset>
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
-        <div className="flex justify-end gap-2">
-          <Button
-            variant="outline"
-            disabled={busy}
-            onClick={() => answer(() => denyConsent(request))}
-          >
-            Deny
-          </Button>
-          <Button disabled={busy} onClick={() => answer(() => approveConsent(request, scope))}>
-            Approve
-          </Button>
-        </div>
-      </CardContent>
-    </>
+    <ConsentCard
+      client={consent.client}
+      requestedScope={consent.requested_scope}
+      resource={consent.resource}
+      redirectUri={consent.redirect_uri}
+      onApprove={async (scope) => window.location.assign(await approveConsent(request, scope))}
+      onDeny={async () => window.location.assign(await denyConsent(request))}
+    />
   );
 }

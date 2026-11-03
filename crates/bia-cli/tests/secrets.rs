@@ -103,6 +103,11 @@ impl Harness {
     /// Runs `bia` with `token`, writing `stdin` to it.
     async fn bia(&self, token: &str, args: &[&str], stdin: &str) -> Ran {
         let mut child = Command::new(env!("CARGO_BIN_EXE_bia"))
+            .env("BIA_KEYCHAIN", "off")
+            .env(
+                "BIA_CONFIG_DIR",
+                std::env::temp_dir().join("bia-cli-tests-no-login"),
+            )
             .args(args)
             .env_remove("BIA_CONFIG")
             .env("BIA_URL", &self.url)
