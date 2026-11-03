@@ -73,6 +73,8 @@ pub(crate) async fn start(
                 created_at: state.clock.now(),
                 user_agent,
                 grant_id: None,
+                expires_at: None,
+                audience: None,
             },
         )
         .await

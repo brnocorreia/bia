@@ -33,6 +33,7 @@ mod cors;
 mod error;
 mod extract;
 mod mcp;
+mod oauth;
 mod routes;
 #[cfg(feature = "ui")]
 mod ui;
@@ -41,6 +42,7 @@ pub use auth::{SetupCode, Wait};
 pub use cors::{CorsOrigins, InvalidOrigin};
 pub use error::{ApiError, ErrorBody, ErrorCode};
 pub use extract::{Json, Path, Query};
+pub use oauth::{ClientMetadataFetcher, Resolve};
 
 /// What every handler shares.
 #[derive(Clone)]
@@ -50,6 +52,8 @@ pub struct ApiState {
     clock: Arc<dyn Clock>,
     config: Arc<ApiConfig>,
     sign_ins: Arc<auth::SignInThrottle>,
+    registrations: Arc<oauth::register::Limiter>,
+    metadata: Arc<oauth::MetadataCache>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -67,6 +71,10 @@ pub struct ApiConfig {
     /// The code `POST /v1/setup` takes, from the Setup Link. Without one, setup refuses every
     /// code.
     pub setup_code: Option<SetupCode>,
+    /// How a client's metadata document is fetched when its `client_id` is a URL. Strict by
+    /// default: HTTPS to public addresses only. Nothing configures it; only a test built with
+    /// the `testing` feature can swap in a relaxed one (ADR-0067).
+    pub client_metadata_fetcher: ClientMetadataFetcher,
     /// Encrypts Secrets. Without it, the Secret routes that write answer `master_key_missing`.
     pub master_key: Option<MasterKey>,
 }
@@ -79,6 +87,8 @@ impl ApiState {
             clock,
             config: Arc::default(),
             sign_ins: Arc::default(),
+            registrations: Arc::default(),
+            metadata: Arc::default(),
         }
     }
 
@@ -181,6 +191,18 @@ fn documented() -> OpenApiRouter<ApiState> {
         .routes(routes!(routes::session::sign_in, routes::session::sign_out))
         .routes(routes!(routes::session::sign_out_others))
         .routes(routes!(routes::user::change_password))
+        .routes(routes!(routes::grant::list_grants))
+        .routes(routes!(routes::grant::revoke_grant))
+        .routes(routes!(oauth::discovery::api_resource_metadata))
+        .routes(routes!(oauth::discovery::mcp_resource_metadata))
+        .routes(routes!(oauth::discovery::authorization_server_metadata))
+        .routes(routes!(oauth::authorize::authorize))
+        .routes(routes!(oauth::token::token))
+        .routes(routes!(oauth::revoke::revoke))
+        .routes(routes!(oauth::register::register))
+        .routes(routes!(oauth::consent::get_consent))
+        .routes(routes!(oauth::consent::approve))
+        .routes(routes!(oauth::consent::deny))
         .routes(routes!(routes::secret::list_secrets))
         .routes(routes!(
             routes::secret::put_secret,

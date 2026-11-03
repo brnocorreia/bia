@@ -76,7 +76,7 @@ Claude Desktop: add this under `mcpServers` in `claude_desktop_config.json`, wit
 { "bia": { "command": "bia", "args": ["mcp"], "env": { "BIA_URL": "http://127.0.0.1:8080", "BIA_TOKEN": "<agent token>" } } }
 ```
 
-Any client that speaks streamable HTTP can instead connect to `http://127.0.0.1:8080/mcp` with the header `Authorization: Bearer <agent token>`. The agent sees these tools: `get_schema`, `list_actions`, `list_workflows`, `get_workflow`, `list_versions`, `get_version`, `validate_workflow`, `create_draft`, `replace_draft`, `dry_run`, `diff_versions`, `trigger_run`, `get_run`, `list_runs`, `list_failures`, `retry_run`, `resume_run`, `cancel_run` and `list_secrets`. There is deliberately no tool to publish or activate.
+A client that supports OAuth (Claude Code, Claude Desktop, Cursor) needs no Token: point it at `http://127.0.0.1:8080/mcp`, sign in to the UI when it opens your browser, and approve it on the consent screen; it appears under Connected apps in Access, where you can revoke it. Any client that speaks streamable HTTP can instead connect to `http://127.0.0.1:8080/mcp` with the header `Authorization: Bearer <agent token>`. The agent sees these tools: `get_schema`, `list_actions`, `list_workflows`, `get_workflow`, `list_versions`, `get_version`, `validate_workflow`, `create_draft`, `replace_draft`, `dry_run`, `diff_versions`, `trigger_run`, `get_run`, `list_runs`, `list_failures`, `retry_run`, `resume_run`, `cancel_run` and `list_secrets`. There is deliberately no tool to publish or activate.
 
 ## 5. Walk the scenario
 

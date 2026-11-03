@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useGrants } from "@/api/grants";
 import { useTokens } from "@/api/tokens";
 import { messageOf } from "@/api/request";
 import { RequireAdmin } from "@/components/admin-only";
@@ -19,6 +20,7 @@ export const Route = createFileRoute("/_app/access")({
 
 function Access() {
   const tokens = useTokens();
+  const grants = useGrants();
   const revoke = useRevokeFlow((token) =>
     token.origin === "session" ? "this Session" : token.name,
   );
@@ -38,7 +40,11 @@ function Access() {
       {credentials && (
         <>
           <SessionsSection sessions={credentials.sessions} onRevoke={revoke.ask} />
-          <ConnectedAppsSection oauth={credentials.oauth} onRevoke={revoke.ask} />
+          <ConnectedAppsSection
+            grants={grants.data ?? []}
+            error={grants.error}
+            onRevoke={revoke.askGrant}
+          />
           <TokensSection tokens={credentials.manual} onRevoke={revoke.ask} />
         </>
       )}

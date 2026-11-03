@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, name, scope, origin, workflow_id, trigger_id, user_id, created_at, last_used_at, revoked_at, user_agent, grant_id\nFROM tokens\nORDER BY created_at, id\n",
+  "query": "-- $1: hash\nSELECT id, name, scope, origin, workflow_id, trigger_id, user_id, created_at, last_used_at, revoked_at, user_agent, grant_id, expires_at, audience\nFROM tokens\nWHERE hash = $1 AND revoked_at IS NULL\n",
   "describe": {
     "columns": [
       {
@@ -134,10 +134,34 @@
             "name": "grant_id"
           }
         }
+      },
+      {
+        "ordinal": 12,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tokens",
+            "name": "expires_at"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "audience",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tokens",
+            "name": "audience"
+          }
+        }
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Bytea"
+      ]
     },
     "nullable": [
       false,
@@ -151,8 +175,10 @@
       true,
       true,
       true,
+      true,
+      true,
       true
     ]
   },
-  "hash": "9cd903a76fec752a006dcba555eeeb5ede5ddb01d45adb9951375bba5030c517"
+  "hash": "b289e1cd6ff4f7ccf27907b414d56e39092160f67f9e652817c64fb56898b630"
 }

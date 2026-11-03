@@ -21,6 +21,8 @@ pub(crate) struct TokenRow {
     pub(crate) revoked_at: Option<DateTime<Utc>>,
     pub(crate) user_agent: Option<String>,
     pub(crate) grant_id: Option<Uuid>,
+    pub(crate) expires_at: Option<DateTime<Utc>>,
+    pub(crate) audience: Option<String>,
 }
 
 impl TryFrom<TokenRow> for Token {
@@ -54,6 +56,8 @@ impl TryFrom<TokenRow> for Token {
             revoked_at: row.revoked_at,
             user_agent: row.user_agent,
             grant_id: row.grant_id,
+            expires_at: row.expires_at,
+            audience: row.audience,
         })
     }
 }

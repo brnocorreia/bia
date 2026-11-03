@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "-- $1: name, $2: hash, $3: scope, $4: workflow id, $5: trigger id, $6: user id, $7: now, $8: origin, $9: user agent, $10: grant id\nINSERT INTO tokens (name, hash, scope, workflow_id, trigger_id, user_id, created_at, origin, user_agent, grant_id)\nVALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)\nRETURNING id, name, scope, origin, workflow_id, trigger_id, user_id, created_at, last_used_at, revoked_at, user_agent, grant_id\n",
+  "query": "-- Revoking twice keeps the first revocation time.\n-- $1: token id, $2: now\nUPDATE tokens SET revoked_at = coalesce(revoked_at, $2)\nWHERE id = $1\nRETURNING id, name, scope, origin, workflow_id, trigger_id, user_id, created_at, last_used_at, revoked_at, user_agent, grant_id, expires_at, audience\n",
   "describe": {
     "columns": [
       {
@@ -134,20 +134,34 @@
             "name": "grant_id"
           }
         }
+      },
+      {
+        "ordinal": 12,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tokens",
+            "name": "expires_at"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "audience",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tokens",
+            "name": "audience"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
-        "Text",
-        "Bytea",
-        "Text",
-        "Text",
-        "Text",
         "Uuid",
-        "Timestamptz",
-        "Text",
-        "Text",
-        "Uuid"
+        "Timestamptz"
       ]
     },
     "nullable": [
@@ -162,8 +176,10 @@
       true,
       true,
       true,
+      true,
+      true,
       true
     ]
   },
-  "hash": "ec16143c1561459a0a51b83d21f0c97bc99f058759ee38d95eb2318a1c051f15"
+  "hash": "9e7116dcf952140c2af1686df4c2034c37c8ca65de7ad58d75d66af6328864c7"
 }
