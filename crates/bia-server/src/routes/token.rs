@@ -76,6 +76,10 @@ pub(crate) struct TokenInfo {
     created_at: DateTime<Utc>,
     /// When the Token last authenticated a request, to the minute.
     last_used_at: Option<DateTime<Utc>>,
+    /// The browser a Session was started from, as it described itself; only for Sessions.
+    user_agent: Option<String>,
+    /// The OAuth Grant an `oauth` Token belongs to; only for `oauth` Tokens.
+    grant_id: Option<Uuid>,
     /// Once set, the Token authenticates nothing.
     revoked_at: Option<DateTime<Utc>>,
 }
@@ -93,7 +97,7 @@ pub(crate) struct CreatedToken {
 
 #[derive(Debug, Serialize, ToSchema)]
 pub(crate) struct TokenList {
-    /// Every Token, revoked ones included, oldest first.
+    /// Every credential, revoked ones included, oldest first.
     tokens: Vec<TokenInfo>,
 }
 
@@ -151,6 +155,8 @@ pub(crate) async fn create_token(
                 origin: Origin::Manual,
                 user_id: caller.user_id,
                 created_at: state.clock.now(),
+                user_agent: None,
+                grant_id: None,
             },
         )
         .await
@@ -159,7 +165,8 @@ pub(crate) async fn create_token(
     Ok(created(token, value))
 }
 
-/// Every Token, revoked ones included, without their values. Needs an `admin` Token.
+/// Every credential, revoked ones included, without their values: Sessions, `oauth` Tokens and
+/// manual Tokens, told apart by `origin`. Needs an `admin` Token.
 #[utoipa::path(
     get,
     path = "/v1/tokens",
@@ -285,6 +292,8 @@ impl From<Token> for TokenInfo {
             webhook,
             created_at: token.created_at,
             last_used_at: token.last_used_at,
+            user_agent: token.user_agent,
+            grant_id: token.grant_id,
             revoked_at: token.revoked_at,
         }
     }

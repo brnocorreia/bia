@@ -110,6 +110,14 @@ enum TokenCommand {
         #[arg(long, required_if_eq("scope", "webhook"))]
         trigger: Option<String>,
     },
+    /// Lists every credential with its origin (`session`, `oauth` or `manual`), revoked ones
+    /// included. Needs an admin Token in BIA_TOKEN.
+    List,
+    /// Revokes a Token or Session by id. Needs an admin Token in BIA_TOKEN.
+    Revoke {
+        /// The `id` that `bia token list` shows.
+        id: uuid::Uuid,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -194,12 +202,6 @@ fn api_context(
 }
 
 async fn token(cli: &Cli, command: &TokenCommand) -> anyhow::Result<()> {
-    let TokenCommand::Create {
-        name,
-        scope,
-        workflow,
-        trigger,
-    } = command;
     let config = ClientConfig::load(cli.config.as_deref())?;
     let client = config.client(cli.url.as_deref())?;
     if config.token().is_none() {
@@ -208,6 +210,39 @@ async fn token(cli: &Cli, command: &TokenCommand) -> anyhow::Result<()> {
              install, `bia setup` prints one"
         );
     }
+    let (name, scope, workflow, trigger) = match command {
+        TokenCommand::Create {
+            name,
+            scope,
+            workflow,
+            trigger,
+        } => (name, scope, workflow, trigger),
+        TokenCommand::List => {
+            for token in client.list_tokens().await? {
+                println!(
+                    "{}\t{:?}\t{:?}\t{}\t{}",
+                    token.id,
+                    token.origin,
+                    token.scope,
+                    token.name,
+                    if token.revoked_at.is_some() {
+                        "revoked"
+                    } else {
+                        "active"
+                    },
+                );
+            }
+            return Ok(());
+        }
+        TokenCommand::Revoke { id } => {
+            let token = client.revoke_token(*id).await?;
+            eprintln!(
+                "revoked {:?} Token `{}` ({})",
+                token.origin, token.name, token.id
+            );
+            return Ok(());
+        }
+    };
     let (scope, webhook) = match (scope, workflow, trigger) {
         (ScopeArg::Admin, ..) => (Scope::Admin, None),
         (ScopeArg::Agent, ..) => (Scope::Agent, None),

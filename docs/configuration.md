@@ -69,7 +69,7 @@ A request made with the cookie and an unsafe method must carry an `Origin` equal
 
 Every API route except `GET /health`, `GET /ready`, `GET /openapi.json`, `POST /v1/setup` and `POST /v1/session` needs a Token, sent as `Authorization: Bearer <token>` (or, in a browser, the Session cookie). Its Scope decides what it may call: `admin` everything, `agent` everything but publishing, activation and administering Tokens, `webhook` only the webhook Trigger it is bound to (ADR-0008, ADR-0043). bia stores only a hash of each Token, so a lost value cannot be recovered, only replaced.
 
-Create Tokens in the UI's Tokens screen, or with an existing admin Token, e.g. `bia token create --name claude-desktop --scope agent`. `bia token create` talks to the API at `BIA_URL` (default `http://127.0.0.1:8080`) and reads its Token only from `BIA_TOKEN` (or `token` in the config file), never from arguments. Token values are never logged.
+Create Tokens in the UI's Access screen, or with an existing admin Token, e.g. `bia token create --name claude-desktop --scope agent`; `bia token list` shows every credential with its origin, and `bia token revoke <id>` revokes one. `bia token create` talks to the API at `BIA_URL` (default `http://127.0.0.1:8080`) and reads its Token only from `BIA_TOKEN` (or `token` in the config file), never from arguments. Token values are never logged.
 
 ## Secrets
 

@@ -74,6 +74,8 @@ impl TokenRepository for PgTokenRepository {
             token.user_id.as_uuid(),
             token.created_at,
             token.origin.as_str(),
+            token.user_agent,
+            token.grant_id,
         )
         .fetch_one(&mut *conn)
         .await?

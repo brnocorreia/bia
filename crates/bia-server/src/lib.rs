@@ -179,6 +179,7 @@ fn documented() -> OpenApiRouter<ApiState> {
         .routes(routes!(routes::token::revoke_token))
         .routes(routes!(routes::setup::set_up))
         .routes(routes!(routes::session::sign_in, routes::session::sign_out))
+        .routes(routes!(routes::session::sign_out_others))
         .routes(routes!(routes::user::change_password))
         .routes(routes!(routes::secret::list_secrets))
         .routes(routes!(
