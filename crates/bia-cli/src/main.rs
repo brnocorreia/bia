@@ -458,7 +458,7 @@ async fn require_master_key_for_secrets(pool: &PgPool, has_key: bool) -> anyhow:
     Ok(())
 }
 
-/// Clears the User's password and revokes their Tokens, so the Setup Link this start logs is
+/// Clears the User's password, deletes their passkeys and revokes their Tokens, so the Setup Link this start logs is
 /// the way back in. `serve` does it itself so only `serve` and `migrate` touch Postgres
 /// (ADR-0007).
 async fn reset_admin_password(pool: &PgPool) -> anyhow::Result<()> {
@@ -468,7 +468,10 @@ async fn reset_admin_password(pool: &PgPool) -> anyhow::Result<()> {
         .context("cannot connect to the database")?;
     match PgUserRepository.reset(&mut conn, SystemClock.now()).await? {
         Some(revoked) => {
-            tracing::warn!(revoked_tokens = revoked, "admin reset: password cleared");
+            tracing::warn!(
+                revoked_tokens = revoked,
+                "admin reset: password and passkeys cleared"
+            );
         }
         None => tracing::info!("admin reset: no User exists yet"),
     }

@@ -41,8 +41,8 @@ pub trait UserRepository {
         password: &PasswordHash,
     ) -> impl Future<Output = Result<bool, StoreError>> + Send;
 
-    /// Clears every User's password and revokes all their Tokens at `now`, returning how many
-    /// Tokens it revoked, or `None` when no User exists.
+    /// Clears every User's password, deletes their passkeys and revokes all their Tokens at
+    /// `now`, returning how many Tokens it revoked, or `None` when no User exists.
     fn reset(
         &self,
         conn: &mut PgConnection,
@@ -138,6 +138,12 @@ impl UserRepository for PgUserRepository {
         if users.is_empty() {
             return Ok(None);
         }
+        sqlx::query_file!("src/user/queries/delete_passkeys.sql")
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query_file!("src/user/queries/delete_ceremonies.sql")
+            .execute(&mut *tx)
+            .await?;
         let mut revoked = 0;
         for user in users {
             sqlx::query_file!("src/user/queries/revoke_grants_for_user.sql", user, now)

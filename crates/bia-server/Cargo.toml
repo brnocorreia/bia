@@ -45,6 +45,7 @@ subtle = "2.6.1"
 url = "2.5.8"
 base64 = "0.22.1"
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls"] }
+webauthn-rs = { version = "0.6.2", features = ["danger-allow-state-serialisation"] }
 
 [dev-dependencies]
 insta = { version = "1.49.0", features = ["json"] }
@@ -56,6 +57,8 @@ schemars = "1.2.3"
 tokio = { version = "1.53.3", features = ["macros", "rt", "net", "time"] }
 wiremock = "0.6.5"
 tracing-subscriber = { version = "0.3.23", default-features = false, features = ["fmt", "json"] }
+webauthn-authenticator-rs = { version = "0.6.2", default-features = false, features = ["softpasskey"] }
+base64 = "0.22"
 
 # Needs the relaxed metadata fetchers only the `testing` feature builds (`--all-features`, as
 # `just test` runs it).

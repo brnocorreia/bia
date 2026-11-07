@@ -1,7 +1,7 @@
 //! Postgres persistence: migrations, repositories, Queue and Job primitives.
 //!
 //! One module per domain (`workflow`, `version`, `approval`, `run`, `timeline`, `job`,
-//! `schedule`, `chore`, `user`, `token`, `oauth`, `secret`, `queue`), each laid out the same way:
+//! `schedule`, `chore`, `user`, `passkey`, `token`, `oauth`, `secret`, `queue`), each laid out the same way:
 //!
 //! - `model.rs`: the values its repository takes and returns.
 //! - `row.rs`: rows as Postgres returns them, converted into models with `TryFrom`.
@@ -24,6 +24,7 @@ mod clock;
 mod error;
 pub mod job;
 pub mod oauth;
+pub mod passkey;
 pub mod queue;
 pub mod run;
 pub mod schedule;

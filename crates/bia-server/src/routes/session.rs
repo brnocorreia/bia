@@ -23,9 +23,9 @@ pub(crate) struct SignInRequest {
 // No `Debug`, so nothing here can reach a log through one.
 #[derive(Serialize, ToSchema)]
 pub(crate) struct SignedIn {
-    user: UserInfo,
+    pub(crate) user: UserInfo,
     /// The Session, which is a Token with origin `session`.
-    session: TokenInfo,
+    pub(crate) session: TokenInfo,
 }
 
 /// Signs in with the password and sets the `bia_session` cookie: `HttpOnly`, `SameSite=Lax`,

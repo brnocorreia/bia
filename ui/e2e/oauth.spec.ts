@@ -146,7 +146,7 @@ test("someone who is not signed in signs in and comes back to the request", asyn
   await page.goto(authorizeUrl(app.clientId, resource, pkce().challenge, "agent"));
   await expect(page).toHaveURL(/\/login\?redirect=/);
   await page.getByLabel("Password").fill(ADMIN_PASSWORD);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
 
   await expect(page.getByRole("heading", { name: `Let ${app.name} use bia?` })).toBeVisible();
 });
