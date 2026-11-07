@@ -1,0 +1,100 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Locks the row so two polls of one device code are answered one after the other.\n-- $1: device code hash\nSELECT id, expires_at, interval_secs, last_polled_at, outcome, consumed_at, grant_id\nFROM oauth_device_authorizations\nWHERE device_code_hash = $1\nFOR UPDATE\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "expires_at"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "interval_secs",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "interval_secs"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "last_polled_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "last_polled_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "outcome",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "outcome"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "consumed_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "consumed_at"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "grant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "grant_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "37c190f3fe5ee3293117665969e769573c36b9b128cd37913761250c26554dd8"
+}

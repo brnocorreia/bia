@@ -577,7 +577,10 @@ fn report(ctx: &Ctx, error: &anyhow::Error) {
 
 fn print_error(ctx: &Ctx, status: u16, body: &bia_client::ErrorBody, source: Option<&Source>) {
     let hint = match status {
-        401 => Some("set BIA_TOKEN, or `token` in the config file, to a valid Token"),
+        401 => Some(
+            "run `bia login` to sign in, or set BIA_TOKEN (or `token` in the config file) to a \
+             valid Token",
+        ),
         403 => Some(
             "this Token's Scope does not allow the call; publishing and activation need an \
              `admin` Token",

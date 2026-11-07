@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- $1: grant id, $2: hash, $3: now, $4: expires at\nINSERT INTO grant_refresh_tokens (grant_id, hash, created_at, expires_at) VALUES ($1, $2, $3, $4)\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "eebf0a008b3ea26dde9c6ce0994a27bdc17014cff8b26c8e045c789f3bc96d3c"
+}

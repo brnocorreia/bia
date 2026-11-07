@@ -499,3 +499,78 @@ async fn the_token_list_says_where_each_token_came_from(pool: PgPool) {
     assert_eq!((count(Origin::Session), count(Origin::Manual)), (1, 1));
     assert_eq!(tokens.len(), 2);
 }
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn a_session_lists_the_browser_it_was_started_from(pool: PgPool) {
+    let server = TestServer::start(pool).await;
+    let agent = "Mozilla/5.0 (X11; Linux x86_64) Firefox/130.0";
+
+    let response = reqwest::Client::new()
+        .post(server.url("/v1/session"))
+        .header("user-agent", agent)
+        .json(&json!({ "password": PASSWORD }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let tokens = server.client.list_tokens().await.unwrap();
+    let described: Vec<_> = tokens
+        .iter()
+        .filter(|t| t.user_agent.as_deref() == Some(agent))
+        .collect();
+    assert_eq!(described.len(), 1, "{tokens:?}");
+    assert_eq!(described[0].origin, Origin::Session);
+    assert!(tokens.iter().all(|t| t.grant_id.is_none()));
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn revoking_a_session_makes_its_cookie_fail_on_the_next_request(pool: PgPool) {
+    let server = TestServer::start(pool).await;
+    let signed_in = server.anonymous().sign_in(PASSWORD).await.unwrap();
+    let session = server.client_with_session(&signed_in.session);
+    session.current_token().await.unwrap();
+
+    server
+        .client
+        .revoke_token(signed_in.token.id)
+        .await
+        .unwrap();
+
+    assert_eq!(failure(session.current_token().await), unauthenticated());
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn a_session_revoking_itself_through_the_token_route_signs_itself_out(pool: PgPool) {
+    let server = TestServer::start(pool).await;
+    let session = server.session_client();
+    let own = session.current_token().await.unwrap();
+
+    let revoked = session.revoke_token(own.id).await.unwrap();
+
+    assert!(revoked.revoked_at.is_some());
+    assert_eq!(failure(session.current_token().await), unauthenticated());
+}
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn signing_out_the_others_keeps_this_session_and_the_manual_tokens(pool: PgPool) {
+    let server = TestServer::start(pool).await;
+    let manual = server.token(Scope::Agent).await;
+    let other = server.anonymous().sign_in(PASSWORD).await.unwrap();
+    let this = server.session_client();
+
+    let revoked = this.sign_out_others().await.unwrap();
+
+    assert_eq!(revoked, 1);
+    assert_eq!(
+        failure(
+            server
+                .client_with_session(&other.session)
+                .current_token()
+                .await
+        ),
+        unauthenticated()
+    );
+    server.client_with(&manual).current_token().await.unwrap();
+    this.current_token().await.unwrap();
+}

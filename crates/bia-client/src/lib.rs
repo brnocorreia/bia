@@ -6,6 +6,9 @@
 //! [`Client::with_session`] after [`Client::sign_in`].
 
 use std::fmt;
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
 
 use bia_core::validation::Diagnostic;
 use chrono::{DateTime, Utc};
@@ -119,6 +122,10 @@ pub struct Token {
     pub created_at: DateTime<Utc>,
     pub last_used_at: Option<DateTime<Utc>>,
     pub revoked_at: Option<DateTime<Utc>>,
+    /// The browser a Session was started from.
+    pub user_agent: Option<String>,
+    /// The OAuth Grant an [`Origin::Oauth`] Token belongs to.
+    pub grant_id: Option<Uuid>,
 }
 
 /// A Token just created, with the value the API shows only this once.
@@ -517,6 +524,20 @@ struct VersionList {
     versions: Vec<VersionSummary>,
 }
 
+/// Where a [`Client`] gets its Token when it is not fixed, e.g. a stored login whose access
+/// token is renewed with a refresh token.
+pub trait TokenSource: Send + Sync {
+    /// The Token to send with the next request, or `None` to send none.
+    fn token(&self) -> Pin<Box<dyn Future<Output = Option<String>> + Send + '_>>;
+
+    /// Called when the server answered 401 to `rejected`: a Token to retry once with, or
+    /// `None` when there is no better one.
+    fn refresh(
+        &self,
+        rejected: Option<String>,
+    ) -> Pin<Box<dyn Future<Output = Option<String>> + Send + '_>>;
+}
+
 /// What approving an Approval Request does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -596,6 +617,7 @@ pub struct Client {
     http: reqwest::Client,
     base: Url,
     token: Option<String>,
+    source: Option<Arc<dyn TokenSource>>,
     session: Option<String>,
     origin: Option<String>,
 }
@@ -623,6 +645,7 @@ impl Client {
             http: reqwest::Client::new(),
             base,
             token: None,
+            source: None,
             session: None,
             origin: None,
         })
@@ -631,6 +654,13 @@ impl Client {
     /// Sends `token` as `Authorization: Bearer <token>` with every request.
     pub fn with_token(mut self, token: impl Into<String>) -> Self {
         self.token = Some(token.into());
+        self
+    }
+
+    /// Asks `source` for the Token of each request, and retries once with the one it offers
+    /// when the server answers 401. A Token set with [`with_token`](Self::with_token) wins.
+    pub fn with_token_source(mut self, source: Arc<dyn TokenSource>) -> Self {
+        self.source = Some(source);
         self
     }
 
@@ -726,6 +756,18 @@ impl Client {
     /// Revokes the Session this client sends.
     pub async fn sign_out(&self) -> Result<Token, Error> {
         self.send(Method::DELETE, "/v1/session", None::<&()>).await
+    }
+
+    /// Revokes every Session but the one this client sends, returning how many it revoked.
+    pub async fn sign_out_others(&self) -> Result<u64, Error> {
+        #[derive(Deserialize)]
+        struct Response {
+            revoked_sessions: u64,
+        }
+        let response: Response = self
+            .send(Method::DELETE, "/v1/session/others", None::<&()>)
+            .await?;
+        Ok(response.revoked_sessions)
     }
 
     /// Replaces the password and revokes every other Session.
@@ -1207,12 +1249,50 @@ impl Client {
         path: &str,
         body: Option<&impl Serialize>,
     ) -> Result<reqwest::Response, Error> {
+        let mut token = match (&self.token, &self.source) {
+            (Some(token), _) => Some(token.clone()),
+            (None, Some(source)) => source.token().await,
+            (None, None) => None,
+        };
+        let mut retried = false;
+        loop {
+            let response = self
+                .request(method.clone(), path, body, token.as_deref())
+                .await?;
+            let status = response.status();
+            if status.is_success() {
+                return Ok(response);
+            }
+            if status == StatusCode::UNAUTHORIZED
+                && !retried
+                && self.token.is_none()
+                && let Some(source) = &self.source
+                && let Some(renewed) = source.refresh(token.clone()).await
+            {
+                retried = true;
+                token = Some(renewed);
+                continue;
+            }
+            return Err(Error::Api {
+                status,
+                body: response.json().await?,
+            });
+        }
+    }
+
+    async fn request(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<&impl Serialize>,
+        token: Option<&str>,
+    ) -> Result<reqwest::Response, Error> {
         let url = self
             .base
             .join(path.trim_start_matches('/'))
             .map_err(|_| Error::BaseUrl(self.base.to_string()))?;
         let mut request = self.http.request(method, url);
-        if let Some(token) = &self.token {
+        if let Some(token) = token {
             request = request.bearer_auth(token);
         }
         if let Some(session) = &self.session {
@@ -1224,14 +1304,6 @@ impl Client {
         if let Some(body) = body {
             request = request.json(body);
         }
-        let response = request.send().await?;
-        let status = response.status();
-        if status.is_success() {
-            return Ok(response);
-        }
-        Err(Error::Api {
-            status,
-            body: response.json().await?,
-        })
+        Ok(request.send().await?)
     }
 }

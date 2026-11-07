@@ -134,6 +134,10 @@ impl Harness {
 
     async fn bia_with(&self, token: &str, args: &[&str]) -> Ran {
         let mut command = Command::new(env!("CARGO_BIN_EXE_bia"));
+        command.env("BIA_KEYCHAIN", "off").env(
+            "BIA_CONFIG_DIR",
+            std::env::temp_dir().join("bia-cli-tests-no-login"),
+        );
         command
             .args(args)
             .env_remove("BIA_CONFIG")
@@ -580,6 +584,10 @@ async fn url_and_token_come_from_the_config_file_and_the_flag_wins(pool: PgPool)
         &format!("url = \"{}\"\ntoken = \"{}\"\n", h.url, h.admin),
     );
     let mut command = Command::new(env!("CARGO_BIN_EXE_bia"));
+    command.env("BIA_KEYCHAIN", "off").env(
+        "BIA_CONFIG_DIR",
+        std::env::temp_dir().join("bia-cli-tests-no-login"),
+    );
     command
         .args([
             "--config",
@@ -622,6 +630,11 @@ fn files_that_do_not_parse_stop_apply_before_anything_is_sent() {
     let dir = TempDir::new().unwrap();
     write_all(dir.path(), "broken.yaml", "id: [unclosed\n");
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_bia"))
+        .env("BIA_KEYCHAIN", "off")
+        .env(
+            "BIA_CONFIG_DIR",
+            std::env::temp_dir().join("bia-cli-tests-no-login"),
+        )
         .args(["workflow", "apply", "-f", "broken.yaml"])
         .env("BIA_URL", "http://127.0.0.1:1")
         .env_remove("BIA_CONFIG")
@@ -643,6 +656,11 @@ struct McpProxy {
 impl McpProxy {
     fn start(h: &Harness, token: &str) -> Self {
         let mut child = Command::new(env!("CARGO_BIN_EXE_bia"))
+            .env("BIA_KEYCHAIN", "off")
+            .env(
+                "BIA_CONFIG_DIR",
+                std::env::temp_dir().join("bia-cli-tests-no-login"),
+            )
             .arg("mcp")
             .env_remove("BIA_CONFIG")
             .env("BIA_URL", &h.url)

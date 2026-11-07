@@ -74,7 +74,7 @@ test("a new Token's value is shown once and cannot be recovered after a reload",
   signedInPage: page,
 }) => {
   const name = uniqueName("agent");
-  await page.goto("/tokens");
+  await page.goto("/access");
   await page.getByLabel("Name").fill(name);
   await page.getByLabel("Scope").selectOption("agent");
   await page.getByRole("button", { name: "Create Token" }).click();
@@ -105,7 +105,7 @@ test("a new Token's value is shown once and cannot be recovered after a reload",
 
 test("a webhook Token is bound to a Workflow and Trigger", async ({ signedInPage: page, api }) => {
   const name = uniqueName("hook");
-  await page.goto("/tokens");
+  await page.goto("/access");
   await page.getByLabel("Name").fill(name);
   await page.getByLabel("Scope").selectOption("webhook");
   await page.getByLabel("Workflow").fill("onboarding");
@@ -127,22 +127,22 @@ test("a revoked Token fails authentication", async ({ signedInPage: page, api })
     fetch(`${e2eEnv().apiUrl}/v1/tokens/me`, { headers: { Authorization: `Bearer ${value}` } });
   expect((await authenticate()).status).toBe(200);
 
-  await page.goto("/tokens");
+  await page.goto("/access");
   const row = page.getByRole("row").filter({ hasText: name });
   await row.getByRole("button", { name: `Revoke ${name}` }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Revoke Token" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Revoke", exact: true }).click();
 
   await expect(row).toContainText("Revoked");
   await expect(row.getByRole("button", { name: `Revoke ${name}` })).toBeDisabled();
   expect((await authenticate()).status).toBe(401);
 });
 
-test("a non-admin Scope cannot use the Secrets and Tokens screens", async ({
+test("a non-admin Scope cannot use the Secrets and Access screens", async ({
   signedInPage: page,
 }) => {
   await actAsAgent(page);
 
-  for (const path of ["/secrets", "/tokens"]) {
+  for (const path of ["/secrets", "/access"]) {
     await page.goto(path);
     await expect(page.getByRole("alert")).toContainText("needs an admin Token");
     await expect(page.getByRole("button", { name: /Set Secret|Create Token/ })).toHaveCount(0);

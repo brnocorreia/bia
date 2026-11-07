@@ -8,7 +8,7 @@ test("signing in with the password shows the shell", async ({ page }) => {
 
   await expect(page).toHaveURL(/\/workflows$/);
   const nav = page.getByRole("navigation", { name: "Main" });
-  for (const label of ["Workflows", "Runs", "Secrets", "Tokens"]) {
+  for (const label of ["Workflows", "Runs", "Secrets", "Access"]) {
     await expect(nav.getByRole("link", { name: label })).toBeVisible();
   }
   await expect(page.getByRole("heading", { name: "Workflows" })).toBeVisible();

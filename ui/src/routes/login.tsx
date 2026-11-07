@@ -1,6 +1,7 @@
-import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate, useRouter } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { signIn } from "@/auth/login";
+import { safeRedirect } from "@/auth/redirect";
 import { session } from "@/auth/session";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,6 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export const Route = createFileRoute("/login")({
+  validateSearch: (search: Record<string, unknown>): { redirect?: string } => ({
+    redirect: safeRedirect(search.redirect),
+  }),
   beforeLoad: () => {
     if (session.getState() === "signed-in") throw redirect({ to: "/" });
   },
@@ -16,6 +20,8 @@ export const Route = createFileRoute("/login")({
 
 function Login() {
   const navigate = useNavigate();
+  const router = useRouter();
+  const { redirect: back } = Route.useSearch();
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -30,7 +36,9 @@ function Login() {
       setError(result.message);
       return;
     }
-    await navigate({ to: "/" });
+    // Back to what sent the person here, such as an app's request for approval.
+    if (back) router.history.push(back);
+    else await navigate({ to: "/" });
   }
 
   return (

@@ -323,7 +323,13 @@ impl Config {
         Ok(ApiConfig {
             cors_origins,
             public_url: Some(self.public_url_on(listening)?),
-            ui_url: Some(self.ui_url_on(listening)?),
+            // Without the UI built in, nothing at `public_url` answers the consent screen, so a
+            // `ui_url` that merely defaults to it would send people there for nothing.
+            ui_url: if self.ui_url.is_some() || cfg!(feature = "ui") {
+                Some(self.ui_url_on(listening)?)
+            } else {
+                None
+            },
             master_key,
             ..ApiConfig::default()
         })
