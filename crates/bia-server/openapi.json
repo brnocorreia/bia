@@ -1089,6 +1089,502 @@
         }
       }
     },
+    "/v1/approval-requests": {
+      "get": {
+        "tags": [
+          "approvals"
+        ],
+        "summary": "Approval Requests, newest first, optionally of one status or Workflow.",
+        "operationId": "list_approval_requests",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Only requests with this status.",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/StatusName"
+            }
+          },
+          {
+            "name": "workflow_id",
+            "in": "query",
+            "description": "Only requests for this Workflow.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalRequestList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_request`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route (`insufficient_scope`), or a request made\nwith the Session cookie carries no acceptable `Origin` (`origin_mismatch`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "approvals"
+        ],
+        "summary": "Asks for a Version to be published and/or activated. A Draft target must pass the checks\npublishing makes, or the request fails with `invalid_definition` and the Diagnostics and\nnothing is created. `activate` needs a Published Version. The Workflow's earlier pending\nrequest becomes `withdrawn`. Replacing the Draft later makes the request `stale`. Needs an\n`agent` or `admin` Token; an admin decides it with `approve` or `reject`.",
+        "operationId": "create_approval_request",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewApprovalRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalRequestInfo"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`malformed_request`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route (`insufficient_scope`), or a request made\nwith the Session cookie carries no acceptable `Origin` (`origin_mismatch`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`workflow_not_found` or `version_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`version_published` for a Published Version asked to be published, or `version_not_published` for a Draft asked to be activated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_definition`: the Draft cannot be published; `diagnostics` says why.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/v1/approval-requests/{id}": {
+      "get": {
+        "tags": [
+          "approvals"
+        ],
+        "summary": "One Approval Request.",
+        "operationId": "get_approval_request",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The request's id.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalRequestInfo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route (`insufficient_scope`), or a request made\nwith the Session cookie carries no acceptable `Origin` (`origin_mismatch`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`approval_request_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/v1/approval-requests/{id}/approve": {
+      "post": {
+        "tags": [
+          "approvals"
+        ],
+        "summary": "Approves a pending request and makes its change as the deciding User: publishes the Draft\nand/or activates the Version, all in one transaction with the status change, so when the\nchange fails nothing happens and the request stays pending. A Draft that was replaced makes\nthe request `stale` and unapprovable. Needs an `admin` Token; the body may be `{}`.",
+        "operationId": "approve_approval_request",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The request's id.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecisionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalRequestInfo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route (`insufficient_scope`), or a request made\nwith the Session cookie carries no acceptable `Origin` (`origin_mismatch`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`approval_request_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`approval_request_not_pending`, `version_published`, `version_not_published` or `version_changed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_definition`: the Draft no longer passes publishing's checks.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/v1/approval-requests/{id}/reject": {
+      "post": {
+        "tags": [
+          "approvals"
+        ],
+        "summary": "Rejects a pending request; the Version stays as it is. Needs an `admin` Token; the body may\nbe `{}`.",
+        "operationId": "reject_approval_request",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The request's id.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecisionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalRequestInfo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route (`insufficient_scope`), or a request made\nwith the Session cookie carries no acceptable `Origin` (`origin_mismatch`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`approval_request_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`approval_request_not_pending`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/v1/approval-requests/{id}/withdraw": {
+      "post": {
+        "tags": [
+          "approvals"
+        ],
+        "summary": "Withdraws a pending request. Needs an `agent` or `admin` Token.",
+        "operationId": "withdraw_approval_request",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The request's id.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalRequestInfo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route (`insufficient_scope`), or a request made\nwith the Session cookie carries no acceptable `Origin` (`origin_mismatch`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`approval_request_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`approval_request_not_pending`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ]
+      }
+    },
     "/v1/dry-run": {
       "post": {
         "tags": [
@@ -4316,6 +4812,15 @@
           }
         }
       },
+      "ActionName": {
+        "type": "string",
+        "description": "What approving the request does.",
+        "enum": [
+          "publish",
+          "publish_and_activate",
+          "activate"
+        ]
+      },
       "Approval": {
         "type": "object",
         "properties": {
@@ -4332,6 +4837,111 @@
           }
         },
         "additionalProperties": false
+      },
+      "ApprovalRequestInfo": {
+        "type": "object",
+        "description": "An Approval Request, with what a review page shows: the Workflow, the Version, the action,\nwho asked and why, how long ago, and how it was decided.",
+        "required": [
+          "id",
+          "workflow_id",
+          "number",
+          "action",
+          "status",
+          "requester_name",
+          "requested_by",
+          "requester_token_id",
+          "created_at"
+        ],
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/ActionName"
+          },
+          "closed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When the status left `pending`, whatever the reason."
+          },
+          "comment": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The admin's comment on the decision."
+          },
+          "content_hash": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "SHA-256 of the Draft's Definition when the request was made, as hex. Absent for\n`activate`."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The request's age is now minus this."
+          },
+          "decided_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The User who approved or rejected it."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "number": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The Version the request is about."
+          },
+          "requested_by": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The User the requesting Token acts for."
+          },
+          "requester_name": {
+            "type": "string",
+            "description": "The name of the Token the request was made with, e.g. `claude-desktop`."
+          },
+          "requester_token_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/StatusName"
+          },
+          "workflow_id": {
+            "type": "string",
+            "example": "onboarding-email"
+          }
+        }
+      },
+      "ApprovalRequestList": {
+        "type": "object",
+        "required": [
+          "approval_requests"
+        ],
+        "properties": {
+          "approval_requests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApprovalRequestInfo"
+            },
+            "description": "Newest first."
+          }
+        }
       },
       "AttemptStatusName": {
         "type": "string",
@@ -4594,6 +5204,19 @@
             "type": "string"
           }
         }
+      },
+      "DecisionBody": {
+        "type": "object",
+        "properties": {
+          "comment": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why, for the requester. Up to 2000 characters."
+          }
+        },
+        "additionalProperties": false
       },
       "DefinitionDryRunRequest": {
         "type": "object",
@@ -4905,6 +5528,8 @@
           "hmac_secret_unavailable",
           "secret_not_found",
           "master_key_missing",
+          "approval_request_not_found",
+          "approval_request_not_pending",
           "queue_not_found",
           "dead_letter_queue_not_found",
           "queue_in_use",
@@ -5220,6 +5845,36 @@
             "description": "The Output every Attempt returns. Any JSON value, `null` included."
           }
         }
+      },
+      "NewApprovalRequestBody": {
+        "type": "object",
+        "required": [
+          "workflow_id",
+          "number",
+          "action"
+        ],
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/ActionName"
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the change should go ahead, for the admin. Up to 2000 characters."
+          },
+          "number": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The Version's number: a Draft to publish, or a Published Version to activate."
+          },
+          "workflow_id": {
+            "type": "string",
+            "example": "onboarding-email"
+          }
+        },
+        "additionalProperties": false
       },
       "NewTokenRequest": {
         "type": "object",
@@ -5904,6 +6559,16 @@
             "example": "ok"
           }
         }
+      },
+      "StatusName": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "approved",
+          "rejected",
+          "stale",
+          "withdrawn"
+        ]
       },
       "TargetName": {
         "type": "string",

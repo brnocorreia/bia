@@ -7,6 +7,7 @@ use axum::http::StatusCode;
 use bia_core::dsl::{Definition, WorkflowId};
 use bia_core::validation::{Diagnostic, KnownResources, Target, Validator};
 use bia_store::StoreError;
+use bia_store::approval::{ApprovalRepository, PgApprovalRepository};
 use bia_store::queue::{PgQueueRepository, QueueRepository};
 use bia_store::version::{
     PgVersionRepository, Version, VersionNumber, VersionRepository, VersionState,
@@ -326,10 +327,22 @@ pub(crate) async fn replace_draft(
     let number = version_number(number)?;
     let mut conn = acquire(&state).await?;
     let (definition, diagnostics) = parse(&state, &mut conn, &workflow_id, body).await?;
+    let mut tx = sqlx::Connection::begin(&mut *conn)
+        .await
+        .map_err(|e| ApiError::internal(&e))?;
     let version = versions()
-        .replace_draft(&mut conn, &workflow_id, number, &definition)
+        .replace_draft(&mut tx, &workflow_id, number, &definition)
         .await
         .map_err(store_error)?;
+    // What an admin was asked to approve is gone, so the request must not stay approvable.
+    let stale = PgApprovalRepository
+        .mark_stale(&mut tx, &workflow_id, number, state.clock.now())
+        .await
+        .map_err(store_error)?;
+    tx.commit().await.map_err(|e| ApiError::internal(&e))?;
+    if stale {
+        tracing::info!(workflow = %workflow_id, version = number.get(), "approval request made stale");
+    }
     tracing::info!(workflow = %workflow_id, version = number.get(), "draft replaced");
     Ok(Json(saved(version, None, diagnostics)))
 }
@@ -427,31 +440,7 @@ pub(crate) async fn publish_version(
     let mut tx = sqlx::Connection::begin(&mut *conn)
         .await
         .map_err(|e| ApiError::internal(&e))?;
-    let draft = existing_version(&mut tx, &workflow_id, number).await?;
-    if draft.state == VersionState::Published {
-        return Err(store_error(StoreError::VersionPublished {
-            workflow: workflow_id,
-            number,
-        }));
-    }
-    let resources = known_resources(&mut tx).await?;
-    let diagnostics = validator(&state, Target::Publish, &resources).validate(&draft.definition);
-    if diagnostics.iter().any(Diagnostic::is_error) {
-        return Err(ApiError::invalid_definition(diagnostics));
-    }
-    let published = versions()
-        .publish(&mut tx, &workflow_id, number, state.clock.now())
-        .await
-        .map_err(store_error)?;
-    // The Draft may have been replaced after it was validated; publishing what nobody
-    // validated would defeat the check.
-    if published.definition != draft.definition {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            ErrorCode::VersionChanged,
-            "the Draft was replaced while it was being published; publish it again",
-        ));
-    }
+    let (published, diagnostics) = publish_draft(&state, &mut tx, &workflow_id, number).await?;
     tx.commit().await.map_err(|e| ApiError::internal(&e))?;
     tracing::info!(workflow = %workflow_id, version = number.get(), "version published");
     let workflow = existing_workflow(&mut conn, &workflow_id).await?;
@@ -484,10 +473,7 @@ pub(crate) async fn activate_version(
 ) -> Result<Json<WorkflowInfo>, ApiError> {
     let number = version_number(number)?;
     let mut conn = acquire(&state).await?;
-    workflows()
-        .set_active_version(&mut conn, &workflow_id, number)
-        .await
-        .map_err(store_error)?;
+    activate(&mut conn, &workflow_id, number).await?;
     tracing::info!(workflow = %workflow_id, version = number.get(), "version activated");
     let workflow = existing_workflow(&mut conn, &workflow_id).await?;
     Ok(Json(workflow.into()))
@@ -527,6 +513,66 @@ pub(crate) async fn diff_versions(
         to: to.get(),
         patch,
     }))
+}
+
+/// The Draft, when it is one and has no error Diagnostics for the `publish` target; with the
+/// Diagnostics, so warnings still reach the caller.
+pub(super) async fn publishable_draft(
+    state: &ApiState,
+    conn: &mut PgConnection,
+    workflow_id: &WorkflowId,
+    number: VersionNumber,
+) -> Result<(Version, Vec<Diagnostic>), ApiError> {
+    let draft = existing_version(conn, workflow_id, number).await?;
+    if draft.state == VersionState::Published {
+        return Err(store_error(StoreError::VersionPublished {
+            workflow: workflow_id.clone(),
+            number,
+        }));
+    }
+    let resources = known_resources(conn).await?;
+    let diagnostics = validator(state, Target::Publish, &resources).validate(&draft.definition);
+    if diagnostics.iter().any(Diagnostic::is_error) {
+        return Err(ApiError::invalid_definition(diagnostics));
+    }
+    Ok((draft, diagnostics))
+}
+
+/// Validates and publishes the Draft inside the caller's transaction, which the caller
+/// commits.
+pub(super) async fn publish_draft(
+    state: &ApiState,
+    tx: &mut PgConnection,
+    workflow_id: &WorkflowId,
+    number: VersionNumber,
+) -> Result<(Version, Vec<Diagnostic>), ApiError> {
+    let (draft, diagnostics) = publishable_draft(state, tx, workflow_id, number).await?;
+    let published = versions()
+        .publish(tx, workflow_id, number, state.clock.now())
+        .await
+        .map_err(store_error)?;
+    // The Draft may have been replaced after it was validated; publishing what nobody
+    // validated would defeat the check.
+    if published.definition != draft.definition {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ErrorCode::VersionChanged,
+            "the Draft was replaced while it was being published; publish it again",
+        ));
+    }
+    Ok((published, diagnostics))
+}
+
+/// Makes the Published Version the Workflow's Active Version.
+pub(super) async fn activate(
+    conn: &mut PgConnection,
+    workflow_id: &WorkflowId,
+    number: VersionNumber,
+) -> Result<(), ApiError> {
+    workflows()
+        .set_active_version(conn, workflow_id, number)
+        .await
+        .map_err(store_error)
 }
 
 pub(super) async fn acquire(
@@ -611,7 +657,10 @@ pub(super) fn version_number(number: i32) -> Result<VersionNumber, ApiError> {
         .ok_or_else(|| ApiError::malformed_request("a Version number is a positive integer"))
 }
 
-async fn existing_workflow(conn: &mut PgConnection, id: &WorkflowId) -> Result<Workflow, ApiError> {
+pub(super) async fn existing_workflow(
+    conn: &mut PgConnection,
+    id: &WorkflowId,
+) -> Result<Workflow, ApiError> {
     workflows()
         .get(conn, id)
         .await
@@ -638,7 +687,7 @@ pub(super) async fn existing_version(
     }))
 }
 
-fn definition_value(definition: &Definition) -> Value {
+pub(super) fn definition_value(definition: &Definition) -> Value {
     serde_json::to_value(definition)
         .unwrap_or_else(|_| unreachable!("a Definition serialises to JSON"))
 }
@@ -698,6 +747,12 @@ pub(super) fn store_error(error: StoreError) -> ApiError {
             StatusCode::UNPROCESSABLE_ENTITY,
             ErrorCode::WorkflowIdMismatch,
         ),
+        StoreError::ApprovalRequestNotFound(_) => {
+            (StatusCode::NOT_FOUND, ErrorCode::ApprovalRequestNotFound)
+        }
+        StoreError::ApprovalRequestNotPending(_) => {
+            (StatusCode::CONFLICT, ErrorCode::ApprovalRequestNotPending)
+        }
         _ => return ApiError::internal(&error),
     };
     // These variants name only ids the caller sent.

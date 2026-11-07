@@ -164,8 +164,8 @@ Maps to `POST /v1/validate` or `POST /v1/workflows/{workflow_id}/versions/{numbe
         description: "Saves a Definition as a new Draft Version of the Workflow named by its \
 `id`, creating the Workflow if it is new. Semantic errors do not stop the save: they come back \
 as `diagnostics`, so fix them and call `replace_draft`. A Draft starts no Runs. Publishing and \
-activating it need an admin and are not available here: tell the human which Version to \
-publish. Maps to `POST /v1/workflows/{workflow_id}/versions`.",
+activating it need an admin and are not available here: call `request_approval` instead of \
+asking a human to publish, and a human decides. Maps to `POST /v1/workflows/{workflow_id}/versions`.",
         read_only: false,
         schema: || {
             object(
@@ -185,7 +185,8 @@ publish. Maps to `POST /v1/workflows/{workflow_id}/versions`.",
         name: "replace_draft",
         description: "Replaces the Definition of a Draft Version. A Published Version is frozen \
 and fails with `version_published`: create a new Draft instead. Semantic errors come back as \
-`diagnostics`. Maps to `PUT /v1/workflows/{workflow_id}/versions/{number}`.",
+`diagnostics`. Replacing a Draft makes its pending approval request `stale`: ask again when \
+you are done. Maps to `PUT /v1/workflows/{workflow_id}/versions/{number}`.",
         read_only: false,
         schema: || {
             object(
@@ -267,6 +268,80 @@ from `from` to `to`. Maps to `GET /v1/workflows/{workflow_id}/diff?from=&to=`.",
                 ("to", Some(int(a, "to")?.to_string())),
             ]);
             Ok(get(format!("/v1/workflows/{id}/diff{query}"), None))
+        },
+    },
+    ToolDef {
+        name: "request_approval",
+        description: "Asks a human admin to publish and/or activate a Version. Use this instead \
+of asking a human to publish: you cannot publish or activate yourself. `action` is `publish` \
+(freeze the Draft), `publish_and_activate` (freeze the Draft and make it the Active Version) \
+or `activate` (make an already Published Version Active, which is also how you ask for a \
+rollback). A Draft must pass publishing's checks: otherwise this fails with \
+`invalid_definition` and the Diagnostics, and nothing is created, so fix it with \
+`replace_draft` and ask again. Give a `note` saying why the change is safe. A new request for \
+the Workflow withdraws its pending one, and replacing the Draft afterwards makes the request \
+`stale`. Returns the request as `pending`; poll `get_approval_request` for the decision and \
+the admin's `comment`. Maps to `POST /v1/approval-requests`.",
+        read_only: false,
+        schema: || {
+            object(
+                json!({
+                    "workflow_id": shared("workflow_id"),
+                    "number": shared("number"),
+                    "action": { "type": "string", "enum": ["publish", "publish_and_activate", "activate"] },
+                    "note": { "type": "string", "description": "Why the change should go ahead, for the admin." },
+                }),
+                &["workflow_id", "number", "action"],
+            )
+        },
+        build: |a| {
+            let mut body = Map::new();
+            body.insert("workflow_id".into(), Value::String(text(a, "workflow_id")?));
+            body.insert("number".into(), json!(int(a, "number")?));
+            body.insert("action".into(), Value::String(text(a, "action")?));
+            if let Some(note) = opt_text(a, "note")? {
+                body.insert("note".into(), Value::String(note));
+            }
+            Ok(post("/v1/approval-requests".into(), Some(body.into())))
+        },
+    },
+    ToolDef {
+        name: "get_approval_request",
+        description: "Shows an approval request: its `status` (`pending`, `approved`, \
+`rejected`, `stale` or `withdrawn`), the admin's `comment` on the decision and when it was \
+decided. Poll it after `request_approval` until it is no longer `pending`; `stale` means you \
+replaced the Draft, so ask again. Maps to `GET /v1/approval-requests/{request_id}`.",
+        read_only: true,
+        schema: || {
+            object(
+                json!({ "request_id": shared("request_id") }),
+                &["request_id"],
+            )
+        },
+        build: |a| {
+            Ok(get(
+                format!("/v1/approval-requests/{}", seg(a, "request_id")?),
+                None,
+            ))
+        },
+    },
+    ToolDef {
+        name: "withdraw_approval_request",
+        description: "Withdraws a pending approval request you no longer want decided. A \
+decided, stale or withdrawn request fails with `approval_request_not_pending`. Maps to \
+`POST /v1/approval-requests/{request_id}/withdraw`.",
+        read_only: false,
+        schema: || {
+            object(
+                json!({ "request_id": shared("request_id") }),
+                &["request_id"],
+            )
+        },
+        build: |a| {
+            Ok(post(
+                format!("/v1/approval-requests/{}/withdraw", seg(a, "request_id")?),
+                None,
+            ))
         },
     },
     ToolDef {
@@ -400,6 +475,9 @@ fn shared(name: &str) -> Value {
             json!({ "type": "integer", "minimum": 1, "description": "The Version number." })
         }
         "run_id" => json!({ "type": "string", "format": "uuid", "description": "The Run's id." }),
+        "request_id" => {
+            json!({ "type": "string", "format": "uuid", "description": "The approval request's id." })
+        }
         "definition" => json!({
             "type": "object",
             "description": "A Workflow Definition as JSON; its shape is `definition` in `get_schema`.",
@@ -437,6 +515,15 @@ fn seg(args: &Args, name: &str) -> Result<String, String> {
         }
     };
     Ok(utf8_percent_encode(value, NON_ALPHANUMERIC).to_string())
+}
+
+fn text(args: &Args, name: &str) -> Result<String, String> {
+    match args.get(name) {
+        Some(Value::String(value)) if !value.is_empty() => Ok(value.clone()),
+        _ => Err(format!(
+            "`{name}` is required and must be a non-empty string"
+        )),
+    }
 }
 
 fn int(args: &Args, name: &str) -> Result<i32, String> {

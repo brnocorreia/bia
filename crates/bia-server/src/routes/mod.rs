@@ -1,3 +1,4 @@
+pub(crate) mod approval;
 pub(crate) mod dry_run;
 pub(crate) mod grant;
 pub(crate) mod probe;

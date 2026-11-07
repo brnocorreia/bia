@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- $1: workflow id, $2: version number, $3: action, $4: note, $5: content hash,\n-- $6: requesting user, $7: requesting Token, $8: now\nINSERT INTO approval_requests (workflow_id, number, action, note, content_hash, status,\n                               requested_by, requester_token, created_at)\nVALUES ($1, $2, $3, $4, $5, 'pending', $6, $7, $8)\nRETURNING id\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "approval_requests",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int4",
+        "Text",
+        "Text",
+        "Text",
+        "Uuid",
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "8cbcc50cbc47e864bc7fe62e02ed364b73c7ae25a0f2b48f2e1c399a73c8e370"
+}
