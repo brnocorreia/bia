@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- $1: workflow id, $2: version number, $3: now\nUPDATE approval_requests SET status = 'stale', closed_at = $3\nWHERE workflow_id = $1 AND number = $2 AND status = 'pending' AND action <> 'activate'\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int4",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8ac0105cf61b5715c75bd379e302cac7c2e8b2534a22e486489c27e244f38ff0"
+}

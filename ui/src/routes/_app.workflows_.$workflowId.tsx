@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import { useApprovalRequests } from "@/api/approvals";
 import { ApiError, messageOf } from "@/api/request";
 import {
   useVersion,
@@ -8,6 +9,7 @@ import {
   useWorkflow,
   type VersionSummary,
 } from "@/api/workflows";
+import { ACTION_LABEL } from "@/approvals/model";
 import { useCurrentToken } from "@/auth/scope";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DefinitionViewer } from "@/components/definition-viewer";
@@ -49,6 +51,7 @@ function WorkflowDetail() {
   const versions = useVersions(workflowId);
   const token = useCurrentToken();
   const isAdmin = token.data?.scope === "admin";
+  const approvals = useApprovalRequests({ status: "pending", workflow: workflowId });
   const [pending, setPending] = useState<Pending | null>(null);
 
   const list = versions.data ?? [];
@@ -95,6 +98,20 @@ function WorkflowDetail() {
           {activeNumber ? `Active Version: v${activeNumber}` : "No Active Version yet."}
         </p>
       </div>
+
+      {approvals.data?.map((request) => (
+        <p key={request.id} role="status" className="rounded-md border p-3 text-sm">
+          {request.requester_name} asks to {ACTION_LABEL[request.action].toLowerCase()} v
+          {request.number}.{" "}
+          <Link
+            to="/approvals/$requestId"
+            params={{ requestId: request.id }}
+            className="underline underline-offset-4"
+          >
+            Review the request
+          </Link>
+        </p>
+      ))}
 
       <div>
         <h2 className="mb-2 text-lg font-semibold">Versions</h2>

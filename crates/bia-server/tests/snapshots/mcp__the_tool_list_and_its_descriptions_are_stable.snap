@@ -189,7 +189,7 @@ expression: tools
   },
   {
     "name": "create_draft",
-    "description": "Saves a Definition as a new Draft Version of the Workflow named by its `id`, creating the Workflow if it is new. Semantic errors do not stop the save: they come back as `diagnostics`, so fix them and call `replace_draft`. A Draft starts no Runs. Publishing and activating it need an admin and are not available here: tell the human which Version to publish. Maps to `POST /v1/workflows/{workflow_id}/versions`.",
+    "description": "Saves a Definition as a new Draft Version of the Workflow named by its `id`, creating the Workflow if it is new. Semantic errors do not stop the save: they come back as `diagnostics`, so fix them and call `replace_draft`. A Draft starts no Runs. Publishing and activating it need an admin and are not available here: call `request_approval` instead of asking a human to publish, and a human decides. Maps to `POST /v1/workflows/{workflow_id}/versions`.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -216,7 +216,7 @@ expression: tools
   },
   {
     "name": "replace_draft",
-    "description": "Replaces the Definition of a Draft Version. A Published Version is frozen and fails with `version_published`: create a new Draft instead. Semantic errors come back as `diagnostics`. Maps to `PUT /v1/workflows/{workflow_id}/versions/{number}`.",
+    "description": "Replaces the Definition of a Draft Version. A Published Version is frozen and fails with `version_published`: create a new Draft instead. Semantic errors come back as `diagnostics`. Replacing a Draft makes its pending approval request `stale`: ask again when you are done. Maps to `PUT /v1/workflows/{workflow_id}/versions/{number}`.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -313,6 +313,93 @@ expression: tools
     },
     "annotations": {
       "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "request_approval",
+    "description": "Asks a human admin to publish and/or activate a Version. Use this instead of asking a human to publish: you cannot publish or activate yourself. `action` is `publish` (freeze the Draft), `publish_and_activate` (freeze the Draft and make it the Active Version) or `activate` (make an already Published Version Active, which is also how you ask for a rollback). A Draft must pass publishing's checks: otherwise this fails with `invalid_definition` and the Diagnostics, and nothing is created, so fix it with `replace_draft` and ask again. Give a `note` saying why the change is safe. A new request for the Workflow withdraws its pending one, and replacing the Draft afterwards makes the request `stale`. Returns the request as `pending`; poll `get_approval_request` for the decision and the admin's `comment`. Maps to `POST /v1/approval-requests`.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "enum": [
+            "publish",
+            "publish_and_activate",
+            "activate"
+          ],
+          "type": "string"
+        },
+        "note": {
+          "description": "Why the change should go ahead, for the admin.",
+          "type": "string"
+        },
+        "number": {
+          "description": "The Version number.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "workflow_id": {
+          "description": "The Workflow's id.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workflow_id",
+        "number",
+        "action"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "get_approval_request",
+    "description": "Shows an approval request: its `status` (`pending`, `approved`, `rejected`, `stale` or `withdrawn`), the admin's `comment` on the decision and when it was decided. Poll it after `request_approval` until it is no longer `pending`; `stale` means you replaced the Draft, so ask again. Maps to `GET /v1/approval-requests/{request_id}`.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "request_id": {
+          "description": "The approval request's id.",
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "withdraw_approval_request",
+    "description": "Withdraws a pending approval request you no longer want decided. A decided, stale or withdrawn request fails with `approval_request_not_pending`. Maps to `POST /v1/approval-requests/{request_id}/withdraw`.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "request_id": {
+          "description": "The approval request's id.",
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "readOnlyHint": false,
       "destructiveHint": false,
       "openWorldHint": false
     }

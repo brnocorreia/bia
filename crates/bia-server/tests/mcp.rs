@@ -543,3 +543,88 @@ async fn scopes_are_the_apis_for_every_session(pool: PgPool) {
         .await;
     assert!(result.is_err() || result.unwrap().is_error == Some(true));
 }
+
+#[sqlx::test(migrator = "bia_store::MIGRATOR")]
+async fn approval_tools_map_to_their_endpoints_and_no_tool_decides(pool: PgPool) {
+    let f = fixture(pool).await;
+    ok(
+        &f.mcp,
+        "create_draft",
+        json!({ "workflow_id": "greeter", "definition": definition("greeter", "test.echo") }),
+    )
+    .await;
+
+    let requested = ok(
+        &f.mcp,
+        "request_approval",
+        json!({
+            "workflow_id": "greeter",
+            "number": 1,
+            "action": "publish_and_activate",
+            "note": "ready",
+        }),
+    )
+    .await;
+    assert_eq!(requested["status"], "pending");
+    assert_eq!(requested["note"], "ready");
+    let id = requested["id"].as_str().unwrap();
+
+    let path = format!("/v1/approval-requests/{id}");
+    assert_eq!(
+        ok(&f.mcp, "get_approval_request", json!({ "request_id": id })).await,
+        f.api(&path).await
+    );
+
+    let missing = err(
+        &f.mcp,
+        "get_approval_request",
+        json!({ "request_id": Uuid::new_v4() }),
+    )
+    .await;
+    assert_eq!(missing["code"], "approval_request_not_found");
+
+    let withdrawn = ok(
+        &f.mcp,
+        "withdraw_approval_request",
+        json!({ "request_id": id }),
+    )
+    .await;
+    assert_eq!(withdrawn["status"], "withdrawn");
+    let again = err(
+        &f.mcp,
+        "withdraw_approval_request",
+        json!({ "request_id": id }),
+    )
+    .await;
+    assert_eq!(again["code"], "approval_request_not_pending");
+
+    let names: Vec<String> = f
+        .mcp
+        .list_all_tools()
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|tool| tool.name.into_owned())
+        .collect();
+    for forbidden in ["approve_approval_request", "reject_approval_request"] {
+        assert!(!names.iter().any(|name| name == forbidden), "{forbidden}");
+        let unknown = f
+            .mcp
+            .call_tool(CallToolRequestParams::new(forbidden.to_owned()))
+            .await;
+        assert!(unknown.is_err());
+    }
+    // Reaching the endpoints through the agent's Token does not work either.
+    let agent = f.server.token(Scope::Agent).await;
+    for decision in ["approve", "reject"] {
+        let response = f
+            .http
+            .post(f.server.url(&format!("{path}/{decision}")))
+            .bearer_auth(&agent)
+            .json(&json!({}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+}
