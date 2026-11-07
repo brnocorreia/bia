@@ -12,7 +12,7 @@ use axum::Router;
 use axum::body::Body;
 use axum::extract::{FromRequestParts, Request, State};
 use axum::http::request::Parts;
-use axum::http::{HeaderValue, header};
+use axum::http::{HeaderValue, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use rmcp::ServerHandler;
@@ -26,8 +26,8 @@ use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, Stream
 use serde_json::{Map, Value, json};
 use tower::ServiceExt;
 
-use crate::ApiState;
-use crate::auth::Agent;
+use crate::auth::{Agent, ViaMcp};
+use crate::{ApiState, ErrorCode};
 
 mod tools;
 
@@ -68,12 +68,43 @@ async fn authenticate(State(state): State<ApiState>, request: Request, next: Nex
     // Tools forward the `Authorization` header, and a cookie would make `/mcp` a target for
     // cross-site requests, so only the header authenticates here.
     if !parts.headers.contains_key(header::AUTHORIZATION) {
-        return crate::auth::missing_token().into_response();
+        return challenge(&state, crate::auth::missing_token());
     }
+    parts.extensions.insert(ViaMcp);
     match Agent::from_request_parts(&mut parts, &state).await {
         Ok(_) => next.run(Request::from_parts(parts, body)).await,
-        Err(error) => error.into_response(),
+        Err(error) => challenge(&state, error),
     }
+}
+
+/// An error response that tells an OAuth client where to start (RFC 9728, RFC 6750): where the
+/// resource metadata is, and which scope `/mcp` needs.
+fn challenge(state: &ApiState, error: crate::ApiError) -> Response {
+    let status = error.status();
+    let code = error.body().code;
+    let mut parameters = Vec::new();
+    match status {
+        StatusCode::UNAUTHORIZED if code != ErrorCode::MissingToken => {
+            parameters.push("error=\"invalid_token\"".to_owned());
+        }
+        StatusCode::FORBIDDEN => parameters.push("error=\"insufficient_scope\"".to_owned()),
+        _ => {}
+    }
+    if let Ok(resource) = state.config.issuer() {
+        parameters.push(format!(
+            "resource_metadata=\"{resource}/.well-known/oauth-protected-resource/mcp\""
+        ));
+    }
+    parameters.push("scope=\"agent\"".to_owned());
+    let mut response = error.into_response();
+    if matches!(status, StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN)
+        && let Ok(value) = HeaderValue::from_str(&format!("Bearer {}", parameters.join(", ")))
+    {
+        response
+            .headers_mut()
+            .insert(header::WWW_AUTHENTICATE, value);
+    }
+    response
 }
 
 #[derive(Clone)]
@@ -83,9 +114,11 @@ struct Mcp {
 
 impl Mcp {
     async fn dispatch(&self, call: Call, authorization: HeaderValue) -> CallToolResult {
+        // `ViaMcp` is what lets a Token issued for `/mcp` only be used on the API.
         let mut request = Request::builder()
             .method(call.method)
             .uri(&call.uri)
+            .extension(ViaMcp)
             .header(header::AUTHORIZATION, authorization);
         let body = match &call.body {
             Some(body) => {

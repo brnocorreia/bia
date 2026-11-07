@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Whether a code that was not redeemed was used before, and the Grant it produced, if any.\n-- $1: code hash\nSELECT grant_id, code_used_at FROM oauth_authorizations WHERE code_hash = $1\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "grant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "oauth_authorizations",
+            "name": "grant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "code_used_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "oauth_authorizations",
+            "name": "code_used_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "98d0b9b5d9351c810ad3504bd3b283df7bc1a5545c992b01ca518d89296492a3"
+}

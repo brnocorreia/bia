@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- The Grant an access token or a refresh token belongs to.\n-- $1: hash\nSELECT grant_id AS \"grant_id!\"\nFROM (\n    SELECT hash, grant_id FROM tokens WHERE grant_id IS NOT NULL\n    UNION ALL\n    SELECT hash, grant_id FROM grant_refresh_tokens\n) credentials\nWHERE hash = $1\nLIMIT 1\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "grant_id!",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "cd6719e132785fe4a9968ca65bf52bd1a0fa5b5fd1ba2921f2367aba094f1c86"
+}

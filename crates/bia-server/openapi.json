@@ -10,6 +10,96 @@
     "version": "0.0.0"
   },
   "paths": {
+    "/.well-known/oauth-authorization-server": {
+      "get": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "The authorization server's endpoints and what it supports. Public.",
+        "operationId": "authorization_server_metadata",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorizationServerMetadata"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`public_url_missing`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/.well-known/oauth-protected-resource": {
+      "get": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "The API's metadata, for tokens issued for the whole API. Public.",
+        "operationId": "api_resource_metadata",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProtectedResourceMetadata"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`public_url_missing`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/.well-known/oauth-protected-resource/mcp": {
+      "get": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "The MCP endpoint's metadata: which authorization server issues tokens for `/mcp`. Public.",
+        "operationId": "mcp_resource_metadata",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProtectedResourceMetadata"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`public_url_missing`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -155,6 +245,818 @@
           },
           {}
         ]
+      }
+    },
+    "/oauth/authorize": {
+      "get": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "Starts an authorization: redirects to the UI's consent screen at\n`{ui_url}/oauth/consent?request=<id>`, where a signed-in person approves or denies. Needs no\ncredential. A problem with the client or its redirect URI is a 400 error body; any other\nproblem redirects to the client's `redirect_uri` with `error`, `error_description`, `state`\nand `iss`.",
+        "operationId": "authorize",
+        "parameters": [
+          {
+            "name": "response_type",
+            "in": "query",
+            "description": "Must be `code`.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "client_id",
+            "in": "query",
+            "description": "A Client ID Metadata Document URL (`https`), or an id from `POST /oauth/register`.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "description": "Exactly one of the client's registered redirect URIs; a loopback one may use any port.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "code_challenge",
+            "in": "query",
+            "description": "The PKCE challenge: the base64url SHA-256 of the code verifier.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "code_challenge_method",
+            "in": "query",
+            "description": "Must be `S256`.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "resource",
+            "in": "query",
+            "description": "The audience (RFC 8707): the server's `public_url`, or `{public_url}/mcp`.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "description": "`agent` (default) or `admin`; the person may approve less than is asked.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "description": "Returned unchanged.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "To the consent screen, or to the client's `redirect_uri` with an OAuth `error`."
+          },
+          "400": {
+            "description": "`invalid_client`, `invalid_redirect_uri`, `client_metadata_blocked`, `client_metadata_unreachable`, `client_metadata_too_large`, `client_metadata_redirected`, `client_metadata_invalid`, `client_metadata_mismatch`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`public_url_missing`, or, as plain text, a build without a UI and `ui_url`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/oauth/consent/{request_id}": {
+      "get": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "The authorization request a person is asked about. Needs a Session.",
+        "operationId": "get_consent",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "description": "The `request` in the consent screen's URL.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentRequest"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route (`insufficient_scope`), or a request made\nwith the Session cookie carries no acceptable `Origin` (`origin_mismatch`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`authorization_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/oauth/consent/{request_id}/approve": {
+      "post": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "Approves the request with the Scope given or less, and returns where to send the person:\nthe client's `redirect_uri` with a single-use `code` (valid for a minute), `state` and\n`iss`. Answering twice fails. Needs a Session.",
+        "operationId": "approve",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "description": "The `request` in the consent screen's URL.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Approval"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Decision"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`scope_exceeds_request`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route (`insufficient_scope`), or a request made\nwith the Session cookie carries no acceptable `Origin` (`origin_mismatch`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`authorization_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/oauth/consent/{request_id}/deny": {
+      "post": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "Denies the request and returns where to send the person: the client's `redirect_uri` with\n`error=access_denied`, `state` and `iss`. Needs a Session.",
+        "operationId": "deny",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "description": "The `request` in the consent screen's URL.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Decision"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route (`insufficient_scope`), or a request made\nwith the Session cookie carries no acceptable `Origin` (`origin_mismatch`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`authorization_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/oauth/device/lookup": {
+      "post": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "Finds the pending device authorization a user code names. Attempts are throttled like\nsign-ins, since a guess that lands would let someone approve their own request. Needs a\nSession.",
+        "operationId": "lookup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserCode"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceConsentRequest"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route (`insufficient_scope`), or a request made\nwith the Session cookie carries no acceptable `Origin` (`origin_mismatch`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`device_authorization_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/oauth/device/{id}": {
+      "get": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "The pending device authorization with this id. Needs a Session.",
+        "operationId": "get_device_consent",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The `id` that `POST /oauth/device/lookup` returned.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceConsentRequest"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route (`insufficient_scope`), or a request made\nwith the Session cookie carries no acceptable `Origin` (`origin_mismatch`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`device_authorization_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/oauth/device/{id}/approve": {
+      "post": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "Approves the device authorization with the Scope given or less. The device's next poll\nreceives its tokens. Answering twice fails. Needs a Session.",
+        "operationId": "approve_device",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The `id` that `POST /oauth/device/lookup` returned.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Approval"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceDecision"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`scope_exceeds_request`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route (`insufficient_scope`), or a request made\nwith the Session cookie carries no acceptable `Origin` (`origin_mismatch`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`device_authorization_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/oauth/device/{id}/deny": {
+      "post": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "Denies the device authorization; the device's next poll is answered `access_denied`. Needs\na Session.",
+        "operationId": "deny_device",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The `id` that `POST /oauth/device/lookup` returned.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceDecision"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route (`insufficient_scope`), or a request made\nwith the Session cookie carries no acceptable `Origin` (`origin_mismatch`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`device_authorization_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": []
+          }
+        ]
+      }
+    },
+    "/oauth/device_authorization": {
+      "post": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "Starts a device authorization. Needs no credential; only the built-in `bia-cli` client may\nuse it, and a request from an address that asked too often is refused.",
+        "operationId": "device_authorization",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceAuthorizationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Sent with `Cache-Control: no-store`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceAuthorizationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "An OAuth error: `invalid_request`, `invalid_client`, `unauthorized_client`, `invalid_scope` or `invalid_target`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`temporarily_unavailable`: the server has no `ui_url` to send the person to.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/oauth/register": {
+      "post": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "Registers a client. Open to anyone, since a client has to register before it can ask; the\nperson who approves it is told it registered itself and is unverified. At most 20 per\naddress per hour.",
+        "operationId": "register",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Registration"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Registered"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_redirect_uri` or `invalid_client_metadata`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/oauth/revoke": {
+      "post": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "Revokes the Grant the token belongs to, and with it every access token and refresh token it\nissued: a client that is done wants all of it gone. Answers 200 whether or not the token\nwas known. Needs no credential, since holding the token is the proof.",
+        "operationId": "revoke",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Revoked, or unknown."
+          },
+          "400": {
+            "description": "`invalid_request`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/oauth/token": {
+      "post": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "Issues an access token and a refresh token. Needs no credential: the code, its PKCE\nverifier and the client id are the proof.",
+        "operationId": "token",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Sent with `Cache-Control: no-store`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedTokens"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "An OAuth error: `invalid_request`, `invalid_grant`, `invalid_scope`, `invalid_target` or `unsupported_grant_type`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthErrorBody"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/ready": {
@@ -754,6 +1656,124 @@
         "security": [
           {
             "token": []
+          }
+        ]
+      }
+    },
+    "/v1/grants": {
+      "get": {
+        "tags": [
+          "grants"
+        ],
+        "summary": "Every Grant, revoked ones included. Needs an `admin` Token.",
+        "operationId": "list_grants",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GrantList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route (`insufficient_scope`), or a request made\nwith the Session cookie carries no acceptable `Origin` (`origin_mismatch`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          },
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/grants/{grant_id}/revoke": {
+      "post": {
+        "tags": [
+          "grants"
+        ],
+        "summary": "Revokes the Grant at once, with every access token and refresh token it issued; revoking it\nagain changes nothing. Needs an `admin` Token.",
+        "operationId": "revoke_grant",
+        "parameters": [
+          {
+            "name": "grant_id",
+            "in": "path",
+            "description": "The Grant's `id`.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GrantInfo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route (`insufficient_scope`), or a request made\nwith the Session cookie carries no acceptable `Origin` (`origin_mismatch`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`grant_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          },
+          {
+            "session": []
           }
         ]
       }
@@ -2187,6 +3207,54 @@
         ]
       }
     },
+    "/v1/session/others": {
+      "delete": {
+        "tags": [
+          "session"
+        ],
+        "summary": "Revokes every Session of the caller's User but the one the request is made with, if it is\none. Needs an `admin` Token.",
+        "operationId": "sign_out_others",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OtherSessionsRevoked"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No Token, or one that is unknown, revoked or expired; `code` is `missing_token` or\n`invalid_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Token's Scope does not allow this route (`insufficient_scope`), or a request made\nwith the Session cookie carries no acceptable `Origin` (`origin_mismatch`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": []
+          }
+        ]
+      }
+    },
     "/v1/setup": {
       "post": {
         "tags": [
@@ -2270,7 +3338,7 @@
         "tags": [
           "tokens"
         ],
-        "summary": "Every Token, revoked ones included, without their values. Needs an `admin` Token.",
+        "summary": "Every credential, revoked ones included, without their values: Sessions, `oauth` Tokens and\nmanual Tokens, told apart by `origin`. Needs an `admin` Token.",
         "operationId": "list_tokens",
         "responses": {
           "200": {
@@ -3753,6 +4821,23 @@
           "activate"
         ]
       },
+      "Approval": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/GrantScopeName",
+                "description": "The Scope to grant: what was requested, or `agent` to downgrade `admin`. Asking for more\nthan was requested is refused. Defaults to what was requested."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
       "ApprovalRequestInfo": {
         "type": "object",
         "description": "An Approval Request, with what a review page shows: the Workflow, the Version, the action,\nwho asked and why, how long ago, and how it was decided.",
@@ -3867,6 +4952,93 @@
           "cancelled"
         ]
       },
+      "AuthorizationServerMetadata": {
+        "type": "object",
+        "description": "OAuth 2.0 Authorization Server Metadata (RFC 8414).",
+        "required": [
+          "issuer",
+          "authorization_endpoint",
+          "token_endpoint",
+          "revocation_endpoint",
+          "registration_endpoint",
+          "device_authorization_endpoint",
+          "scopes_supported",
+          "response_types_supported",
+          "grant_types_supported",
+          "code_challenge_methods_supported",
+          "token_endpoint_auth_methods_supported",
+          "revocation_endpoint_auth_methods_supported",
+          "authorization_response_iss_parameter_supported",
+          "client_id_metadata_document_supported"
+        ],
+        "properties": {
+          "authorization_endpoint": {
+            "type": "string"
+          },
+          "authorization_response_iss_parameter_supported": {
+            "type": "boolean",
+            "description": "`true`: every authorization response, errors included, carries `iss` (RFC 9207)."
+          },
+          "client_id_metadata_document_supported": {
+            "type": "boolean",
+            "description": "`true`: a `client_id` that is an `https` URL names a Client ID Metadata Document."
+          },
+          "code_challenge_methods_supported": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "`S256` only."
+          },
+          "device_authorization_endpoint": {
+            "type": "string",
+            "description": "The device authorization grant (RFC 8628), which only the built-in `bia-cli` client may\nuse."
+          },
+          "grant_types_supported": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "issuer": {
+            "type": "string"
+          },
+          "registration_endpoint": {
+            "type": "string"
+          },
+          "response_types_supported": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "revocation_endpoint": {
+            "type": "string"
+          },
+          "revocation_endpoint_auth_methods_supported": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "scopes_supported": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "token_endpoint": {
+            "type": "string"
+          },
+          "token_endpoint_auth_methods_supported": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "`none`: clients are public and prove themselves with PKCE."
+          }
+        }
+      },
       "ChangePasswordRequest": {
         "type": "object",
         "required": [
@@ -3884,6 +5056,76 @@
           }
         },
         "additionalProperties": false
+      },
+      "ConsentClient": {
+        "type": "object",
+        "description": "The client asking for access.",
+        "required": [
+          "id",
+          "name",
+          "provenance",
+          "verified"
+        ],
+        "properties": {
+          "host": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "For `cimd`: the host the client's metadata was fetched from."
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "description": "The name the client gave itself."
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ProvenanceName"
+          },
+          "verified": {
+            "type": "boolean",
+            "description": "`false` for a client that registered itself: its name is unchecked."
+          }
+        }
+      },
+      "ConsentRequest": {
+        "type": "object",
+        "description": "What a person is asked to approve.",
+        "required": [
+          "id",
+          "client",
+          "redirect_uri",
+          "requested_scope",
+          "resource",
+          "expires_at"
+        ],
+        "properties": {
+          "client": {
+            "$ref": "#/components/schemas/ConsentClient"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "redirect_uri": {
+            "type": "string",
+            "description": "Where the person is sent back to, with the result."
+          },
+          "requested_scope": {
+            "$ref": "#/components/schemas/GrantScopeName",
+            "description": "What the client asked for; the person may approve less."
+          },
+          "resource": {
+            "type": "string",
+            "description": "What the tokens will be good for: the API, or the MCP endpoint only."
+          }
+        }
       },
       "CreatedToken": {
         "type": "object",
@@ -3951,6 +5193,18 @@
           }
         }
       },
+      "Decision": {
+        "type": "object",
+        "description": "Where to send the person: the client's redirect URI with the result.",
+        "required": [
+          "redirect_to"
+        ],
+        "properties": {
+          "redirect_to": {
+            "type": "string"
+          }
+        }
+      },
       "DecisionBody": {
         "type": "object",
         "properties": {
@@ -3990,6 +5244,119 @@
           }
         },
         "additionalProperties": false
+      },
+      "DeviceAuthorizationRequest": {
+        "type": "object",
+        "description": "What a device posts.",
+        "properties": {
+          "client_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only `bia-cli`, the built-in client."
+          },
+          "resource": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The audience (RFC 8707): the server's `public_url`, or `{public_url}/mcp`."
+          },
+          "scope": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`agent` (default) or `admin`; the person may approve less than is asked."
+          }
+        }
+      },
+      "DeviceAuthorizationResponse": {
+        "type": "object",
+        "description": "What the device shows the person, and polls with (RFC 8628 section 3.2).",
+        "required": [
+          "device_code",
+          "user_code",
+          "verification_uri",
+          "verification_uri_complete",
+          "expires_in",
+          "interval"
+        ],
+        "properties": {
+          "device_code": {
+            "type": "string",
+            "description": "Secret: the device polls the token endpoint with it. Never shown to the person."
+          },
+          "expires_in": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Seconds until the codes stop working: 600."
+          },
+          "interval": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Seconds the device must leave between polls. Polling sooner is answered `slow_down`."
+          },
+          "user_code": {
+            "type": "string",
+            "description": "What the person types at `verification_uri`, e.g. `BCDF-GHJK`."
+          },
+          "verification_uri": {
+            "type": "string",
+            "description": "`{ui_url}/device`."
+          },
+          "verification_uri_complete": {
+            "type": "string",
+            "description": "`verification_uri` with the user code filled in."
+          }
+        }
+      },
+      "DeviceConsentRequest": {
+        "type": "object",
+        "description": "A device authorization a person is asked about.",
+        "required": [
+          "id",
+          "client",
+          "requested_scope",
+          "resource",
+          "expires_at"
+        ],
+        "properties": {
+          "client": {
+            "$ref": "#/components/schemas/ConsentClient"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Pass it to `GET /oauth/device/{id}` and the approve and deny routes."
+          },
+          "requested_scope": {
+            "$ref": "#/components/schemas/GrantScopeName",
+            "description": "What the client asked for; the person may approve less."
+          },
+          "resource": {
+            "type": "string",
+            "description": "What the tokens will be good for: the API, or the MCP endpoint only."
+          }
+        }
+      },
+      "DeviceDecision": {
+        "type": "object",
+        "description": "How a device authorization was answered. The device learns the result by polling.",
+        "required": [
+          "outcome"
+        ],
+        "properties": {
+          "outcome": {
+            "type": "string",
+            "description": "`approved` or `denied`."
+          }
+        }
       },
       "Diagnostic": {
         "type": "object",
@@ -4117,9 +5484,24 @@
           "missing_token",
           "invalid_token",
           "insufficient_scope",
+          "wrong_audience",
           "token_not_found",
           "origin_mismatch",
           "invalid_credentials",
+          "public_url_missing",
+          "invalid_client",
+          "invalid_redirect_uri",
+          "client_metadata_blocked",
+          "client_metadata_unreachable",
+          "client_metadata_too_large",
+          "client_metadata_redirected",
+          "client_metadata_invalid",
+          "client_metadata_mismatch",
+          "authorization_not_found",
+          "device_authorization_not_found",
+          "scope_exceeds_request",
+          "grant_not_found",
+          "rate_limited",
           "not_a_session",
           "invalid_setup_code",
           "setup_code_expired",
@@ -4199,6 +5581,124 @@
               "$ref": "#/components/schemas/FailedRun"
             },
             "description": "Failed Runs, newest first."
+          }
+        }
+      },
+      "GrantInfo": {
+        "type": "object",
+        "description": "What a person approved for an OAuth client.",
+        "required": [
+          "id",
+          "client_id",
+          "client_name",
+          "provenance",
+          "scope",
+          "resource",
+          "created_at"
+        ],
+        "properties": {
+          "client_host": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "For `cimd`: the host the client's metadata came from."
+          },
+          "client_id": {
+            "type": "string"
+          },
+          "client_name": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "last_used_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When one of its access tokens last authenticated a request, to the minute."
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ProvenanceName"
+          },
+          "resource": {
+            "type": "string",
+            "description": "The audience of its tokens: the API's `public_url`, or `{public_url}/mcp`."
+          },
+          "revoked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Once set, none of its tokens authenticates anything."
+          },
+          "scope": {
+            "$ref": "#/components/schemas/GrantScopeName"
+          }
+        }
+      },
+      "GrantList": {
+        "type": "object",
+        "required": [
+          "grants"
+        ],
+        "properties": {
+          "grants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GrantInfo"
+            },
+            "description": "Every Grant, revoked ones included, oldest first."
+          }
+        }
+      },
+      "GrantScopeName": {
+        "type": "string",
+        "description": "Which scope a person can grant.",
+        "enum": [
+          "agent",
+          "admin"
+        ]
+      },
+      "IssuedTokens": {
+        "type": "object",
+        "description": "A token response (RFC 6749 section 5.1).",
+        "required": [
+          "access_token",
+          "token_type",
+          "expires_in",
+          "refresh_token",
+          "scope"
+        ],
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "description": "An `oauth` Token for the Grant's `resource`, valid for `expires_in` seconds."
+          },
+          "expires_in": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Seconds: 3600."
+          },
+          "refresh_token": {
+            "type": "string",
+            "description": "Single-use: exchanging it returns a new one. Presenting an old one again revokes the\nGrant. Unused for 90 days it stops working."
+          },
+          "scope": {
+            "type": "string",
+            "description": "The Scope granted: `agent` or `admin`."
+          },
+          "token_type": {
+            "type": "string"
           }
         }
       },
@@ -4405,6 +5905,24 @@
         },
         "additionalProperties": false
       },
+      "OAuthErrorBody": {
+        "type": "object",
+        "description": "An OAuth error response.",
+        "required": [
+          "error",
+          "error_description"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "An OAuth error code such as `invalid_grant`, `invalid_request`, `invalid_scope`,\n`invalid_target` or `unsupported_grant_type`."
+          },
+          "error_description": {
+            "type": "string",
+            "description": "Human-readable explanation. Its wording may change; match on `error`."
+          }
+        }
+      },
       "OriginName": {
         "type": "string",
         "description": "Where a Token came from.",
@@ -4413,6 +5931,21 @@
           "oauth",
           "manual"
         ]
+      },
+      "OtherSessionsRevoked": {
+        "type": "object",
+        "description": "What signing out the other Sessions did.",
+        "required": [
+          "revoked_sessions"
+        ],
+        "properties": {
+          "revoked_sessions": {
+            "type": "integer",
+            "format": "int64",
+            "description": "How many Sessions it revoked. OAuth Grants and manual Tokens are not affected.",
+            "minimum": 0
+          }
+        }
       },
       "PasswordChanged": {
         "type": "object",
@@ -4427,6 +5960,51 @@
             "minimum": 0
           }
         }
+      },
+      "ProtectedResourceMetadata": {
+        "type": "object",
+        "description": "OAuth 2.0 Protected Resource Metadata (RFC 9728).",
+        "required": [
+          "resource",
+          "authorization_servers",
+          "scopes_supported",
+          "bearer_methods_supported"
+        ],
+        "properties": {
+          "authorization_servers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The one authorization server: this one."
+          },
+          "bearer_methods_supported": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "resource": {
+            "type": "string",
+            "description": "The resource these tokens are for: the MCP endpoint, or the whole API."
+          },
+          "scopes_supported": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "`agent`: what an MCP client needs; `admin` is only granted if the person approves it."
+          }
+        }
+      },
+      "ProvenanceName": {
+        "type": "string",
+        "description": "Where a client's identity comes from.",
+        "enum": [
+          "cimd",
+          "dynamic",
+          "builtin"
+        ]
       },
       "PutQueueRequest": {
         "type": "object",
@@ -4558,6 +6136,109 @@
               "$ref": "#/components/schemas/QueueInfo"
             },
             "description": "Every Queue, ordered by name."
+          }
+        }
+      },
+      "Registered": {
+        "type": "object",
+        "description": "A registered client.",
+        "required": [
+          "client_id",
+          "client_name",
+          "redirect_uris",
+          "token_endpoint_auth_method",
+          "grant_types",
+          "response_types",
+          "client_id_issued_at"
+        ],
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "description": "Use it as `client_id` in authorization and token requests."
+          },
+          "client_id_issued_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "client_name": {
+            "type": "string"
+          },
+          "grant_types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "redirect_uris": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "response_types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "token_endpoint_auth_method": {
+            "type": "string"
+          }
+        }
+      },
+      "Registration": {
+        "type": "object",
+        "description": "Client metadata (RFC 7591). Other members are ignored.",
+        "required": [
+          "redirect_uris"
+        ],
+        "properties": {
+          "client_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Shown to the person when they approve; unverified, since anyone can claim any name."
+          },
+          "redirect_uris": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Where the client may be sent back to: `https`, `http` on loopback (any port), or a\nnative app's own scheme. One to ten, exactly as the client will send them."
+          },
+          "token_endpoint_auth_method": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only `none`: clients are public and use PKCE."
+          }
+        }
+      },
+      "RevokeRequest": {
+        "type": "object",
+        "properties": {
+          "client_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The client's id; a token is only revoked for the client it was issued to."
+          },
+          "token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "An access token or a refresh token the client was issued."
+          },
+          "token_type_hint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Ignored: either kind is recognised."
           }
         }
       },
@@ -4980,6 +6661,14 @@
             "type": "string",
             "format": "date-time"
           },
+          "grant_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The OAuth Grant an `oauth` Token belongs to; only for `oauth` Tokens."
+          },
           "id": {
             "type": "string",
             "format": "uuid"
@@ -5009,6 +6698,13 @@
           "scope": {
             "$ref": "#/components/schemas/ScopeName"
           },
+          "user_agent": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The browser a Session was started from, as it described itself; only for Sessions."
+          },
           "webhook": {
             "oneOf": [
               {
@@ -5033,7 +6729,76 @@
             "items": {
               "$ref": "#/components/schemas/TokenInfo"
             },
-            "description": "Every Token, revoked ones included, oldest first."
+            "description": "Every credential, revoked ones included, oldest first."
+          }
+        }
+      },
+      "TokenRequest": {
+        "type": "object",
+        "description": "The form a client posts. Each grant type needs its own fields.",
+        "properties": {
+          "client_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The client's id, as in the authorization request."
+          },
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`authorization_code`: the code the redirect carried."
+          },
+          "code_verifier": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`authorization_code`: the PKCE verifier whose SHA-256 is the `code_challenge`."
+          },
+          "device_code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`urn:ietf:params:oauth:grant-type:device_code`: the `device_code` that\n`POST /oauth/device_authorization` returned. Polling before the `interval` is answered\n`slow_down`; `authorization_pending` means keep polling; `expired_token` and\n`access_denied` end the flow. It is spent when it returns tokens."
+          },
+          "grant_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`authorization_code`, `refresh_token` or, for the built-in `bia-cli` client,\n`urn:ietf:params:oauth:grant-type:device_code`."
+          },
+          "redirect_uri": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`authorization_code`: the `redirect_uri` of the authorization request, exactly."
+          },
+          "refresh_token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`refresh_token`: the refresh token. It is spent by this request."
+          },
+          "resource": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The `resource` of the authorization request; refused if it is a different one."
+          },
+          "scope": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`refresh_token`: a Scope no broader than the Grant's."
           }
         }
       },
@@ -5049,6 +6814,19 @@
               "null"
             ],
             "description": "The manual Trigger to start from. Defaults to the first manual Trigger of the Active\nVersion."
+          }
+        },
+        "additionalProperties": false
+      },
+      "UserCode": {
+        "type": "object",
+        "required": [
+          "user_code"
+        ],
+        "properties": {
+          "user_code": {
+            "type": "string",
+            "description": "The code the device shows, in any case, with or without the hyphen."
           }
         },
         "additionalProperties": false

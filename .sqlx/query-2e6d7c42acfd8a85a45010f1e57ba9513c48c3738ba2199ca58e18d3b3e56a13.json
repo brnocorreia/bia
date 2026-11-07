@@ -1,0 +1,155 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- $1: user id, $2: client id, $3: client name, $4: client host, $5: provenance, $6: scope, $7: resource, $8: now\nINSERT INTO grants (user_id, client_id, client_name, client_host, provenance, scope, resource, created_at)\nVALUES ($1, $2, $3, $4, $5, $6, $7, $8)\nRETURNING id, user_id, client_id, client_name, client_host, provenance, scope, resource, created_at, last_used_at, revoked_at\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "grants",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "grants",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "client_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "grants",
+            "name": "client_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "client_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "grants",
+            "name": "client_name"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "client_host",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "grants",
+            "name": "client_host"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "provenance",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "grants",
+            "name": "provenance"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "scope",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "grants",
+            "name": "scope"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "resource",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "grants",
+            "name": "resource"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "grants",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "last_used_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "grants",
+            "name": "last_used_at"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "revoked_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "grants",
+            "name": "revoked_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "2e6d7c42acfd8a85a45010f1e57ba9513c48c3738ba2199ca58e18d3b3e56a13"
+}

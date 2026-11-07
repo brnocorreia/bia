@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- $1: id, $2: now, $3: interval seconds\nUPDATE oauth_device_authorizations SET last_polled_at = $2, interval_secs = $3 WHERE id = $1\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "42152ce7de9b8f1df31c8467a79cc5eb32598decaa38fb3c34adce32014460f2"
+}

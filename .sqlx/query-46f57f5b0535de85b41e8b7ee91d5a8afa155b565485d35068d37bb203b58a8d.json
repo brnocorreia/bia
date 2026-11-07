@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Closes authorization requests and codes that are still open, so none outlives the reset.\n-- $1: now\nUPDATE oauth_authorizations\nSET decided_at = coalesce(decided_at, $1), code_used_at = coalesce(code_used_at, $1)\nWHERE code_used_at IS NULL\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "46f57f5b0535de85b41e8b7ee91d5a8afa155b565485d35068d37bb203b58a8d"
+}

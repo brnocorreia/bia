@@ -2,6 +2,7 @@
 
 use std::fmt;
 
+use bia_store::oauth::SecretHash;
 use bia_store::token::TokenHash;
 use sha2::{Digest, Sha256};
 
@@ -20,6 +21,16 @@ impl TokenValue {
         getrandom::fill(&mut random)?;
         let value = format!("{PREFIX}{}", hex::encode(random));
         let hash = hash(&value);
+        Ok((Self(value), hash))
+    }
+
+    /// A new random value that starts with `prefix` instead of the Token one, for secrets that
+    /// must never authenticate a request, such as authorization codes and refresh tokens.
+    pub(crate) fn generate_prefixed(prefix: &str) -> Result<(Self, SecretHash), getrandom::Error> {
+        let mut random = [0; RANDOM_BYTES];
+        getrandom::fill(&mut random)?;
+        let value = format!("{prefix}{}", hex::encode(random));
+        let hash = SecretHash(Sha256::digest(value.as_bytes()).into());
         Ok((Self(value), hash))
     }
 
@@ -53,6 +64,11 @@ pub(crate) fn is_token_value(value: &str) -> bool {
 /// guessing, and lookups need no key the server would have to keep (ADR-0043).
 pub(crate) fn hash(value: &str) -> TokenHash {
     TokenHash(Sha256::digest(value.as_bytes()).into())
+}
+
+/// The hash the store keeps of an authorization code or refresh token.
+pub(crate) fn secret_hash(value: &str) -> SecretHash {
+    SecretHash(Sha256::digest(value.as_bytes()).into())
 }
 
 #[cfg(test)]
