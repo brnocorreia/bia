@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Closes device authorizations that are still open, so none outlives the reset.\n-- $1: now\nUPDATE oauth_device_authorizations\nSET decided_at = coalesce(decided_at, $1), outcome = coalesce(outcome, 'denied'), consumed_at = coalesce(consumed_at, $1)\nWHERE consumed_at IS NULL\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "479b4e2f91ccf0418d9bd6cb360d6c32a2fe56dcb05348a86aeeaf125de0eb4c"
+}

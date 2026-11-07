@@ -3,7 +3,7 @@
 
 use axum::extract::State;
 use axum::extract::rejection::JsonRejection;
-use axum::http::{HeaderValue, StatusCode, header};
+use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use bia_store::user::{PgUserRepository, UserRepository};
 use serde::{Deserialize, Serialize};
 use sqlx::Acquire;
@@ -48,6 +48,7 @@ pub(crate) struct SetupDone {
 )]
 pub(crate) async fn set_up(
     State(state): State<ApiState>,
+    headers: HeaderMap,
     request: Result<axum::Json<SetupRequest>, JsonRejection>,
 ) -> Result<
     (
@@ -110,7 +111,8 @@ pub(crate) async fn set_up(
                 "setup is done; `bia serve --reset-admin` starts it again",
             )
         })?;
-    let (token, value) = session::start(&state, &mut tx, user.id).await?;
+    let (token, value) =
+        session::start(&state, &mut tx, user.id, session::user_agent(&headers)).await?;
     tx.commit().await.map_err(|e| ApiError::internal(&e))?;
     tracing::warn!(user_id = %user.id, session_id = %token.id, "setup done");
     Ok((

@@ -19,6 +19,10 @@ pub(crate) struct TokenRow {
     pub(crate) created_at: DateTime<Utc>,
     pub(crate) last_used_at: Option<DateTime<Utc>>,
     pub(crate) revoked_at: Option<DateTime<Utc>>,
+    pub(crate) user_agent: Option<String>,
+    pub(crate) grant_id: Option<Uuid>,
+    pub(crate) expires_at: Option<DateTime<Utc>>,
+    pub(crate) audience: Option<String>,
 }
 
 impl TryFrom<TokenRow> for Token {
@@ -50,6 +54,10 @@ impl TryFrom<TokenRow> for Token {
             created_at: row.created_at,
             last_used_at: row.last_used_at,
             revoked_at: row.revoked_at,
+            user_agent: row.user_agent,
+            grant_id: row.grant_id,
+            expires_at: row.expires_at,
+            audience: row.audience,
         })
     }
 }

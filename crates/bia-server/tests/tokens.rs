@@ -240,7 +240,7 @@ async fn a_token_request_with_a_misplaced_or_missing_webhook_binding_is_malforme
 }
 
 #[sqlx::test(migrator = "bia_store::MIGRATOR")]
-async fn every_route_but_the_probes_and_setup_needs_a_token(pool: PgPool) {
+async fn every_route_but_the_probes_setup_sign_in_and_oauth_needs_a_token(pool: PgPool) {
     let server = TestServer::start(pool).await;
     let document = serde_json::to_value(bia_server::openapi()).unwrap();
     let http = reqwest::Client::new();
@@ -255,9 +255,13 @@ async fn every_route_but_the_probes_and_setup_needs_a_token(pool: PgPool) {
                 public.push(format!("{method} {path}"));
                 continue;
             }
+            let nil = uuid::Uuid::nil().to_string();
             let concrete = path
-                .replace("{token_id}", &uuid::Uuid::nil().to_string())
-                .replace("{passkey_id}", &uuid::Uuid::nil().to_string());
+                .replace("{token_id}", &nil)
+                .replace("{passkey_id}", &nil)
+                .replace("{grant_id}", &nil)
+                .replace("{request_id}", &nil)
+                .replace("{id}", &nil);
             let response = http
                 .request(
                     method.to_uppercase().parse().unwrap(),
@@ -277,8 +281,16 @@ async fn every_route_but_the_probes_and_setup_needs_a_token(pool: PgPool) {
     assert_eq!(
         public,
         [
+            "get /.well-known/oauth-authorization-server",
+            "get /.well-known/oauth-protected-resource",
+            "get /.well-known/oauth-protected-resource/mcp",
             "get /health",
+            "get /oauth/authorize",
             "get /ready",
+            "post /oauth/device_authorization",
+            "post /oauth/register",
+            "post /oauth/revoke",
+            "post /oauth/token",
             "post /v1/session",
             "post /v1/session/passkey/begin",
             "post /v1/session/passkey/finish",

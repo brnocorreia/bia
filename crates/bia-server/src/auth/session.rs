@@ -45,11 +45,20 @@ fn cookie(value: &str, max_age: i64, secure: bool) -> HeaderValue {
     .unwrap_or_else(|_| unreachable!("a cookie is visible ASCII"))
 }
 
-/// Starts an `admin` Session for the User.
+/// The `User-Agent` header, trimmed to what a list can show. Only ever displayed, never trusted.
+pub(crate) fn user_agent(headers: &HeaderMap) -> Option<String> {
+    let value = headers.get(header::USER_AGENT)?.to_str().ok()?.trim();
+    (!value.is_empty()).then(|| value.chars().take(MAX_USER_AGENT_LEN).collect())
+}
+
+const MAX_USER_AGENT_LEN: usize = 256;
+
+/// Starts an `admin` Session for the User, from the browser that called itself `user_agent`.
 pub(crate) async fn start(
     state: &ApiState,
     conn: &mut PgConnection,
     user_id: UserId,
+    user_agent: Option<String>,
 ) -> Result<(Token, TokenValue), ApiError> {
     let (value, hash) = TokenValue::generate().map_err(|e| ApiError::internal(&e))?;
     let token = PgTokenRepository
@@ -62,6 +71,10 @@ pub(crate) async fn start(
                 origin: Origin::Session,
                 user_id,
                 created_at: state.clock.now(),
+                user_agent,
+                grant_id: None,
+                expires_at: None,
+                audience: None,
             },
         )
         .await

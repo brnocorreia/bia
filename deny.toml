@@ -6,10 +6,19 @@ all-features = true
 [advisories]
 version = 2
 yanked = "deny"
-# `rsa` has no patched release. It arrives only through `webauthn-rs` (crypto-glue) and bia only
-# uses it to verify passkey signatures with public keys. The Marvin attack needs private-key
-# operations (decryption or signing), which bia never performs with it.
-ignore = [{ id = "RUSTSEC-2023-0071", reason = "rsa only verifies passkey signatures; no private-key operation" }]
+# `keyring` reaches the Secret Service on Linux (`bia login`) through `zbus` 5, whose helper
+# crates `zbus_names`, `zvariant` and `zvariant_derive` were folded into `zbus` 6. These are
+# notices that the old crates stopped, not vulnerabilities; drop the entries once `keyring`
+# moves to `zbus` 6.
+ignore = [
+    { id = "RUSTSEC-2026-0370", reason = "its crates merged into zbus 6; unmaintained notice only" },
+    { id = "RUSTSEC-2026-0371", reason = "its crates merged into zbus 6; unmaintained notice only" },
+    { id = "RUSTSEC-2026-0372", reason = "its crates merged into zbus 6; unmaintained notice only" },
+    # `rsa` has no patched release. It arrives only through `webauthn-rs` (crypto-glue) and bia
+    # only uses it to verify passkey signatures with public keys. The Marvin attack needs
+    # private-key operations (decryption or signing), which bia never performs with it.
+    { id = "RUSTSEC-2023-0071", reason = "rsa only verifies passkey signatures; no private-key operation" },
+]
 
 [licenses]
 version = 2

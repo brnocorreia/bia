@@ -63,6 +63,18 @@ const RELEASED: &[(i64, &str)] = &[
         13,
         "b56be576a1a6d3b7ecdee1d0d21a3dbde974ef55034e5a0bf0af7fa9efcb0e169d50639d2447344e017f560dcf174e08",
     ),
+    (
+        14,
+        "8cf1627a83391e9849e1ff00f96c82eb396c1b6a6e41f4336feac3f25a0c2a186890f387472abd976558c0fb54e9de64",
+    ),
+    (
+        16,
+        "a648341cc25195a8d660767177a15888954afcdf69add67f570fc1d69beda3b5a7de1761d176359e42b990b01f630f45",
+    ),
+    (
+        17,
+        "43f312d28385678facdccf09eaa26b2cb03fba596116462d782a175ef05a7f1c9d98e353c7332073108d497d2c5d2c39",
+    ),
 ];
 
 #[sqlx::test(migrations = false)]

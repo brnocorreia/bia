@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "-- $1: hash\nSELECT id, name, scope, origin, workflow_id, trigger_id, user_id, created_at, last_used_at, revoked_at\nFROM tokens\nWHERE hash = $1 AND revoked_at IS NULL\n",
+  "query": "SELECT id, name, scope, origin, workflow_id, trigger_id, user_id, created_at, last_used_at, revoked_at, user_agent, grant_id, expires_at, audience\nFROM tokens\nORDER BY created_at, id\n",
   "describe": {
     "columns": [
       {
@@ -112,12 +112,54 @@
             "name": "revoked_at"
           }
         }
+      },
+      {
+        "ordinal": 10,
+        "name": "user_agent",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tokens",
+            "name": "user_agent"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "grant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "tokens",
+            "name": "grant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tokens",
+            "name": "expires_at"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "audience",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tokens",
+            "name": "audience"
+          }
+        }
       }
     ],
     "parameters": {
-      "Left": [
-        "Bytea"
-      ]
+      "Left": []
     },
     "nullable": [
       false,
@@ -129,8 +171,12 @@
       false,
       false,
       true,
+      true,
+      true,
+      true,
+      true,
       true
     ]
   },
-  "hash": "4c8ac8a89bc648430b878c929b70c118a36d6daa3d6cadaba4841911073ba862"
+  "hash": "c15139af841512fa5ebf6b2a4827212f58626eb9486056adcc092e481a32e818"
 }

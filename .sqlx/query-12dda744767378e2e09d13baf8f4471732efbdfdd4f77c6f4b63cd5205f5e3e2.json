@@ -1,0 +1,175 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Decided at most once, and only while pending.\n-- $1: id, $2: now, $3: user id, $4: granted scope\nUPDATE oauth_device_authorizations\nSET decided_at = $2, outcome = 'approved', user_id = $3, granted_scope = $4\nWHERE id = $1 AND decided_at IS NULL AND expires_at > $2\nRETURNING id, client_id, client_name, client_host, provenance, requested_scope, resource, created_at, expires_at, interval_secs, user_id, granted_scope, grant_id\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "client_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "client_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "client_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "client_name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "client_host",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "client_host"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "provenance",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "provenance"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "requested_scope",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "requested_scope"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "resource",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "resource"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "expires_at"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "interval_secs",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "interval_secs"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "granted_scope",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "granted_scope"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "grant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "oauth_device_authorizations",
+            "name": "grant_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "12dda744767378e2e09d13baf8f4471732efbdfdd4f77c6f4b63cd5205f5e3e2"
+}

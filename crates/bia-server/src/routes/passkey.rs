@@ -3,7 +3,7 @@
 //! and keeps the challenge's state server-side, and a `finish` that checks the response.
 
 use axum::extract::State;
-use axum::http::{HeaderValue, StatusCode, header};
+use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use bia_store::passkey::{
     CeremonyId, CeremonyKind, NewPasskey, Passkey, PasskeyId, PasskeyRepository,
     PgPasskeyRepository,
@@ -450,6 +450,7 @@ fn passkey_refused() -> ApiError {
 pub(crate) async fn finish_sign_in(
     State(state): State<ApiState>,
     ClientAddress(address): ClientAddress,
+    headers: HeaderMap,
     Json(request): Json<FinishCeremony>,
 ) -> Result<
     (
@@ -508,7 +509,8 @@ pub(crate) async fn finish_sign_in(
         .await
         .map_err(|e| ApiError::internal(&e))?;
     state.sign_ins.succeeded(subject);
-    let (token, value) = session::start(&state, &mut conn, user.id).await?;
+    let (token, value) =
+        session::start(&state, &mut conn, user.id, session::user_agent(&headers)).await?;
     tracing::info!(user_id = %user.id, session_id = %token.id, passkey_id = %used.id, "signed in with a passkey");
     Ok((
         StatusCode::CREATED,

@@ -186,6 +186,9 @@ _Avoid_: API key
 A User's browser sign-in: a Token with origin `session` and the `admin` Scope, held in the `HttpOnly` `bia_session` cookie. It expires after 14 days without use, or 90 days after it started, and signing out or changing the password revokes it.
 _Avoid_: login, cookie (for the Token behind it)
 
+**Grant**:
+What a User approved for an OAuth client such as an MCP client: the client, a Scope (`agent` or `admin`), a `resource` that tokens are good for, and when it was used. Its access tokens are `oauth` Tokens, and revoking the Grant revokes them all and its refresh tokens.
+_Avoid_: authorization (for the stored approval), connection, app
 **Passkey**:
 A WebAuthn credential the User signs in with instead of the password, never as a second factor. The User can register several and names each one; removing one needs a Session that signed in within the last 10 minutes.
 _Avoid_: security key, 2FA, biometric login

@@ -1,17 +1,7 @@
 import { useState, type FormEvent } from "react";
-import { createFileRoute } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  createToken,
-  tokenKeys,
-  useRevokeToken,
-  useTokens,
-  type CreatedToken,
-  type TokenInfo,
-} from "@/api/tokens";
+import { createToken, tokenKeys, type CreatedToken, type TokenInfo } from "@/api/tokens";
 import { messageOf } from "@/api/request";
-import { RequireAdmin } from "@/components/admin-only";
-import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,34 +9,25 @@ import { Label } from "@/components/ui/label";
 import { formatTime } from "@/lib/format";
 import type { Scope } from "@/auth/scope";
 
-export const Route = createFileRoute("/_app/tokens")({
-  staticData: { nav: { label: "Tokens", order: 40 } },
-  component: () => (
-    <RequireAdmin what="Tokens">
-      <Tokens />
-    </RequireAdmin>
-  ),
-});
-
-function Tokens() {
-  const tokens = useTokens();
-  const revoke = useRevokeToken();
-  const [revoking, setRevoking] = useState<TokenInfo | null>(null);
+/** Manual Tokens, for CI and webhooks: created here, shown once, never expiring. */
+export function TokensSection({
+  tokens,
+  onRevoke,
+}: {
+  tokens: TokenInfo[];
+  onRevoke: (token: TokenInfo) => void;
+}) {
   return (
-    <section>
-      <h1 className="text-2xl font-semibold">Tokens</h1>
+    <section aria-labelledby="tokens-heading" className="mt-8">
+      <h2 id="tokens-heading" className="text-lg font-semibold">
+        Tokens
+      </h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        A Token's value is shown once, when it is created. Give an <code>agent</code> Token to an
-        agent to let it author Workflows.
+        For CI and webhooks. A Token's value is shown once, when it is created, and it never
+        expires. Give an <code>agent</code> Token to an agent to let it author Workflows.
       </p>
       <NewTokenForm />
-      {tokens.isPending && <p className="mt-4 text-sm text-muted-foreground">Loading…</p>}
-      {tokens.error && (
-        <p role="alert" className="mt-4 text-sm text-destructive">
-          {messageOf(tokens.error)}
-        </p>
-      )}
-      {tokens.data && (
+      {tokens.length > 0 && (
         <table className="mt-4 w-full text-left text-sm">
           <thead className="border-b text-muted-foreground">
             <tr>
@@ -61,7 +42,7 @@ function Tokens() {
             </tr>
           </thead>
           <tbody>
-            {tokens.data.map((token) => (
+            {tokens.map((token) => (
               <tr key={token.id} className="border-b">
                 <td className="py-2 pr-4">{token.name}</td>
                 <td className="py-2 pr-4">
@@ -87,10 +68,7 @@ function Tokens() {
                     size="sm"
                     disabled={token.revoked_at != null}
                     aria-label={`Revoke ${token.name}`}
-                    onClick={() => {
-                      revoke.reset();
-                      setRevoking(token);
-                    }}
+                    onClick={() => onRevoke(token)}
                   >
                     Revoke
                   </Button>
@@ -100,19 +78,6 @@ function Tokens() {
           </tbody>
         </table>
       )}
-      <ConfirmDialog
-        open={revoking !== null}
-        title={`Revoke ${revoking?.name ?? "Token"}?`}
-        confirmLabel="Revoke Token"
-        busy={revoke.isPending}
-        error={revoke.error ? messageOf(revoke.error) : undefined}
-        onCancel={() => setRevoking(null)}
-        onConfirm={() =>
-          revoking && revoke.mutate(revoking.id, { onSuccess: () => setRevoking(null) })
-        }
-      >
-        It stops authenticating at once and cannot be restored. Anything using it loses access.
-      </ConfirmDialog>
     </section>
   );
 }

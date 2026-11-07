@@ -23,6 +23,7 @@ use tokio::net::TcpListener;
 mod api;
 mod client_config;
 mod config;
+mod login;
 mod mcp;
 mod setup;
 
@@ -61,8 +62,20 @@ enum Command {
     /// Applies the database migrations this release needs.
     Migrate,
     /// Sets up the User with the code from the Setup Link that `bia serve` logs, prompting for
-    /// it and a password, and prints an admin Token.
+    /// it and a password. Then `bia login` signs the CLI in.
     Setup,
+    /// Signs the CLI in to the server: approve it in the browser, and every later `bia`
+    /// command and `bia mcp` uses the login, renewing it on its own. `BIA_TOKEN` wins over it.
+    Login {
+        /// Shows a code to enter on another device, for a machine without a browser.
+        #[arg(long)]
+        device: bool,
+        /// Prints the sign-in URL without opening a browser.
+        #[arg(long, conflicts_with = "device")]
+        no_browser: bool,
+    },
+    /// Revokes the CLI's login on the server and removes it from this machine.
+    Logout,
     /// Saves, checks, dry-runs, publishes and activates Workflows.
     Workflow {
         #[command(subcommand)]
@@ -74,7 +87,7 @@ enum Command {
         command: api::RunCommand,
     },
     /// Speaks MCP on stdin and stdout for a local client such as Claude Code, forwarding to the
-    /// server's `/mcp` endpoint with the Token in `BIA_TOKEN`.
+    /// server's `/mcp` endpoint with `BIA_TOKEN`, or else the login from `bia login`.
     Mcp,
     /// Creates, lists and deletes Queues, and lists their Messages.
     Queue {
@@ -95,8 +108,8 @@ enum Command {
 
 #[derive(Debug, Subcommand)]
 enum TokenCommand {
-    /// Creates a Token and prints its value, which is shown only this once. Needs an admin
-    /// Token in BIA_TOKEN.
+    /// Creates a Token and prints its value, which is shown only this once. Needs an `admin`
+    /// login or Token.
     Create {
         /// What the Token is for, e.g. `claude-desktop`.
         #[arg(long)]
@@ -109,6 +122,14 @@ enum TokenCommand {
         /// The webhook Trigger a `webhook` Token may start Runs from.
         #[arg(long, required_if_eq("scope", "webhook"))]
         trigger: Option<String>,
+    },
+    /// Lists every credential with its origin (`session`, `oauth` or `manual`), revoked ones
+    /// included. Needs an `admin` login or Token.
+    List,
+    /// Revokes a Token or Session by id. Needs an `admin` login or Token.
+    Revoke {
+        /// The `id` that `bia token list` shows.
+        id: uuid::Uuid,
     },
 }
 
@@ -149,7 +170,37 @@ async fn main() -> anyhow::Result<ExitCode> {
         }
         Command::Mcp => {
             let config = ClientConfig::load(cli.config.as_deref())?;
-            mcp::proxy(config.url(cli.url.as_deref()), config.token()).await?;
+            mcp::proxy(
+                config.url(cli.url.as_deref()),
+                config.token_source(cli.url.as_deref()),
+            )
+            .await?;
+            true
+        }
+        Command::Login { device, no_browser } => {
+            let config = ClientConfig::load(cli.config.as_deref())?;
+            let credentials = login::credentials::Credentials::from_env()
+                .context("cannot tell where to keep the login: there is no home directory")?;
+            let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+            login::login(
+                &credentials,
+                &clock,
+                &login::LoginOptions {
+                    url: config.url(cli.url.as_deref()).to_owned(),
+                    device,
+                    no_browser,
+                    json: cli.json,
+                    token_overrides: config.token().is_some(),
+                },
+            )
+            .await?;
+            true
+        }
+        Command::Logout => {
+            let config = ClientConfig::load(cli.config.as_deref())?;
+            let credentials = login::credentials::Credentials::from_env()
+                .context("cannot tell where the login is kept: there is no home directory")?;
+            login::logout(&credentials, config.url(cli.url.as_deref()), cli.json).await?;
             true
         }
         Command::Setup => {
@@ -194,20 +245,47 @@ fn api_context(
 }
 
 async fn token(cli: &Cli, command: &TokenCommand) -> anyhow::Result<()> {
-    let TokenCommand::Create {
-        name,
-        scope,
-        workflow,
-        trigger,
-    } = command;
     let config = ClientConfig::load(cli.config.as_deref())?;
     let client = config.client(cli.url.as_deref())?;
-    if config.token().is_none() {
+    if !config.has_credentials(cli.url.as_deref()) {
         bail!(
-            "set BIA_TOKEN (or `token` in the config file) to an admin Token; on a fresh \
-             install, `bia setup` prints one"
+            "run `bia login` to sign in, or set BIA_TOKEN (or `token` in the config file) to an \
+             admin Token"
         );
     }
+    let (name, scope, workflow, trigger) = match command {
+        TokenCommand::Create {
+            name,
+            scope,
+            workflow,
+            trigger,
+        } => (name, scope, workflow, trigger),
+        TokenCommand::List => {
+            for token in client.list_tokens().await? {
+                println!(
+                    "{}\t{:?}\t{:?}\t{}\t{}",
+                    token.id,
+                    token.origin,
+                    token.scope,
+                    token.name,
+                    if token.revoked_at.is_some() {
+                        "revoked"
+                    } else {
+                        "active"
+                    },
+                );
+            }
+            return Ok(());
+        }
+        TokenCommand::Revoke { id } => {
+            let token = client.revoke_token(*id).await?;
+            eprintln!(
+                "revoked {:?} Token `{}` ({})",
+                token.origin, token.name, token.id
+            );
+            return Ok(());
+        }
+    };
     let (scope, webhook) = match (scope, workflow, trigger) {
         (ScopeArg::Admin, ..) => (Scope::Admin, None),
         (ScopeArg::Agent, ..) => (Scope::Agent, None),
