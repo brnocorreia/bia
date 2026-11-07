@@ -1,6 +1,6 @@
 # Quickstart: the anchor scenario
 
-This walks the scenario bia must support: an agent, over MCP, authors an uptime-check Workflow, fixes a Diagnostic and dry-runs it; a human publishes it; cron runs it; the agent inspects the failed Runs and retries one. The automated version of the same scenario is `crates/bia-cli/tests/anchor_scenario.rs`.
+This walks the scenario bia must support: an agent, over MCP, authors an uptime-check Workflow, fixes a Diagnostic and dry-runs it; a human approves its publication in the UI; cron runs it; the agent inspects the failed Runs and retries one. The automated version of the same scenario is `crates/bia-cli/tests/anchor_scenario.rs`.
 
 You need Rust (the pinned toolchain installs itself), Docker, `openssl`, `python3`, and a clone of this repository. Run every command from the repository root unless a step says otherwise.
 
@@ -19,15 +19,19 @@ bia serve --role all
 
 `bia serve --role all` keeps running, so use a second terminal for the rest. The master key is only read by the server. On this fresh database the server logs a Setup Link, `http://localhost:8080/setup?code=…`: keep it for the next step. See [`configuration.md`](configuration.md) for every setting.
 
-## 2. Create the Tokens
+The quickstart uses the embedded UI, so build with it (`cargo install --path crates/bia-cli --locked --features ui`, after `just ui-build`; see [`deploy-ui.md`](deploy-ui.md)). Nothing below needs a Token to be copied by hand.
 
-Open the Setup Link in a browser and choose a password of at least 12 characters; setup signs you in. (Without a browser, `bia setup` asks for the link or its code and the password, but returns no credential.) In the Access screen create an `admin` Token and an `agent` Token, and copy each value, which is shown once. In the second terminal, `BIA_URL` defaults to `http://127.0.0.1:8080`:
+## 2. Set your password and sign in
+
+Open the Setup Link in a browser and choose a password of at least 12 characters; setup signs you in to the UI. (Without a browser, `bia setup` asks for the link or its code and the password.) The Link only works until the next restart of `bia serve`.
+
+Then sign the CLI in, in the second terminal. `BIA_URL` defaults to `http://127.0.0.1:8080`:
 
 ```sh
-export BIA_TOKEN=<admin token>
+bia login
 ```
 
-Keep the admin Token for yourself. Give the agent Token's value (it starts with `bia_`) to the MCP client. An `agent` Token can author Drafts, validate, dry-run, trigger and read, but cannot publish or activate (ADR-0008).
+Your browser opens a consent screen for "bia CLI (built in)"; approve it. The CLI keeps the login in the OS keychain (or in `~/.config/bia/credentials.json`, mode 0600, when there is no keychain) and renews it on its own, so there is nothing to export. On a machine without a browser run `bia login --device`, which shows a code to enter at `{public_url}/device`. `bia logout` revokes it again. See [Access](configuration.md#access).
 
 ## 3. Set the Secret and start a target
 
@@ -62,21 +66,27 @@ HTTPServer(("127.0.0.1", 9000), Handler).serve_forever()
 
 ## 4. Connect an MCP client
 
-`bia mcp` is a stdio MCP server that forwards to `bia serve` with the Token in `BIA_TOKEN`. Give it the agent Token, never the admin one.
+The URL is all an MCP client needs: `http://127.0.0.1:8080/mcp` (your `public_url` plus `/mcp`). The client finds bia's sign-in on its own (OAuth, ADR-0067), opens your browser, and you approve it on the consent screen as the `agent` Scope. It then shows under Connected apps in Access, where you can revoke it.
 
 Claude Code:
 
 ```sh
-claude mcp add bia --env BIA_URL=http://127.0.0.1:8080 --env BIA_TOKEN=<agent token> -- bia mcp
+claude mcp add --transport http bia http://127.0.0.1:8080/mcp
 ```
 
-Claude Desktop: add this under `mcpServers` in `claude_desktop_config.json`, with the absolute path of `bia` if it is not on the app's `PATH`:
+Then run `/mcp` in Claude Code, choose `bia` and authenticate.
+
+Claude Desktop: Settings → Connectors → Add custom connector, with the URL `http://127.0.0.1:8080/mcp` and nothing else.
+
+Cursor, in `~/.cursor/mcp.json`:
 
 ```json
-{ "bia": { "command": "bia", "args": ["mcp"], "env": { "BIA_URL": "http://127.0.0.1:8080", "BIA_TOKEN": "<agent token>" } } }
+{ "mcpServers": { "bia": { "url": "http://127.0.0.1:8080/mcp" } } }
 ```
 
-A client that supports OAuth (Claude Code, Claude Desktop, Cursor) needs no Token: point it at `http://127.0.0.1:8080/mcp`, sign in to the UI when it opens your browser, and approve it on the consent screen; it appears under Connected apps in Access, where you can revoke it. Any client that speaks streamable HTTP can instead connect to `http://127.0.0.1:8080/mcp` with the header `Authorization: Bearer <agent token>`. The agent sees these tools: `get_schema`, `list_actions`, `list_workflows`, `get_workflow`, `list_versions`, `get_version`, `validate_workflow`, `create_draft`, `replace_draft`, `dry_run`, `diff_versions`, `trigger_run`, `get_run`, `list_runs`, `list_failures`, `retry_run`, `resume_run`, `cancel_run` and `list_secrets`. There is deliberately no tool to publish or activate.
+For a client that cannot do OAuth but can run a command, `bia mcp` is a stdio proxy that uses the login from `bia login` (or `BIA_TOKEN`, if set): `claude mcp add bia --env BIA_URL=http://127.0.0.1:8080 -- bia mcp`. It acts with your Scope, which is `admin`, so prefer the URL form for agents.
+
+The agent sees these tools: `get_schema`, `list_actions`, `list_workflows`, `get_workflow`, `list_versions`, `get_version`, `validate_workflow`, `create_draft`, `replace_draft`, `dry_run`, `diff_versions`, `trigger_run`, `get_run`, `list_runs`, `list_failures`, `retry_run`, `resume_run`, `cancel_run`, `list_secrets`, `list_queues`, `request_approval`, `get_approval_request` and `withdraw_approval_request`. There is deliberately no tool to publish, activate, approve or reject.
 
 ## 5. Walk the scenario
 
@@ -94,19 +104,11 @@ The agent applies the suggestion with `replace_draft` and validates again until 
 
 **3. Dry-run.** The agent calls `dry_run` on Version 1, mocking the Step `probe` (mocks are keyed by Step id), for example `{"probe": {"output": {"status": 200, "body": {"status": "up"}}}}`. The result has `"dry_run": true` and a Timeline whose entry shows the Step's `params` as written, `{{ secrets.API_TOKEN }}` included. Nothing is stored and the target is not called.
 
-**4. Ask a human to publish.** The agent has no publish tool. If it tries the API with its Token it gets `403 insufficient_scope`; you can see the same refusal yourself:
+**4. Ask a human to publish.** The agent has no publish tool, and a publish call with its credential is refused with `403 insufficient_scope`. It calls `request_approval` with the Workflow, the Version, the action (`publish`, `publish_and_activate` or `activate`) and a note. The request must pass publishing's checks, or the call fails with the Diagnostics.
 
-```sh
-BIA_TOKEN=<agent token> bia workflow publish uptime-check 1
-# error[insufficient_scope]: this route needs an `admin` Token; this Token's Scope is `agent`
-```
+In the UI, the Approvals item in the navigation now shows a badge. Open the request, read the note and the Definition (or the diff against the Active Version, once there is one), and Approve. Approving publishes and activates Version 1 as you, in one step; Reject with a comment sends the agent back to the Draft. Replacing the Draft while the request is pending marks it `stale`, so you never approve content you did not see. From a terminal: `bia approval list`, `bia approval show <id>`, `bia approval approve <id>`.
 
-You review the Draft, then publish and activate it with the admin Token:
-
-```sh
-bia workflow publish uptime-check 1
-bia workflow activate uptime-check 1
-```
+The agent finds the decision with `get_approval_request` (with `request_id`), which carries your comment.
 
 **5. Cron fires and the target fails.** Within a minute, a Run starts from the cron Trigger. The target answers `503`, so the Run fails: `bia run list --failed` shows it.
 
@@ -118,11 +120,11 @@ touch up        # in the directory where target.py runs
 
 The agent calls `retry_run` with the failed Run's id. It creates a new Run, linked to the failed one by `retry_of`, which succeeds; `get_run` shows the target's `{"status": "up"}`. The failed Run stays as it was. The Secret's value appears nowhere in these Timelines.
 
-When you are done, stop `target.py` and `bia serve` with Ctrl-C and `docker compose down`.
+When you are done, stop `target.py` and `bia serve` with Ctrl-C and `docker compose down`. `bia logout` removes the CLI's login, and you can revoke the MCP client in Access.
 
 ## Driving the tools by hand
 
-Save this as `mcp.py`. It starts `bia mcp` (the same stdio server the clients use), calls one tool and prints its structured answer; without arguments it lists the tools.
+Save this as `mcp.py`. It starts `bia mcp` (the stdio server, which uses your `bia login`), calls one tool and prints its structured answer; without arguments it lists the tools. It acts with your `admin` Scope, so the Scope refusals are not shown here.
 
 ```python
 import json, subprocess, sys
@@ -158,7 +160,7 @@ p.stdin.close()
 p.wait()
 ```
 
-With `BIA_TOKEN` set to the agent Token, the whole scenario is:
+With the login from step 2, the whole scenario is:
 
 ```sh
 cat > def.json <<'EOF'
@@ -176,7 +178,7 @@ sed -i.bak 's/http.requst/http.request/' def.json
 python3 mcp.py replace_draft "$(args '{"number":1}')"
 python3 mcp.py validate_workflow '{"workflow_id":"uptime-check","number":1,"target":"publish"}'   # valid
 python3 mcp.py dry_run '{"workflow_id":"uptime-check","number":1,"mocks":{"probe":{"output":{"status":200,"body":{"status":"up"}}}}}'   # step 3
-# steps 4 and 5: refuse, then publish, as in the section above; wait a minute
+# step 4: python3 mcp.py request_approval ..., then approve in the UI or with `bia approval approve`; wait a minute
 python3 mcp.py list_failures                                             # step 6
 touch up
 python3 mcp.py retry_run '{"run_id":"<id from list_failures>"}'
