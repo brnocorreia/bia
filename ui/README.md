@@ -66,6 +66,10 @@ Tests share one database, so give seeded data a `uniqueName` and do not assume t
 
 When a handler changes, run `just openapi` at the repository root, then `pnpm gen:api` here, and commit both `crates/bia-server/openapi.json` and `src/api/schema.gen.ts`. CI fails if the types are stale.
 
+## Approvals
+
+`/approvals` lists Approval Requests (Pending and Decided tabs; the nav badge counts pending ones), and `/approvals/$requestId` is the review page: the note, the diff against the Active Version (or the Definition when there is none), the Diagnostics publishing would give, and Approve or Reject with a comment, disabled without an admin Token. Both poll like Runs (`api/approvals.ts`), so a request that goes stale shows up while the page is open. `approvals/model.ts` holds the pure display state (Vitest).
+
 ## Runs and the Timeline
 
 - `/runs` lists Runs (newest first, "Load more" pages by `next_after`) filtered by Workflow, status and a creation date range; filters are URL search params. "Trigger a Run" opens a dialog with the Workflow (those with an Active Version) and a JSON input. `/runs/$runId` shows the Run, its input and Trigger metadata, the Timeline, and Cancel, Resume and Retry behind confirmations (Retry offers a link to the new Run). See ADR-0054.
