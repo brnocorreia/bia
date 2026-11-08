@@ -95,10 +95,10 @@ jobs:
       BIA_E2E_DATABASE_URL: postgres://bia:bia@localhost:5432/bia_e2e
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           package_json_file: ui/package.json
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -126,7 +126,7 @@ jobs:
         working-directory: ui
         env:
           BIA_E2E_BIN: ${{ github.workspace }}/target/debug/bia
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: playwright-report
@@ -154,10 +154,10 @@ jobs:
       BIA_E2E_EMBEDDED: "1"
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           package_json_file: ui/package.json
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -178,7 +178,7 @@ jobs:
         working-directory: ui
         env:
           BIA_E2E_BIN: ${{ github.workspace }}/target/debug/bia
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: playwright-report-embedded
